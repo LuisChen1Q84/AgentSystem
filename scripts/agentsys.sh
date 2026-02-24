@@ -15,6 +15,7 @@ DAILY_SUMMARY_DIR="$(get_cfg_path "daily_summary_dir" "日志/每日摘要")"
 WEEKLY_SUMMARY_DIR="$(get_cfg_path "weekly_summary_dir" "日志/每周摘要")"
 RECOMMEND_DIR="$(get_cfg_path "recommend_dir" "日志/建议")"
 METRICS_DIR="$(get_cfg_path "metrics_dir" "日志/指标")"
+POLICY_EVAL_DIR="$(get_cfg_path "policy_eval_dir" "日志/policy_eval")"
 OUTPUT_DIR="$(get_cfg_path "output_dir" "产出")"
 DASHBOARD_DIR="$(get_cfg_path "dashboard_dir" "日志/经营看板")"
 RISK_DIR="$(get_cfg_path "risk_dir" "日志/风险雷达")"
@@ -295,6 +296,27 @@ run_pipeline() {
     --db "${KNOWLEDGE_INDEX_DB}" \
     --topic "${topic}" \
     --out-dir "${OUTPUT_DIR}" || return "${E_PIPELINE}"
+}
+
+run_policy_eval() {
+  automation_log "INFO" "policy-eval" "start"
+  python3 "${ROOT_DIR}/scripts/policy_analysis_eval.py" \
+    --db "${KNOWLEDGE_INDEX_DB}" \
+    --out-dir "${POLICY_EVAL_DIR}" || return "${E_PIPELINE}"
+  automation_log "INFO" "policy-eval" "done"
+}
+
+run_policy_diff() {
+  local keyword="${1:-}"
+  if [ -z "${keyword}" ]; then
+    echo "policy-diff 命令需要 keyword"
+    return "${E_USAGE}"
+  fi
+  automation_log "INFO" "policy-diff" "keyword=${keyword}"
+  python3 "${ROOT_DIR}/scripts/policy_version_diff.py" \
+    --db "${KNOWLEDGE_INDEX_DB}" \
+    --keyword "${keyword}" \
+    --out-dir "${POLICY_EVAL_DIR}" || return "${E_PIPELINE}"
 }
 
 run_metrics() {
@@ -899,6 +921,8 @@ Usage:
   scripts/agentsys.sh datahub-api
   scripts/agentsys.sh datahub-cycle
   scripts/agentsys.sh pipeline "<topic>"
+  scripts/agentsys.sh policy-eval
+  scripts/agentsys.sh policy-diff "<keyword>"
   scripts/agentsys.sh metrics
   scripts/agentsys.sh plan-task "<task_id>"
   scripts/agentsys.sh cycle-daily
@@ -972,6 +996,8 @@ case "${cmd}" in
   datahub-api) run_datahub_api ;;
   datahub-cycle) run_datahub_cycle ;;
   pipeline) shift; run_pipeline "${1:-}" ;;
+  policy-eval) run_policy_eval ;;
+  policy-diff) shift; run_policy_diff "${1:-}" ;;
   metrics) run_metrics ;;
   plan-task) shift; run_plan_task "${1:-}" ;;
   cycle-daily) run_cycle_daily ;;

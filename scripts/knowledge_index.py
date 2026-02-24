@@ -26,6 +26,7 @@ def connect(db_path):
           source_url TEXT,
           source_hash TEXT,
           confidence REAL,
+          domain TEXT,
           file_mtime INTEGER,
           content_hash TEXT,
           indexed_at TEXT
@@ -44,6 +45,8 @@ def connect(db_path):
         conn.execute("ALTER TABLE docs ADD COLUMN file_mtime INTEGER DEFAULT 0")
     if "content_hash" not in cols:
         conn.execute("ALTER TABLE docs ADD COLUMN content_hash TEXT DEFAULT ''")
+    if "domain" not in cols:
+        conn.execute("ALTER TABLE docs ADD COLUMN domain TEXT DEFAULT ''")
     return conn
 
 
@@ -81,6 +84,58 @@ def parse_metadata(lines):
     return title, updated, source_url, source_hash, confidence
 
 
+def clamp(v, lo=0.0, hi=100.0):
+    return max(lo, min(hi, v))
+
+
+def derive_confidence(title: str, source_url: str, domain: str, raw_conf: float) -> float:
+    if raw_conf and raw_conf > 0:
+        return clamp(float(raw_conf))
+
+    base_map = {
+        "pbc_policy": 90.0,
+        "legal_commentary": 78.0,
+        "important_document": 72.0,
+        "industry_report": 62.0,
+        "payment_agreement": 55.0,
+        "generic": 48.0,
+    }
+    conf = base_map.get(domain, 50.0)
+
+    t = title or ""
+    s = (source_url or "").lower()
+    if "pbc.gov.cn" in s or ".gov.cn" in s:
+        conf += 8.0
+    if "hankunlaw.com" in s:
+        conf += 3.0
+    if "iresearch.com.cn" in s:
+        conf += 2.0
+
+    if any(k in t for k in ("人民银行", "国务院", "令", "条例", "实施细则", "办法")):
+        conf += 4.0
+    if any(k in t for k in ("解读", "点评", "观察")):
+        conf -= 2.0
+    if "协议" in t:
+        conf -= 4.0
+
+    return round(clamp(conf), 2)
+
+
+def infer_domain(path: Path):
+    p = str(path).replace("\\", "/")
+    if "/知识库/pbc_weixin/" in p:
+        return "pbc_policy"
+    if "/知识库/hankun_information/" in p:
+        return "legal_commentary"
+    if "/知识库/important_document/" in p:
+        return "important_document"
+    if "/知识库/agreement_weixin/" in p:
+        return "payment_agreement"
+    if "/知识库/iresearch_information/" in p:
+        return "industry_report"
+    return "generic"
+
+
 def extract_doc(path: Path):
     text = path.read_text(encoding="utf-8", errors="ignore")
     lines = text.splitlines()
@@ -89,13 +144,15 @@ def extract_doc(path: Path):
         title = path.stem
     if not updated:
         updated = dt.date.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d")
+    domain = infer_domain(path)
     return {
         "path": str(path),
         "title": title,
         "updated_date": updated,
         "source_url": source_url,
         "source_hash": source_hash,
-        "confidence": confidence,
+        "confidence": derive_confidence(title, source_url, domain, confidence),
+        "domain": domain,
         "content": text,
         "content_hash": content_hash(text),
         "file_mtime": int(path.stat().st_mtime),
@@ -112,22 +169,33 @@ def scan_files(root):
 
 
 def load_existing(cur):
-    rows = cur.execute("SELECT path, file_mtime, content_hash FROM docs").fetchall()
-    return {r[0]: {"file_mtime": int(r[1] or 0), "content_hash": r[2] or ""} for r in rows}
+    rows = cur.execute(
+        "SELECT path, file_mtime, content_hash, COALESCE(domain, ''), COALESCE(confidence, 0) FROM docs"
+    ).fetchall()
+    return {
+        r[0]: {
+            "file_mtime": int(r[1] or 0),
+            "content_hash": r[2] or "",
+            "domain": r[3] or "",
+            "confidence": float(r[4] or 0),
+        }
+        for r in rows
+    }
 
 
 def upsert(cur, rec):
     cur.execute("DELETE FROM docs_fts WHERE path = ?", (rec["path"],))
     cur.execute(
         """
-        INSERT INTO docs(path, title, updated_date, source_url, source_hash, confidence, file_mtime, content_hash, indexed_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO docs(path, title, updated_date, source_url, source_hash, confidence, domain, file_mtime, content_hash, indexed_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
           title=excluded.title,
           updated_date=excluded.updated_date,
           source_url=excluded.source_url,
           source_hash=excluded.source_hash,
           confidence=excluded.confidence,
+          domain=excluded.domain,
           file_mtime=excluded.file_mtime,
           content_hash=excluded.content_hash,
           indexed_at=excluded.indexed_at
@@ -139,6 +207,7 @@ def upsert(cur, rec):
             rec["source_url"],
             rec["source_hash"],
             rec["confidence"],
+            rec["domain"],
             rec["file_mtime"],
             rec["content_hash"],
             dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -163,15 +232,36 @@ def build_index(root, db_path, mode="incremental"):
     for p in files:
         pstr = str(p)
         mtime = int(p.stat().st_mtime)
-        if mode == "incremental" and pstr in existing and existing[pstr]["file_mtime"] == mtime:
+        if (
+            mode == "incremental"
+            and pstr in existing
+            and existing[pstr]["file_mtime"] == mtime
+            and existing[pstr]["domain"]
+            and existing[pstr]["confidence"] > 0
+        ):
             skipped += 1
             continue
         rec = extract_doc(p)
         if mode == "incremental" and pstr in existing and existing[pstr]["content_hash"] == rec["content_hash"]:
             # metadata may change via mtime; still update lightweight row
             cur.execute(
-                "UPDATE docs SET file_mtime=?, indexed_at=? WHERE path=?",
-                (rec["file_mtime"], dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), rec["path"]),
+                """
+                UPDATE docs
+                SET title=?, updated_date=?, source_url=?, source_hash=?, confidence=?, domain=?,
+                    file_mtime=?, indexed_at=?
+                WHERE path=?
+                """,
+                (
+                    rec["title"],
+                    rec["updated_date"],
+                    rec["source_url"],
+                    rec["source_hash"],
+                    rec["confidence"],
+                    rec["domain"],
+                    rec["file_mtime"],
+                    dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    rec["path"],
+                ),
             )
             skipped += 1
             continue
@@ -226,6 +316,7 @@ def query_index(db_path, query, limit=10):
     rows = cur.execute(
         """
         SELECT d.path, d.title, d.updated_date, d.source_url, d.confidence,
+               COALESCE(d.domain, '') AS domain,
                snippet(docs_fts, 2, '[', ']', '...', 12) AS snippet_text,
                bm25(docs_fts) AS bm
         FROM docs_fts
@@ -244,14 +335,14 @@ def query_index(db_path, query, limit=10):
 
     ranked = []
     for r in rows:
-        path, title, updated, source_url, conf, snip, bm = r
+        path, title, updated, source_url, conf, domain, snip, bm = r
         rank = final_rank(bm, updated, conf)
-        ranked.append((rank, path, title, updated, source_url, conf, snip, bm))
+        ranked.append((rank, path, title, updated, source_url, conf, domain, snip, bm))
     ranked.sort(key=lambda x: x[0], reverse=True)
 
     for i, item in enumerate(ranked[:limit], start=1):
-        rank, path, title, updated, source_url, conf, snip, bm = item
-        print(f"{i}. {title} | {updated} | rank={rank:.4f} | bm25={bm:.4f} | conf={conf:.1f}")
+        rank, path, title, updated, source_url, conf, domain, snip, bm = item
+        print(f"{i}. {title} | {updated} | domain={domain} | rank={rank:.4f} | bm25={bm:.4f} | conf={conf:.1f}")
         print(f"   path: {path}")
         if source_url:
             print(f"   source: {source_url}")

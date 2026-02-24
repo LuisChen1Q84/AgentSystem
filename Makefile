@@ -213,12 +213,19 @@ datahub-table2:
 	@if [ -z "$(xlsx)" ]; then echo "请提供 xlsx 参数，例如 make datahub-table2 xlsx='/Users/luis/Desktop/表2.xlsx'"; exit 2; fi
 	@python3 $(ROOT)/scripts/datahub_table2_transform.py --xlsx "$(xlsx)"
 
+datahub-table3:
+	@if [ -z "$(xlsx)" ]; then echo "请提供 xlsx 参数，例如 make datahub-table3 xlsx='/Users/luis/Desktop/表3.xlsx'"; exit 2; fi
+	@python3 $(ROOT)/scripts/datahub_table3_transform.py --xlsx "$(xlsx)"
+
 metrics:
 	@$(ROOT)/scripts/agentsys.sh metrics
 
 pipeline:
 	@if [ -z "$(topic)" ]; then echo "请提供 topic 参数"; exit 2; fi
 	@$(ROOT)/scripts/agentsys.sh pipeline "$(topic)"
+
+policy-eval:
+	@$(ROOT)/scripts/agentsys.sh policy-eval
 
 cycle-daily:
 	@$(ROOT)/scripts/agentsys.sh cycle-daily

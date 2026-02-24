@@ -1,0 +1,2 @@
+dataset_id,event_time,entity_id,metric,value,payload
+"table3","2026-01-01 00:00:00","贵州省|静态码牌","terminal_bound_count",12345,"{""dataset_id"":""table3"",""month"":""202601"",""province"":""贵州省"",""terminal_name"":""静态码牌""}"

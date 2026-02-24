@@ -18,6 +18,8 @@ def infer_dataset_id(path: Path) -> str:
         return "table1"
     if "table2" in n or "表2" in n:
         return "table2"
+    if "table3" in n or "表3" in n:
+        return "table3"
     return "unknown"
 
 
@@ -36,6 +38,16 @@ def parse_payload_field(v):
         return {"_raw": s}
 
 
+def pick_value(*vals):
+    for v in vals:
+        if v is None:
+            continue
+        if isinstance(v, str) and not v.strip():
+            continue
+        return v
+    return ""
+
+
 def load_csv(path):
     rows = []
     with path.open("r", encoding="utf-8", errors="ignore") as f:
@@ -46,10 +58,10 @@ def load_csv(path):
             rows.append(
                 {
                     "dataset_id": dataset_id,
-                    "event_time": r.get("event_time") or r.get("timestamp") or "",
-                    "entity_id": r.get("entity_id") or r.get("user_id") or r.get("id") or "",
-                    "metric": r.get("metric") or r.get("event") or r.get("type") or "",
-                    "value": r.get("value") or r.get("amount") or "",
+                    "event_time": str(pick_value(r.get("event_time"), r.get("timestamp"), "")),
+                    "entity_id": str(pick_value(r.get("entity_id"), r.get("user_id"), r.get("id"), "")),
+                    "metric": str(pick_value(r.get("metric"), r.get("event"), r.get("type"), "")),
+                    "value": str(pick_value(r.get("value"), r.get("amount"), "")),
                     "payload": payload_obj,
                 }
             )
@@ -71,10 +83,10 @@ def load_jsonl(path):
         rows.append(
             {
                 "dataset_id": dataset_id,
-                "event_time": str(obj.get("event_time") or obj.get("timestamp") or ""),
-                "entity_id": str(obj.get("entity_id") or obj.get("user_id") or obj.get("id") or ""),
-                "metric": str(obj.get("metric") or obj.get("event") or obj.get("type") or ""),
-                "value": str(obj.get("value") or obj.get("amount") or ""),
+                "event_time": str(pick_value(obj.get("event_time"), obj.get("timestamp"), "")),
+                "entity_id": str(pick_value(obj.get("entity_id"), obj.get("user_id"), obj.get("id"), "")),
+                "metric": str(pick_value(obj.get("metric"), obj.get("event"), obj.get("type"), "")),
+                "value": str(pick_value(obj.get("value"), obj.get("amount"), "")),
                 "payload": payload,
             }
         )

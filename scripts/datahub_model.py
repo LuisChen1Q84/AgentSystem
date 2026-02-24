@@ -26,6 +26,10 @@ def upsert_metric_dictionary(conn, ts):
         ("benefit_amount_yuan", "让利金额", "yuan", "table2"),
         ("merchant_count", "商户数", "count", "table2"),
         ("registered_merchant_cum", "累计注册商家", "count", "table2"),
+        ("terminal_bound_count", "绑定终端数量", "count", "table3"),
+        ("terminal_new_month_count", "当月新增终端数量", "count", "table3"),
+        ("terminal_paused_count", "暂停终端数量", "count", "table3"),
+        ("terminal_complete_5elem_count", "五要素齐全终端数量", "count", "table3"),
     ]
     conn.executemany(
         """
