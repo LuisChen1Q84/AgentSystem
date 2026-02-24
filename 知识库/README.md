@@ -10,7 +10,7 @@
 | 4 | regulation_weixin | `知识库/regulation_weixin/` | 105 | 32个顶层文件 + 8个子目录(73) |
 | 5 | business_weixin | `知识库/business_weixin/` | 31 | 商户业务规范 |
 | 6 | agreement_weixin | `知识库/agreement_weixin/` | 45 | 43个顶层文件 + 案例(2) |
-| 7 | iresearch_information | `知识库/iresearch_information/` | 38 | 行业数据（艾瑞报告子目录为空） |
+| 7 | iresearch_information | `知识库/iresearch_information/` | 38 | 行业数据 |
 
 **总计**：407个文件（含子目录）
 
