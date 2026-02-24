@@ -381,6 +381,8 @@ AgentSystem/
 - `make capital`（资本看板）
 - `make autonomy-audit`（自治审计）
 - `make board-packet`（董事会经营包）
+- `make datahub-cycle`（私有数据清洗整合分析）
+- `make datahub-api`（本地数据接口，仅127.0.0.1）
 - `make cycle-daily|cycle-weekly|cycle-monthly|cycle-intel|cycle-evolve|cycle-autonomous|cycle-ultimate`（经营节奏编排）
 - `make lifecycle`（生命周期清理）
 

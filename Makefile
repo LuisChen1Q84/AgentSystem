@@ -7,6 +7,7 @@ ROOT := /Volumes/Luis_MacData/AgentSystem
 	risk dashboard weekly-review okr-init okr-report decision optimize strategy \
 	forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief \
 	anomaly resilience northstar capital autonomy-audit board-packet \
+	datahub-init datahub-ingest datahub-clean datahub-model datahub-quality datahub-analyze datahub-api datahub-cycle datahub-table1 datahub-table2 \
 	cycle-daily cycle-weekly cycle-monthly cycle-intel cycle-evolve cycle-autonomous cycle-ultimate \
 	preflight release check ci test-all
 
@@ -19,6 +20,7 @@ help:
 	@echo "  make decision|optimize|strategy"
 	@echo "  make forecast|experiment|learning|autopilot|agents|roi|experiment-eval|release-ctrl|ceo-brief"
 	@echo "  make anomaly|resilience|northstar|capital|autonomy-audit|board-packet"
+	@echo "  make datahub-init|datahub-ingest|datahub-clean|datahub-model|datahub-quality|datahub-analyze|datahub-api|datahub-cycle|datahub-table1|datahub-table2"
 	@echo "  make cycle-daily|cycle-weekly|cycle-monthly|cycle-intel|cycle-evolve|cycle-autonomous|cycle-ultimate"
 	@echo "  make search q='关键词'"
 	@echo "  make task-add title='任务' priority='紧急重要' due='2026-02-28'"
@@ -138,6 +140,79 @@ autonomy-audit:
 board-packet:
 	@$(ROOT)/scripts/agentsys.sh board-packet
 
+datahub-init:
+	@$(ROOT)/scripts/agentsys.sh datahub-init
+
+datahub-ingest:
+	@$(ROOT)/scripts/agentsys.sh datahub-ingest
+
+datahub-clean:
+	@$(ROOT)/scripts/agentsys.sh datahub-clean
+
+datahub-model:
+	@$(ROOT)/scripts/agentsys.sh datahub-model
+
+datahub-quality:
+	@$(ROOT)/scripts/agentsys.sh datahub-quality
+
+datahub-analyze:
+	@$(ROOT)/scripts/agentsys.sh datahub-analyze
+
+datahub-query:
+	@$(ROOT)/scripts/agentsys.sh datahub-query $(args)
+
+datahub-insight:
+	@$(ROOT)/scripts/agentsys.sh datahub-insight
+
+datahub-factor:
+	@$(ROOT)/scripts/agentsys.sh datahub-factor
+
+datahub-forecast-baseline:
+	@$(ROOT)/scripts/agentsys.sh datahub-forecast-baseline
+
+datahub-drift-monitor:
+	@$(ROOT)/scripts/agentsys.sh datahub-drift-monitor
+
+datahub-decision-plus:
+	@$(ROOT)/scripts/agentsys.sh datahub-decision-plus
+
+datahub-experiment:
+	@$(ROOT)/scripts/agentsys.sh datahub-experiment $(args)
+
+datahub-causal-eval:
+	@if [ -z "$(exp_id)" ]; then echo "请提供 exp_id 参数，例如 make datahub-causal-eval exp_id='exp_202602'"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh datahub-causal-eval --exp-id "$(exp_id)"
+
+datahub-feedback:
+	@$(ROOT)/scripts/agentsys.sh datahub-feedback $(args)
+
+datahub-expert-cycle:
+	@$(ROOT)/scripts/agentsys.sh datahub-expert-cycle
+
+datahub-integrity:
+	@$(ROOT)/scripts/agentsys.sh datahub-integrity
+
+datahub-backup:
+	@$(ROOT)/scripts/agentsys.sh datahub-backup
+
+datahub-restore:
+	@if [ -z "$(backup)" ]; then echo "请提供 backup 参数，例如 make datahub-restore backup='私有数据/backup/business_20260224_190000.db'"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh datahub-restore "$(backup)"
+
+datahub-api:
+	@$(ROOT)/scripts/agentsys.sh datahub-api
+
+datahub-cycle:
+	@$(ROOT)/scripts/agentsys.sh datahub-cycle
+
+datahub-table1:
+	@if [ -z "$(xlsx)" ]; then echo "请提供 xlsx 参数，例如 make datahub-table1 xlsx='/Users/luis/Desktop/表1.xlsx'"; exit 2; fi
+	@python3 $(ROOT)/scripts/datahub_table1_transform.py --xlsx "$(xlsx)"
+
+datahub-table2:
+	@if [ -z "$(xlsx)" ]; then echo "请提供 xlsx 参数，例如 make datahub-table2 xlsx='/Users/luis/Desktop/表2.xlsx'"; exit 2; fi
+	@python3 $(ROOT)/scripts/datahub_table2_transform.py --xlsx "$(xlsx)"
+
 metrics:
 	@$(ROOT)/scripts/agentsys.sh metrics
 
@@ -207,4 +282,4 @@ check:
 
 ci: check
 
-test-all: check morning health index summary guard weekly-summary recommend risk metrics dashboard decision optimize strategy forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief anomaly resilience northstar capital autonomy-audit board-packet
+test-all: check morning health index summary guard weekly-summary recommend risk metrics dashboard decision optimize strategy forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief anomaly resilience northstar capital autonomy-audit board-packet datahub-cycle

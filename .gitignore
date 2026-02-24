@@ -31,6 +31,11 @@
 日志/资本看板/
 日志/自治审计/
 日志/董事会包/
+日志/datahub/
+日志/datahub_quality/
+日志/datahub_expert/
+私有数据/
+任务系统/tasks.jsonl
 目标系统/okr.json
 目标系统/optimization_policy.json
 目标系统/experiments.json
@@ -39,6 +44,9 @@
 目标系统/release_state.json
 记忆库/语义记忆/经营学习卡.md
 日志/*.db
+*.sqlite
+*.sqlite3
+*.parquet
 *.tmp
 __pycache__/
 *.pyc

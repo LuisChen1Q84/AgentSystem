@@ -31,6 +31,12 @@
 - 资本看板：`make capital`
 - 自治审计：`make autonomy-audit`
 - 董事会包：`make board-packet`
+- DataHub私有数据中台：`make datahub-cycle`
+- 本地数据API：`make datahub-api`
+- DataHub治理与恢复：`make datahub-integrity` / `make datahub-backup` / `make datahub-restore backup='...'`
+- DataHub业务查询与洞察：`make datahub-query args="..."` / `make datahub-insight`
+- DataHub专家分析链：`make datahub-factor` / `make datahub-forecast-baseline` / `make datahub-decision-plus` / `make datahub-expert-cycle`
+- DataHub满配能力：`make datahub-drift-monitor` / `make datahub-experiment args="..."` / `make datahub-causal-eval exp_id="..."` / `make datahub-feedback args="..."`
 - 节奏编排：`make cycle-daily|cycle-weekly|cycle-monthly|cycle-intel|cycle-evolve|cycle-autonomous|cycle-ultimate`
 
 ## 2. 发布前门禁
@@ -111,6 +117,7 @@ make preflight
 | 46 | 资本看板失败 |
 | 47 | 自治审计失败 |
 | 48 | 董事会包失败 |
+| 49 | DataHub失败 |
 
 ## 5. 每日收尾建议
 

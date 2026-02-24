@@ -1,0 +1,3 @@
+{"event_time":"2024-01-01 00:00:00","entity_id":"340200|非小微","metric":"merchant_total_count","value":8282,"payload":{"month":"202401","is_micro":"非小微","region_code":"340200","province":"安徽省","city":"芜湖市","metric_cn":"1.【全量商户数】","unit":"count"}}
+{"event_time":"2024-01-01 00:00:00","entity_id":"340200|非小微","metric":"merchant_txn_amount_cent","value":46024320604,"payload":{"month":"202401","is_micro":"非小微","region_code":"340200","province":"安徽省","city":"芜湖市","metric_cn":"3【商户当月交易金额】(分)（商户收单交易）","unit":"cent"}}
+{"event_time":"2024-01-01 00:00:00","entity_id":"340200|非小微","metric":"new_account_count","value":79,"payload":{"month":"202401","is_micro":"非小微","region_code":"340200","province":"安徽省","city":"芜湖市","metric_cn":"4.【当月新增账户数】","unit":"count"}}

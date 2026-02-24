@@ -44,6 +44,11 @@ NORTH_STAR_DIR="$(get_cfg_path "north_star_dir" "日志/北极星")"
 CAPITAL_DIR="$(get_cfg_path "capital_dir" "日志/资本看板")"
 AUTONOMY_AUDIT_DIR="$(get_cfg_path "autonomy_audit_dir" "日志/自治审计")"
 BOARD_PACKET_DIR="$(get_cfg_path "board_packet_dir" "日志/董事会包")"
+DATAHUB_DB="$(get_cfg_path "datahub_db" "私有数据/oltp/business.db")"
+DATAHUB_IMPORT_DIR="$(get_cfg_path "datahub_import_dir" "私有数据/import")"
+DATAHUB_REPORT_DIR="$(get_cfg_path "datahub_report_dir" "日志/datahub")"
+DATAHUB_QUALITY_DIR="$(get_cfg_path "datahub_quality_dir" "日志/datahub_quality")"
+DATAHUB_EXPERT_DIR="$(get_cfg_path "datahub_expert_dir" "日志/datahub_expert")"
 
 E_USAGE=2
 E_PREFLIGHT=10
@@ -85,6 +90,7 @@ E_NORTHSTAR=45
 E_CAPITAL=46
 E_AUDIT=47
 E_BOARD=48
+E_DATAHUB=49
 
 code_hint() {
   case "$1" in
@@ -128,6 +134,7 @@ code_hint() {
     46) echo "资本看板失败" ;;
     47) echo "自治审计失败" ;;
     48) echo "董事会包失败" ;;
+    49) echo "DataHub失败" ;;
     *) echo "未分类错误" ;;
   esac
 }
@@ -543,6 +550,192 @@ run_board_packet() {
   automation_log "INFO" "board-packet" "done"
 }
 
+run_datahub_init() {
+  automation_log "INFO" "datahub-init" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_init.py" \
+    --db "${DATAHUB_DB}" \
+    --import-dir "${DATAHUB_IMPORT_DIR}" \
+    --report-dir "${DATAHUB_REPORT_DIR}" \
+    --quality-dir "${DATAHUB_QUALITY_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-init" "done"
+}
+
+run_datahub_ingest() {
+  automation_log "INFO" "datahub-ingest" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_ingest.py" \
+    --db "${DATAHUB_DB}" \
+    --import-dir "${DATAHUB_IMPORT_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-ingest" "done"
+}
+
+run_datahub_clean() {
+  automation_log "INFO" "datahub-clean" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_clean.py" \
+    --db "${DATAHUB_DB}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-clean" "done"
+}
+
+run_datahub_model() {
+  automation_log "INFO" "datahub-model" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_model.py" \
+    --db "${DATAHUB_DB}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-model" "done"
+}
+
+run_datahub_quality() {
+  automation_log "INFO" "datahub-quality" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_quality.py" \
+    --db "${DATAHUB_DB}" \
+    --out-dir "${DATAHUB_QUALITY_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-quality" "done"
+}
+
+run_datahub_analyze() {
+  automation_log "INFO" "datahub-analyze" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_analyze.py" \
+    --db "${DATAHUB_DB}" \
+    --out-dir "${DATAHUB_REPORT_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-analyze" "done"
+}
+
+run_datahub_query() {
+  automation_log "INFO" "datahub-query" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_query.py" \
+    --db "${DATAHUB_DB}" "$@" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-query" "done"
+}
+
+run_datahub_insight() {
+  automation_log "INFO" "datahub-insight" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_insight.py" \
+    --db "${DATAHUB_DB}" \
+    --out-dir "${DATAHUB_REPORT_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-insight" "done"
+}
+
+run_datahub_factor() {
+  automation_log "INFO" "datahub-factor" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_factor_decompose.py" \
+    --db "${DATAHUB_DB}" \
+    --dataset "table1" \
+    --out-dir "${DATAHUB_EXPERT_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-factor" "done"
+}
+
+run_datahub_forecast_baseline() {
+  automation_log "INFO" "datahub-forecast-baseline" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_forecast_baseline.py" \
+    --db "${DATAHUB_DB}" \
+    --dataset "table1" \
+    --out-dir "${DATAHUB_EXPERT_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-forecast-baseline" "done"
+}
+
+run_datahub_decision_plus() {
+  automation_log "INFO" "datahub-decision-plus" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_decision_engine.py" \
+    --db "${DATAHUB_DB}" \
+    --dataset "table1" \
+    --expert-dir "${DATAHUB_EXPERT_DIR}" \
+    --out-dir "${DATAHUB_EXPERT_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-decision-plus" "done"
+}
+
+run_datahub_drift_monitor() {
+  automation_log "INFO" "datahub-drift-monitor" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_drift_monitor.py" \
+    --db "${DATAHUB_DB}" \
+    --dataset "table1" \
+    --out-dir "${DATAHUB_EXPERT_DIR}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-drift-monitor" "done"
+}
+
+run_datahub_experiment() {
+  automation_log "INFO" "datahub-experiment" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_experiment.py" \
+    --db "${DATAHUB_DB}" "$@" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-experiment" "done"
+}
+
+run_datahub_causal_eval() {
+  automation_log "INFO" "datahub-causal-eval" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_causal_eval.py" \
+    --db "${DATAHUB_DB}" "$@" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-causal-eval" "done"
+}
+
+run_datahub_feedback() {
+  automation_log "INFO" "datahub-feedback" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_feedback_learn.py" \
+    --db "${DATAHUB_DB}" "$@" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-feedback" "done"
+}
+
+run_datahub_integrity() {
+  automation_log "INFO" "datahub-integrity" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_integrity.py" \
+    --db "${DATAHUB_DB}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-integrity" "done"
+}
+
+run_datahub_backup() {
+  automation_log "INFO" "datahub-backup" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_backup.py" \
+    --db "${DATAHUB_DB}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-backup" "done"
+}
+
+run_datahub_restore() {
+  local backup_file="${1:-}"
+  if [ -z "${backup_file}" ]; then
+    echo "datahub-restore 命令需要 backup 文件路径"
+    return "${E_USAGE}"
+  fi
+  automation_log "INFO" "datahub-restore" "start backup=${backup_file}"
+  python3 "${ROOT_DIR}/scripts/datahub_restore.py" \
+    --db "${DATAHUB_DB}" \
+    --backup "${backup_file}" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-restore" "done"
+}
+
+run_datahub_api() {
+  automation_log "INFO" "datahub-api" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_api.py" \
+    --db "${DATAHUB_DB}" \
+    --host "127.0.0.1" \
+    --port 8787 || return "${E_DATAHUB}"
+}
+
+run_datahub_cycle() {
+  automation_log "INFO" "datahub-cycle" "start"
+  run_datahub_init || return "${E_DATAHUB}"
+  run_datahub_ingest || return "${E_DATAHUB}"
+  run_datahub_clean || return "${E_DATAHUB}"
+  run_datahub_model || return "${E_DATAHUB}"
+  run_datahub_quality || return "${E_DATAHUB}"
+  run_datahub_analyze || return "${E_DATAHUB}"
+  run_datahub_insight || return "${E_DATAHUB}"
+  run_datahub_factor || return "${E_DATAHUB}"
+  run_datahub_forecast_baseline || return "${E_DATAHUB}"
+  run_datahub_drift_monitor || return "${E_DATAHUB}"
+  run_datahub_decision_plus || return "${E_DATAHUB}"
+  run_datahub_feedback import-actions --expert-dir "${DATAHUB_EXPERT_DIR}" || return "${E_DATAHUB}"
+  run_datahub_feedback learn || return "${E_DATAHUB}"
+  run_datahub_integrity || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-cycle" "done"
+}
+
+run_datahub_expert_cycle() {
+  automation_log "INFO" "datahub-expert-cycle" "start"
+  run_datahub_factor || return "${E_DATAHUB}"
+  run_datahub_forecast_baseline || return "${E_DATAHUB}"
+  run_datahub_drift_monitor || return "${E_DATAHUB}"
+  run_datahub_decision_plus || return "${E_DATAHUB}"
+  run_datahub_feedback import-actions --expert-dir "${DATAHUB_EXPERT_DIR}" || return "${E_DATAHUB}"
+  run_datahub_feedback learn || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-expert-cycle" "done"
+}
+
 run_cycle_daily() {
   automation_log "INFO" "cycle-daily" "start"
   run_morning || return "${E_CYCLE}"
@@ -616,6 +809,7 @@ run_cycle_autonomous() {
 run_cycle_ultimate() {
   automation_log "INFO" "cycle-ultimate" "start"
   run_cycle_autonomous || return "${E_CYCLE}"
+  run_datahub_cycle || return "${E_CYCLE}"
   run_anomaly || return "${E_CYCLE}"
   run_resilience || return "${E_CYCLE}"
   run_northstar || return "${E_CYCLE}"
@@ -683,6 +877,27 @@ Usage:
   scripts/agentsys.sh capital
   scripts/agentsys.sh autonomy-audit
   scripts/agentsys.sh board-packet
+  scripts/agentsys.sh datahub-init
+  scripts/agentsys.sh datahub-ingest
+  scripts/agentsys.sh datahub-clean
+  scripts/agentsys.sh datahub-model
+  scripts/agentsys.sh datahub-quality
+  scripts/agentsys.sh datahub-analyze
+  scripts/agentsys.sh datahub-query [args...]
+  scripts/agentsys.sh datahub-insight
+  scripts/agentsys.sh datahub-factor
+  scripts/agentsys.sh datahub-forecast-baseline
+  scripts/agentsys.sh datahub-drift-monitor
+  scripts/agentsys.sh datahub-decision-plus
+  scripts/agentsys.sh datahub-experiment [create|import-units|snapshot ...]
+  scripts/agentsys.sh datahub-causal-eval --exp-id "<id>"
+  scripts/agentsys.sh datahub-feedback [import-actions|record|learn ...]
+  scripts/agentsys.sh datahub-expert-cycle
+  scripts/agentsys.sh datahub-integrity
+  scripts/agentsys.sh datahub-backup
+  scripts/agentsys.sh datahub-restore "<backup_file>"
+  scripts/agentsys.sh datahub-api
+  scripts/agentsys.sh datahub-cycle
   scripts/agentsys.sh pipeline "<topic>"
   scripts/agentsys.sh metrics
   scripts/agentsys.sh plan-task "<task_id>"
@@ -735,6 +950,27 @@ case "${cmd}" in
   capital) run_capital ;;
   autonomy-audit) run_autonomy_audit ;;
   board-packet) run_board_packet ;;
+  datahub-init) run_datahub_init ;;
+  datahub-ingest) run_datahub_ingest ;;
+  datahub-clean) run_datahub_clean ;;
+  datahub-model) run_datahub_model ;;
+  datahub-quality) run_datahub_quality ;;
+  datahub-analyze) run_datahub_analyze ;;
+  datahub-query) shift; run_datahub_query "$@" ;;
+  datahub-insight) run_datahub_insight ;;
+  datahub-factor) run_datahub_factor ;;
+  datahub-forecast-baseline) run_datahub_forecast_baseline ;;
+  datahub-drift-monitor) run_datahub_drift_monitor ;;
+  datahub-decision-plus) run_datahub_decision_plus ;;
+  datahub-experiment) shift; run_datahub_experiment "$@" ;;
+  datahub-causal-eval) shift; run_datahub_causal_eval "$@" ;;
+  datahub-feedback) shift; run_datahub_feedback "$@" ;;
+  datahub-expert-cycle) run_datahub_expert_cycle ;;
+  datahub-integrity) run_datahub_integrity ;;
+  datahub-backup) run_datahub_backup ;;
+  datahub-restore) shift; run_datahub_restore "${1:-}" ;;
+  datahub-api) run_datahub_api ;;
+  datahub-cycle) run_datahub_cycle ;;
   pipeline) shift; run_pipeline "${1:-}" ;;
   metrics) run_metrics ;;
   plan-task) shift; run_plan_task "${1:-}" ;;
