@@ -10,9 +10,9 @@
 | 4 | regulation_weixin | `知识库/regulation_weixin/` | 32 | 财付通内控制度 |
 | 5 | business_weixin | `知识库/business_weixin/` | 31 | 商户业务规范 |
 | 6 | agreement_weixin | `知识库/agreement_weixin/` | 43 | 用户协议 |
-| 7 | iresearch_information | `知识库/iresearch_information/` | 40 | 行业数据 |
+| 7 | iresearch_information | `知识库/iresearch_information/` | 40+2个子目录 | 行业数据（含艾瑞报告2025/2026） |
 
-**总计**：255个文件
+**总计**：255+文件（含子目录）
 
 ## 检索原则
 
