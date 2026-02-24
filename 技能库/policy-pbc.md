@@ -216,12 +216,12 @@
 | 序号 | 知识库 | 路径 | 文件数量 | 说明 |
 |------|--------|------|----------|------|
 | 1 | important_document | `知识库/important_document/` | 35 | 用户更新的内部材料 |
-| 2 | hankun_information | `知识库/hankun_information/` | 5 | 汉坤专业分析 |
+| 2 | hankun_information | `知识库/hankun_information/` | 4+76 | 汉坤专业分析（含hankun_articles） |
 | 3 | pbc_weixin | `知识库/pbc_weixin/` | 69 | 央行监管文件 |
 | 4 | regulation_weixin | `知识库/regulation_weixin/` | 32 | 财付通内控制度 |
 | 5 | business_weixin | `知识库/business_weixin/` | 31 | 商户业务规范 |
 | 6 | agreement_weixin | `知识库/agreement_weixin/` | 43 | 用户协议 |
-| 7 | iresearch_information | `知识库/iresearch_information/` | 40 | 行业数据 |
+| 7 | iresearch_information | `知识库/iresearch_information/` | 40+2子目录 | 行业数据 |
 
 **【执行规则-强制遍历】**
 1. **第一轮：文件扫描**
