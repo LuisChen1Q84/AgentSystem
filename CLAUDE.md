@@ -184,6 +184,8 @@ AgentSystem/
 3. 生成简报
 4. 展示给用户
 
+执行入口：`scripts/agentsys.sh morning`
+
 ### 输出示例
 
 ```
@@ -223,6 +225,8 @@ AgentSystem/
 7. **提炼**：更新语义记忆
 8. **提交**：Git commit
 
+执行入口：`scripts/agentsys.sh iterate`
+
 ### 质量评分
 
 | 分数 | 行动 |
@@ -261,6 +265,8 @@ AgentSystem/
 4. 验证合规性
 5. 执行存储
 6. **告知用户保存位置**
+
+路径配置唯一来源：`config/paths.toml`
 
 ### 存储路径
 
@@ -327,6 +333,63 @@ AgentSystem/
 - /done 执行时
 - 系统迭代完成后
 - 重要文件修改后
+
+提交前安全门禁：
+
+- 启用：`git config core.hooksPath .githooks`
+- 钩子：`.githooks/pre-commit` → `scripts/pre-commit-secrets.sh`
+- 禁止：`git add .`
+
+---
+
+## 标准命令入口
+
+统一使用 `Makefile`：
+
+- `make morning` / `make done` / `make iterate` / `make archive`
+- `make health` / `make index` / `make search q="关键词"`
+- `make task-add title="任务" priority="紧急重要"`
+- `make check`（本地CI检查）
+- `make preflight`（发布前门禁）
+- `make summary`（每日日志摘要）
+- `make weekly-summary`（每周自动化摘要）
+- `make guard`（连续失败阈值监控）
+- `make recommend`（今日执行建议）
+- `make metrics`（7天运营指标）
+- `make pipeline topic="..."`（内容流水线产出）
+- `make index-full`（全量重建索引）
+- `make task-plan id="<TASK_ID>"`（任务自动拆解）
+- `make risk`（风险雷达）
+- `make dashboard`（经营看板）
+- `make weekly-review`（每周复盘）
+- `make okr-init` / `make okr-report`（轻量OKR）
+- `make decision`（智能优先决策）
+- `make optimize`（闭环调优与策略输出）
+- `make strategy`（战略简报）
+- `make forecast`（经营预测）
+- `make experiment`（实验计划管理）
+- `make learning`（经营学习卡沉淀）
+- `make autopilot`（自治目标规划）
+- `make agents`（多代理协同分派）
+- `make roi`（ROI中枢建议）
+- `make experiment-eval`（实验成效评估）
+- `make release-ctrl`（发布风险控制）
+- `make ceo-brief`（CEO简报）
+- `make anomaly`（异常守护）
+- `make resilience`（韧性演练）
+- `make northstar`（北极星追踪）
+- `make capital`（资本看板）
+- `make autonomy-audit`（自治审计）
+- `make board-packet`（董事会经营包）
+- `make cycle-daily|cycle-weekly|cycle-monthly|cycle-intel|cycle-evolve|cycle-autonomous|cycle-ultimate`（经营节奏编排）
+- `make lifecycle`（生命周期清理）
+
+---
+
+## 知识元数据模板
+
+新建知识文档时优先使用：
+`知识库/templates/metadata_template.md`
 
 ### 提交格式
 
