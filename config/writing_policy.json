@@ -1,0 +1,26 @@
+{
+  "global": {
+    "hard": [],
+    "soft": [],
+    "replacements": {}
+  },
+  "session": {
+    "hard": [],
+    "soft": [],
+    "replacements": {},
+    "auto_confirm_on_topic_shift": true
+  },
+  "last_task": {
+    "hard": [
+      "全年最低",
+      "非小微商户"
+    ],
+    "soft": [],
+    "replacements": {
+      "全年最低": "阶段性低位",
+      "非小微商户": "相关市场主体"
+    },
+    "topic": "广西交易公文测试",
+    "updated_at": "2026-02-25 11:44:17"
+  }
+}

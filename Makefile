@@ -4,6 +4,7 @@ ROOT := /Volumes/Luis_MacData/AgentSystem
 .PHONY: help morning done iterate archive health index search lifecycle \
 	task-add task-complete task-bulk task-update task-list task-render \
 	task-plan summary weekly-summary guard recommend metrics pipeline \
+	gov-brief writing-policy \
 	risk dashboard weekly-review okr-init okr-report decision optimize strategy \
 	forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief \
 	anomaly resilience northstar capital autonomy-audit board-packet security-audit \
@@ -15,6 +16,8 @@ help:
 	@echo "Available targets:"
 	@echo "  make morning|done|iterate|archive|health|index|lifecycle"
 	@echo "  make summary|weekly-summary|guard|recommend|metrics|pipeline|preflight|release"
+	@echo "  make gov-brief topic='广西2025交易分析' facts='产出/facts.json' forbidden='词A,词B' replace='词A->表达A'"
+	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
 	@echo "  make decision|optimize|strategy"
@@ -230,6 +233,22 @@ metrics:
 pipeline:
 	@if [ -z "$(topic)" ]; then echo "请提供 topic 参数"; exit 2; fi
 	@$(ROOT)/scripts/agentsys.sh pipeline "$(topic)"
+
+gov-brief:
+	@if [ -z "$(topic)" ]; then echo "请提供 topic 参数"; exit 2; fi
+	@if [ -z "$(facts)" ] && [ -z "$(text)" ] && [ -z "$(input)" ]; then echo "请提供 facts/text/input 参数之一"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh gov-brief --topic "$(topic)" \
+		$(if $(facts),--facts-json "$(facts)",) \
+		$(if $(text),--input-text "$(text)",) \
+		$(if $(input),--input-file "$(input)",) \
+		$(if $(forbidden),--task-hard "$(forbidden)",) \
+		$(if $(soft_forbidden),--task-soft "$(soft_forbidden)",) \
+		$(if $(replace),--task-replace "$(replace)",) \
+		--persist-task-rules
+
+writing-policy:
+	@if [ -z "$(action)" ]; then echo "请提供 action 参数"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh writing-policy "$(action)" $(args)
 
 policy-eval:
 	@$(ROOT)/scripts/agentsys.sh policy-eval

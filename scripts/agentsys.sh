@@ -95,6 +95,7 @@ E_AUDIT=47
 E_BOARD=48
 E_DATAHUB=49
 E_SECURITY=50
+E_WRITING=51
 
 code_hint() {
   case "$1" in
@@ -140,6 +141,7 @@ code_hint() {
     48) echo "董事会包失败" ;;
     49) echo "DataHub失败" ;;
     50) echo "安全审计失败" ;;
+    51) echo "公文写作模块失败" ;;
     *) echo "未分类错误" ;;
   esac
 }
@@ -300,6 +302,18 @@ run_pipeline() {
     --db "${KNOWLEDGE_INDEX_DB}" \
     --topic "${topic}" \
     --out-dir "${OUTPUT_DIR}" || return "${E_PIPELINE}"
+}
+
+run_gov_brief() {
+  automation_log "INFO" "gov-brief" "start args=$*"
+  python3 "${ROOT_DIR}/scripts/gov_brief_writer.py" "$@" || return "${E_WRITING}"
+  automation_log "INFO" "gov-brief" "done"
+}
+
+run_writing_policy() {
+  automation_log "INFO" "writing-policy" "start args=$*"
+  python3 "${ROOT_DIR}/scripts/writing_policy.py" "$@" || return "${E_WRITING}"
+  automation_log "INFO" "writing-policy" "done"
 }
 
 run_policy_eval() {
@@ -955,6 +969,8 @@ Usage:
   scripts/agentsys.sh datahub-api
   scripts/agentsys.sh datahub-cycle
   scripts/agentsys.sh pipeline "<topic>"
+  scripts/agentsys.sh gov-brief --topic "<主题>" [--facts-json <json>|--input-text <text>|--input-file <file>] [--task-hard "词A,词B"] [--task-replace "词A->替换A"] [--persist-task-rules]
+  scripts/agentsys.sh writing-policy show|clear-task|set-task|set-session|set-global|resolve [args...]
   scripts/agentsys.sh policy-eval
   scripts/agentsys.sh policy-diff "<keyword>"
   scripts/agentsys.sh metrics
@@ -1032,6 +1048,8 @@ case "${cmd}" in
   datahub-api) run_datahub_api ;;
   datahub-cycle) run_datahub_cycle ;;
   pipeline) shift; run_pipeline "${1:-}" ;;
+  gov-brief) shift; run_gov_brief "$@" ;;
+  writing-policy) shift; run_writing_policy "$@" ;;
   policy-eval) run_policy_eval ;;
   policy-diff) shift; run_policy_diff "${1:-}" ;;
   metrics) run_metrics ;;
