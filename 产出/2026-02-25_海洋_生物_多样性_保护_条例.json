@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "topic": "海洋 生物 多样性 保护 条例",
+    "scope": {
+      "is_policy_query": true,
+      "has_domain_signal": false
+    },
+    "tokens": [
+      "海洋",
+      "生物",
+      "多样性",
+      "保护",
+      "条例"
+    ],
+    "warnings": [
+      "主题包含政策关键词但不在当前金融支付监管分析域，已停止深度解读以避免误判。"
+    ],
+    "policy_domain_ratio": 0.0,
+    "avg_confidence": 0.0,
+    "summary": [
+      "当前未检索到足够的高相关资料，无法形成可靠政策解读。"
+    ]
+  },
+  "rows": [],
+  "findings": [],
+  "generated_at": "2026-02-25 00:39:19",
+  "out_md": "/Volumes/Luis_MacData/AgentSystem/产出/2026-02-25_海洋_生物_多样性_保护_条例.md"
+}

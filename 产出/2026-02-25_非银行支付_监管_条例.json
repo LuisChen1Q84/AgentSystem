@@ -1,0 +1,187 @@
+{
+  "meta": {
+    "topic": "非银行支付 监管 条例",
+    "scope": {
+      "is_policy_query": true,
+      "has_domain_signal": true
+    },
+    "tokens": [
+      "非银行支付",
+      "支付",
+      "监管",
+      "条例"
+    ],
+    "warnings": [],
+    "policy_domain_ratio": 1.0,
+    "avg_confidence": 0.0,
+    "summary": [
+      "检索到 8 条高相关资料，政策域命中率 100%。",
+      "主要证据主题集中在：准入与许可, 经营与业务边界。",
+      "最高相关来源为《非银行支付机构分类评级管理办法》(score=0.668)。"
+    ]
+  },
+  "rows": [
+    {
+      "title": "非银行支付机构分类评级管理办法",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构分类评级管理办法.md",
+      "updated_date": "2026-02-24",
+      "source_url": "",
+      "confidence": 0.0,
+      "domain": "pbc_policy",
+      "snippet": "...2026-02-18\n\n---\n\n非银行支付机构分类评级管理办法\n第一章  总则\n第一条 为加强非银行支付机构（以下简称支付机构）监管，完善差异化监管措施，合理分配监管资源，促进支付机构健康可持续发展，根据《[非银行支付机构监督管理条例]》等规定，制定本办法。\n第二条...",
+      "bm25": -4.087054124489666,
+      "score": 0.668118
+    },
+    {
+      "title": "非银行支付机构监督管理条例实施细则（中国人民银行令〔2024〕第4号）",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构监督管理条例实施细则_人民银行令_2024_第4号.md",
+      "updated_date": "2026-02-24",
+      "source_url": "",
+      "confidence": 0.0,
+      "domain": "pbc_policy",
+      "snippet": "...总　　则\n第一条　根据《中华人民共和国中国人民银行法》、《中华人民共和国电子商务\n法》、《中华人民共和国行政许可法》、《[非银行支付机构监督管理条例]》（以下简称\n《条例》）等法律、行政法规，制定本细则。\n第二条　非银行支付机构应当遵循诚实信用、合法合规、安全高效原则开展业务...",
+      "bm25": -5.831605627785815,
+      "score": 0.615508
+    },
+    {
+      "title": "非银行支付机构监督管理条例（国务院令第768号）",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构监督管理条例_国务院令第768号.md",
+      "updated_date": "2026-02-24",
+      "source_url": "",
+      "confidence": 0.0,
+      "domain": "pbc_policy",
+      "snippet": "...支付业务许可。非银行支付机构的名称中应当标明“[支付]”字样。\n未经依法批准，任何单位和个人不得从事或者变相从事支付业务，\n不得在单位名称和经营范围中使用“[支付]”字样，法律、行政法规和\n国家另有规定的除外。支付业务许可被依法注销后，该机构名称和经\n营范围中不得继续使用“[支付]”字样。\n第七条设立非银行支付机构...",
+      "bm25": -8.664417492247724,
+      "score": 0.59191
+    },
+    {
+      "title": "央行监管文件索引 (pbc_weixin)",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/index.md",
+      "updated_date": "2026-02-24",
+      "source_url": "",
+      "confidence": 0.0,
+      "domain": "pbc_policy",
+      "snippet": "...23 |\n\n---\n\n## 文件清单\n\n### 支付机构监督管理\n\n| 序号 | 文件名 | 说明 |\n|------|--------|------|\n| 01 | [[非银行支付机构监督管理条例]_国务院令第768号]([非银行支付机构监督管理条例]_国务院令第768号.md) | 国务院令第768号，2024年5月1日起施行 |\n| 02 | [非银行支付机构监督管理条例实施细则_人民银行令_2024...",
+      "bm25": -5.453798382631506,
+      "score": 0.565221
+    },
+    {
+      "title": "中国人民银行关于加强支付受理终端及相关业务管理的通知（银发〔2021〕259号）",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/中国人民银行关于加强支付受理终端及相关业务管理的通知_银发_2021_259号_版2.md",
+      "updated_date": "2026-02-24",
+      "source_url": "",
+      "confidence": 0.0,
+      "domain": "pbc_policy",
+      "snippet": "...4）条码支付辅助受理终端布放地理位置。\n3.收款条码管理。对于为个人或特约商户等收款人生成的，用于付款人识读并发\n起支付指令的收款条码，银行、[支付机构]、清算机构等为收款人提供收款条码相关支\n付服务的机构（以下统称条码支付收款服务机构）应当制定收款条码分类管理制度，\n有效区分个人和特约商户使用收款条码的场景和用途，防范收款条码被出租、出借、\n出售或用于违法违规活动。对于具有明显经营活动特征的个人...",
+      "bm25": -5.8642648404477855,
+      "score": 0.565125
+    },
+    {
+      "title": "中国人民银行关于加强支付受理终端及相关业务管理的通知（银发〔2021〕259号）",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/中国人民银行关于加强支付受理终端及相关业务管理的通知_银发_2021_259号.md",
+      "updated_date": "2026-02-24",
+      "source_url": "",
+      "confidence": 0.0,
+      "domain": "pbc_policy",
+      "snippet": "...条码支付辅助受理终端布 放地理位置。  \n  3.收款条码管理。对于为个人或特约商户等收款人生成的，用于付款人识读并发\n起支付指令的收款条码，银行、[支付机构]、清算机构等为收款人提供收款条码相关支\n付服务的机构（以下统称条码支付收款服务机构）应当制定收款条码分类管理制度，\n有效区分个人和特约商户使用收款条码的场景和用途，防范收款条码被出租、出借、\n出售或用于违法违规活动。对于具有明显经营活动特征的个人...",
+      "bm25": -5.87832765478784,
+      "score": 0.564961
+    },
+    {
+      "title": "财付通支付科技有限公司文件",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/公文写作的标准化及注意事项.md",
+      "updated_date": "2026-02-24",
+      "source_url": "",
+      "confidence": 0.0,
+      "domain": "pbc_policy",
+      "snippet": "# 财付通支付科技有限公司文件\n\n**财付通〔2025〕1号**\n\n## 关于**的报告\n\n中国人民银行**分行：\n\n根据《[非银行支付机构监督管理条例]》（国务院令〔768〕号）、《非银行支付机构监督管理条例实施细则》（中国人民银行令〔2024〕第4号）等的相关要求...",
+      "bm25": -4.039391745504353,
+      "score": 0.56414
+    },
+    {
+      "title": "汉坤金融科技视点（二十二）：十年之后 — 《非银行支付机构条例（征求意见稿）》要点评述",
+      "path": "/Volumes/Luis_MacData/AgentSystem/知识库/hankun_information/hankun_articles/汉坤金融科技视点（二十二）：十年之后_—_《非银行支付机构条例（征求意见稿）》要点评述.md",
+      "updated_date": "2026-02-20",
+      "source_url": "https://www.hankunlaw.com/portal/article/index/cid/8/id/6373.html",
+      "confidence": 0.0,
+      "domain": "legal_commentary",
+      "snippet": "...2021年1月20日，中国人民银行（以下简称“人行”）发布《非银行支付机构条例（征求意见稿）》（以下简称“《[条例]（征）》”或“新规”）并正式对外征求意见。新规共设六个章节，除“总则”及“附则...",
+      "bm25": -5.015279295324036,
+      "score": 0.546434
+    }
+  ],
+  "findings": [
+    {
+      "category": "准入与许可",
+      "text": "# 非银行支付机构分类评级管理办法",
+      "source_title": "非银行支付机构分类评级管理办法",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构分类评级管理办法.md",
+      "score": 0.668118
+    },
+    {
+      "category": "经营与业务边界",
+      "text": "第五条 支付机构分类评级包括公司治理、业务规范、备付金管理、用户权益保护、系统安全、反洗钱措施、经营稳健性等七个模块。各模块内设置若干评级要素，由定量和定性两类指标组成。",
+      "source_title": "非银行支付机构分类评级管理办法",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构分类评级管理办法.md",
+      "score": 0.668118
+    },
+    {
+      "category": "准入与许可",
+      "text": "法》、《中华人民共和国行政许可法》、《非银行支付机构监督管理条例》（以下简称",
+      "source_title": "非银行支付机构监督管理条例实施细则（中国人民银行令〔2024〕第4号）",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构监督管理条例实施细则_人民银行令_2024_第4号.md",
+      "score": 0.615508
+    },
+    {
+      "category": "经营与业务边界",
+      "text": "采取切实有效措施保障业务连续性、备付金安全和用户合法权益，不得以欺骗、隐瞒、非自有资金出资等不正当手段办理行政许可事项，严禁倒卖、出租、出借支付业务许可证。",
+      "source_title": "非银行支付机构监督管理条例实施细则（中国人民银行令〔2024〕第4号）",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构监督管理条例实施细则_人民银行令_2024_第4号.md",
+      "score": 0.615508
+    },
+    {
+      "category": "准入与许可",
+      "text": "内（以下简称境内）依法设立，除银行业金融机构外，取得支付业务",
+      "source_title": "非银行支付机构监督管理条例（国务院令第768号）",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构监督管理条例_国务院令第768号.md",
+      "score": 0.59191
+    },
+    {
+      "category": "经营与业务边界",
+      "text": "内（以下简称境内）依法设立，除银行业金融机构外，取得支付业务",
+      "source_title": "非银行支付机构监督管理条例（国务院令第768号）",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/非银行支付机构监督管理条例_国务院令第768号.md",
+      "score": 0.59191
+    },
+    {
+      "category": "准入与许可",
+      "text": "| 03 | [非银行支付机构分类评级管理办法](非银行支付机构分类评级管理办法.md) | 支付机构分类评级管理 |",
+      "source_title": "央行监管文件索引 (pbc_weixin)",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/index.md",
+      "score": 0.565221
+    },
+    {
+      "category": "经营与业务边界",
+      "text": "### 支付受理终端/收单业务",
+      "source_title": "央行监管文件索引 (pbc_weixin)",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/index.md",
+      "score": 0.565221
+    },
+    {
+      "category": "准入与许可",
+      "text": "款人实行白名单管理，并审慎确定白名单准入条件与规模、个人静态收款条码的有效",
+      "source_title": "中国人民银行关于加强支付受理终端及相关业务管理的通知（银发〔2021〕259号）",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/中国人民银行关于加强支付受理终端及相关业务管理的通知_银发_2021_259号_版2.md",
+      "score": 0.565125
+    },
+    {
+      "category": "经营与业务边界",
+      "text": "# 中国人民银行关于加强支付受理终端及相关业务管理的通知（银发〔2021〕259号）",
+      "source_title": "中国人民银行关于加强支付受理终端及相关业务管理的通知（银发〔2021〕259号）",
+      "source_path": "/Volumes/Luis_MacData/AgentSystem/知识库/pbc_weixin/中国人民银行关于加强支付受理终端及相关业务管理的通知_银发_2021_259号_版2.md",
+      "score": 0.565125
+    }
+  ],
+  "generated_at": "2026-02-25 00:39:19",
+  "out_md": "/Volumes/Luis_MacData/AgentSystem/产出/2026-02-25_非银行支付_监管_条例.md"
+}

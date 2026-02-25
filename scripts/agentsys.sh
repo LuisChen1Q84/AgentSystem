@@ -45,6 +45,8 @@ NORTH_STAR_DIR="$(get_cfg_path "north_star_dir" "日志/北极星")"
 CAPITAL_DIR="$(get_cfg_path "capital_dir" "日志/资本看板")"
 AUTONOMY_AUDIT_DIR="$(get_cfg_path "autonomy_audit_dir" "日志/自治审计")"
 BOARD_PACKET_DIR="$(get_cfg_path "board_packet_dir" "日志/董事会包")"
+SECURITY_AUDIT_DIR="$(get_cfg_path "security_audit_dir" "日志/安全审计")"
+DATAHUB_QUALITY_GATE_DIR="$(get_cfg_path "datahub_quality_gate_dir" "日志/datahub_quality_gate")"
 DATAHUB_DB="$(get_cfg_path "datahub_db" "私有数据/oltp/business.db")"
 DATAHUB_IMPORT_DIR="$(get_cfg_path "datahub_import_dir" "私有数据/import")"
 DATAHUB_REPORT_DIR="$(get_cfg_path "datahub_report_dir" "日志/datahub")"
@@ -92,6 +94,7 @@ E_CAPITAL=46
 E_AUDIT=47
 E_BOARD=48
 E_DATAHUB=49
+E_SECURITY=50
 
 code_hint() {
   case "$1" in
@@ -136,6 +139,7 @@ code_hint() {
     47) echo "自治审计失败" ;;
     48) echo "董事会包失败" ;;
     49) echo "DataHub失败" ;;
+    50) echo "安全审计失败" ;;
     *) echo "未分类错误" ;;
   esac
 }
@@ -572,6 +576,14 @@ run_board_packet() {
   automation_log "INFO" "board-packet" "done"
 }
 
+run_security_audit() {
+  automation_log "INFO" "security-audit" "start"
+  python3 "${ROOT_DIR}/scripts/security_audit.py" \
+    --root "${ROOT_DIR}" \
+    --out-dir "${SECURITY_AUDIT_DIR}" || return "${E_SECURITY}"
+  automation_log "INFO" "security-audit" "done"
+}
+
 run_datahub_init() {
   automation_log "INFO" "datahub-init" "start"
   python3 "${ROOT_DIR}/scripts/datahub_init.py" \
@@ -584,10 +596,20 @@ run_datahub_init() {
 
 run_datahub_ingest() {
   automation_log "INFO" "datahub-ingest" "start"
+  run_datahub_quality_gate || return "${E_DATAHUB}"
   python3 "${ROOT_DIR}/scripts/datahub_ingest.py" \
     --db "${DATAHUB_DB}" \
     --import-dir "${DATAHUB_IMPORT_DIR}" || return "${E_DATAHUB}"
   automation_log "INFO" "datahub-ingest" "done"
+}
+
+run_datahub_quality_gate() {
+  automation_log "INFO" "datahub-quality-gate" "start"
+  python3 "${ROOT_DIR}/scripts/datahub_quality_gate.py" \
+    --import-dir "${DATAHUB_IMPORT_DIR}" \
+    --out-dir "${DATAHUB_QUALITY_GATE_DIR}" \
+    --strict || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-quality-gate" "done"
 }
 
 run_datahub_clean() {
@@ -722,10 +744,16 @@ run_datahub_restore() {
 
 run_datahub_api() {
   automation_log "INFO" "datahub-api" "start"
+  local api_key="${DATAHUB_API_KEY:-}"
+  local auth_args=()
+  if [ -n "${api_key}" ]; then
+    auth_args+=(--api-key "${api_key}" --require-auth)
+  fi
   python3 "${ROOT_DIR}/scripts/datahub_api.py" \
     --db "${DATAHUB_DB}" \
     --host "127.0.0.1" \
-    --port 8787 || return "${E_DATAHUB}"
+    --port 8787 \
+    "${auth_args[@]}" || return "${E_DATAHUB}"
 }
 
 run_datahub_cycle() {
@@ -857,6 +885,10 @@ run_plan_task() {
 run_preflight() {
   automation_log "INFO" "preflight" "start"
   METADATA_STRICT_STAGED=1 bash "${ROOT_DIR}/scripts/checks.sh" || return "${E_PREFLIGHT}"
+  python3 "${ROOT_DIR}/scripts/security_audit.py" \
+    --root "${ROOT_DIR}" \
+    --out-dir "${SECURITY_AUDIT_DIR}" \
+    --strict || return "${E_PREFLIGHT}"
   automation_log "INFO" "preflight" "done"
 }
 
@@ -899,8 +931,10 @@ Usage:
   scripts/agentsys.sh capital
   scripts/agentsys.sh autonomy-audit
   scripts/agentsys.sh board-packet
+  scripts/agentsys.sh security-audit
   scripts/agentsys.sh datahub-init
   scripts/agentsys.sh datahub-ingest
+  scripts/agentsys.sh datahub-quality-gate
   scripts/agentsys.sh datahub-clean
   scripts/agentsys.sh datahub-model
   scripts/agentsys.sh datahub-quality
@@ -974,8 +1008,10 @@ case "${cmd}" in
   capital) run_capital ;;
   autonomy-audit) run_autonomy_audit ;;
   board-packet) run_board_packet ;;
+  security-audit) run_security_audit ;;
   datahub-init) run_datahub_init ;;
   datahub-ingest) run_datahub_ingest ;;
+  datahub-quality-gate) run_datahub_quality_gate ;;
   datahub-clean) run_datahub_clean ;;
   datahub-model) run_datahub_model ;;
   datahub-quality) run_datahub_quality ;;

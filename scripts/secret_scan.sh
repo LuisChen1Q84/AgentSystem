@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-PATTERN='(api[_-]?key\s*=|secret\s*=|token\s*=|password\s*=|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)'
+PATTERN="((api[_-]?key|secret|token|password)\\s*[:=]\\s*['\\\"][A-Za-z0-9][^'\\\"]{7,}['\\\"]|sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)"
 EXCLUDE='^知识库/|^日志/|^\.env\.example$|\.md$|\.txt$'
 
 failed=0

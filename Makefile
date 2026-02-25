@@ -6,8 +6,8 @@ ROOT := /Volumes/Luis_MacData/AgentSystem
 	task-plan summary weekly-summary guard recommend metrics pipeline \
 	risk dashboard weekly-review okr-init okr-report decision optimize strategy \
 	forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief \
-	anomaly resilience northstar capital autonomy-audit board-packet \
-	datahub-init datahub-ingest datahub-clean datahub-model datahub-quality datahub-analyze datahub-api datahub-cycle datahub-table1 datahub-table2 \
+	anomaly resilience northstar capital autonomy-audit board-packet security-audit \
+	datahub-init datahub-ingest datahub-quality-gate datahub-clean datahub-model datahub-quality datahub-analyze datahub-api datahub-cycle datahub-table1 datahub-table2 \
 	cycle-daily cycle-weekly cycle-monthly cycle-intel cycle-evolve cycle-autonomous cycle-ultimate \
 	preflight release check ci test-all
 
@@ -20,7 +20,8 @@ help:
 	@echo "  make decision|optimize|strategy"
 	@echo "  make forecast|experiment|learning|autopilot|agents|roi|experiment-eval|release-ctrl|ceo-brief"
 	@echo "  make anomaly|resilience|northstar|capital|autonomy-audit|board-packet"
-	@echo "  make datahub-init|datahub-ingest|datahub-clean|datahub-model|datahub-quality|datahub-analyze|datahub-api|datahub-cycle|datahub-table1|datahub-table2"
+	@echo "  make security-audit"
+	@echo "  make datahub-init|datahub-ingest|datahub-quality-gate|datahub-clean|datahub-model|datahub-quality|datahub-analyze|datahub-api|datahub-cycle|datahub-table1|datahub-table2"
 	@echo "  make cycle-daily|cycle-weekly|cycle-monthly|cycle-intel|cycle-evolve|cycle-autonomous|cycle-ultimate"
 	@echo "  make search q='关键词'"
 	@echo "  make task-add title='任务' priority='紧急重要' due='2026-02-28'"
@@ -140,11 +141,17 @@ autonomy-audit:
 board-packet:
 	@$(ROOT)/scripts/agentsys.sh board-packet
 
+security-audit:
+	@$(ROOT)/scripts/agentsys.sh security-audit
+
 datahub-init:
 	@$(ROOT)/scripts/agentsys.sh datahub-init
 
 datahub-ingest:
 	@$(ROOT)/scripts/agentsys.sh datahub-ingest
+
+datahub-quality-gate:
+	@$(ROOT)/scripts/agentsys.sh datahub-quality-gate
 
 datahub-clean:
 	@$(ROOT)/scripts/agentsys.sh datahub-clean
@@ -289,4 +296,4 @@ check:
 
 ci: check
 
-test-all: check morning health index summary guard weekly-summary recommend risk metrics dashboard decision optimize strategy forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief anomaly resilience northstar capital autonomy-audit board-packet datahub-cycle
+test-all: check morning health index summary guard weekly-summary recommend risk metrics dashboard decision optimize strategy forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief anomaly resilience northstar capital autonomy-audit board-packet datahub-quality-gate datahub-cycle

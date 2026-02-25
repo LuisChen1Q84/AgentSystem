@@ -1,0 +1,108 @@
+{
+  "generated_at": "2026-02-25 09:21:31",
+  "import_dir": "/Volumes/Luis_MacData/AgentSystem/私有数据/import",
+  "file_count": 6,
+  "total_rows": 1483036,
+  "error_count": 0,
+  "warn_count": 2,
+  "files": [
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table1_events.csv",
+      "rows": 193500,
+      "issues": [],
+      "stats": {
+        "missing_event_time": 0,
+        "missing_metric": 0,
+        "non_numeric_value": 0,
+        "bad_time": 0,
+        "duplicate": 0
+      }
+    },
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table2_events.csv",
+      "rows": 543346,
+      "issues": [
+        [
+          "high_duplicate",
+          "WARN",
+          "重复率 0.01%"
+        ]
+      ],
+      "stats": {
+        "missing_event_time": 0,
+        "missing_metric": 0,
+        "non_numeric_value": 0,
+        "bad_time": 0,
+        "duplicate": 59
+      }
+    },
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table3_events.csv",
+      "rows": 4672,
+      "issues": [],
+      "stats": {
+        "missing_event_time": 0,
+        "missing_metric": 0,
+        "non_numeric_value": 0,
+        "bad_time": 0,
+        "duplicate": 0
+      }
+    },
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table1_events.jsonl",
+      "rows": 193500,
+      "issues": [],
+      "stats": {
+        "missing_event_time": 0,
+        "missing_metric": 0,
+        "non_numeric_value": 0,
+        "bad_time": 0,
+        "duplicate": 0
+      }
+    },
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table2_events.jsonl",
+      "rows": 543346,
+      "issues": [
+        [
+          "high_duplicate",
+          "WARN",
+          "重复率 0.01%"
+        ]
+      ],
+      "stats": {
+        "missing_event_time": 0,
+        "missing_metric": 0,
+        "non_numeric_value": 0,
+        "bad_time": 0,
+        "duplicate": 59
+      }
+    },
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table3_events.jsonl",
+      "rows": 4672,
+      "issues": [],
+      "stats": {
+        "missing_event_time": 0,
+        "missing_metric": 0,
+        "non_numeric_value": 0,
+        "bad_time": 0,
+        "duplicate": 0
+      }
+    }
+  ],
+  "issues": [
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table2_events.csv",
+      "check": "high_duplicate",
+      "severity": "WARN",
+      "details": "重复率 0.01%"
+    },
+    {
+      "file": "/Volumes/Luis_MacData/AgentSystem/私有数据/import/table2_events.jsonl",
+      "check": "high_duplicate",
+      "severity": "WARN",
+      "details": "重复率 0.01%"
+    }
+  ]
+}

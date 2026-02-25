@@ -5,10 +5,37 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PATHS_FILE="${ROOT_DIR}/config/paths.toml"
 ENV_FILE="${ROOT_DIR}/.env"
 
-if [ -f "${ENV_FILE}" ]; then
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-fi
+load_env_file() {
+  local file="$1"
+  local line key value
+  [ -f "${file}" ] || return 0
+
+  while IFS= read -r line || [ -n "${line}" ]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" || "${line}" =~ ^[[:space:]]*# ]] && continue
+
+    if [[ "${line}" =~ ^[[:space:]]*export[[:space:]]+([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+    elif [[ "${line}" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+    else
+      echo "忽略不安全的 .env 行: ${line}" >&2
+      continue
+    fi
+
+    value="${value#"${value%%[![:space:]]*}"}"
+    if [[ "${value}" =~ ^\"(.*)\"$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    elif [[ "${value}" =~ ^\'(.*)\'$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    fi
+    export "${key}=${value}"
+  done < "${file}"
+}
+
+load_env_file "${ENV_FILE}"
 
 get_cfg_path() {
   local key="$1"

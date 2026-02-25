@@ -23,13 +23,25 @@ def ensure_dir(path):
 
 def load_events(path):
     events = []
+    bad_lines = 0
     if not os.path.exists(path):
         return events
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if line:
-                events.append(json.loads(line))
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                bad_lines += 1
+                continue
+            if not isinstance(event, dict):
+                bad_lines += 1
+                continue
+            events.append(event)
+    if bad_lines:
+        print(f"警告: {path} 中跳过 {bad_lines} 条损坏事件", file=sys.stderr)
     return events
 
 
@@ -51,16 +63,20 @@ def materialize(events):
         event_type = event.get("type")
         task_id = event.get("task_id")
         if event_type == "task_created":
+            title = event.get("title")
+            created_at = event.get("created_at")
+            if not task_id or not title or not created_at:
+                continue
             tasks[task_id] = {
                 "id": task_id,
-                "title": event["title"],
-                "created_at": event["created_at"],
+                "title": title,
+                "created_at": created_at,
                 "due_date": event.get("due_date"),
                 "source": event.get("source", "系统"),
                 "priority": normalize_priority(event.get("priority", "日常事项")),
                 "status": "待办",
                 "notes": event.get("notes", ""),
-                "updated_at": event["created_at"],
+                "updated_at": created_at,
             }
         elif event_type == "task_updated" and task_id in tasks:
             for field in ("title", "due_date", "source", "notes"):
@@ -68,13 +84,13 @@ def materialize(events):
                     tasks[task_id][field] = event[field]
             if "priority" in event and event["priority"] is not None:
                 tasks[task_id]["priority"] = normalize_priority(event["priority"])
-            tasks[task_id]["updated_at"] = event["updated_at"]
+            tasks[task_id]["updated_at"] = event.get("updated_at", tasks[task_id]["updated_at"])
         elif event_type == "task_completed" and task_id in tasks:
             tasks[task_id]["status"] = "已完成"
-            tasks[task_id]["updated_at"] = event["completed_at"]
+            tasks[task_id]["updated_at"] = event.get("completed_at", tasks[task_id]["updated_at"])
         elif event_type == "task_reopened" and task_id in tasks:
             tasks[task_id]["status"] = "待办"
-            tasks[task_id]["updated_at"] = event["reopened_at"]
+            tasks[task_id]["updated_at"] = event.get("reopened_at", tasks[task_id]["updated_at"])
     return sorted(tasks.values(), key=lambda x: (x["status"] == "已完成", x["created_at"]))
 
 
