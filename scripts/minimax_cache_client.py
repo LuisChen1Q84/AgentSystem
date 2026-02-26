@@ -38,6 +38,13 @@ try:
 except ImportError:
     raise ImportError("请安装 anthropic 库: pip install anthropic")
 
+# 安全显示模块
+try:
+    from scripts.secure_display import secure_mask
+except ImportError:
+    def secure_mask(value: str) -> str:
+        return value[:8] + "****" if len(value) > 8 else "****"
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = ROOT / "config" / "image_creator_hub.toml"
 
@@ -88,7 +95,10 @@ class MiniMaxCacheClient:
         """
         self.api_key = api_key or os.getenv("MINIMAX_API_KEY", "").strip()
         if not self.api_key:
-            raise ValueError("缺少 API Key，请设置 MINIMAX_API_KEY 环境变量或传入 api_key 参数")
+            raise ValueError("缺少 API Key，请设置 MINIMAX_API_KEY 环境变量")
+
+        # 安全存储（不在任何输出中暴露）
+        self._api_key_masked = secure_mask(self.api_key)
 
         self.base_url = base_url or self.DEFAULT_BASE_URL
         self.model = model or self.DEFAULT_MODEL
