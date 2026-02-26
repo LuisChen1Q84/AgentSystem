@@ -1,6 +1,6 @@
 # 技能库说明
 
-## 已集成的9个AI技能
+## 已集成的10个AI技能
 
 | 序号 | 技能文件 | 说明 | 触发词 |
 |------|----------|------|--------|
@@ -13,6 +13,7 @@
 | 7 | minimax-xlsx.md | Excel处理 | /minimax-xlsx |
 | 8 | minimax-docx.md | 文档处理 | /minimax-docx |
 | 9 | mckinsey-ppt.md | McKinsey风格PPT | /mckinsey-ppt |
+| 10 | image-creator-hub.md | 图像创作中枢 | /image-creator-hub |
 
 ## 使用方式
 
@@ -29,4 +30,4 @@
 - **政策类**：policy-pbc, policy-pbc-basics, policy-pbc-keyword-index
 - **搜索类**：serp-api
 - **研究类**：ai-industry, finance-industry
-- **工具类**：minimax-xlsx, minimax-docx, mckinsey-ppt
+- **工具类**：minimax-xlsx, minimax-docx, mckinsey-ppt, image-creator-hub

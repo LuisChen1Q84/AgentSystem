@@ -14,11 +14,15 @@ from typing import Any, Dict, List, Tuple
 
 try:
     from scripts.mcp_connector import Registry, Runtime, parse_params
+    from scripts.image_creator_hub import load_cfg as load_image_hub_cfg
+    from scripts.image_creator_hub import run_request as run_image_hub_request
     from scripts.stock_market_hub import run_report as run_stock_hub_report
     from scripts.stock_market_hub import load_cfg as load_stock_hub_cfg
     from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
 except ModuleNotFoundError:  # direct script execution
     from mcp_connector import Registry, Runtime, parse_params
+    from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
+    from image_creator_hub import run_request as run_image_hub_request  # type: ignore
     from stock_market_hub import run_report as run_stock_hub_report  # type: ignore
     from stock_market_hub import load_cfg as load_stock_hub_cfg  # type: ignore
     from stock_market_hub import pick_symbols as pick_stock_symbols  # type: ignore
@@ -27,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 ROUTE_DOC = ROOT / "工作流" / "技能路由.md"
 STOCK_HUB_CFG = ROOT / "config" / "stock_market_hub.toml"
+IMAGE_HUB_CFG = ROOT / "config" / "image_creator_hub.toml"
 
 STRONG_EXEC_KEYWORDS = {"xlsx", "excel", "表1", "表2", "填报日期", "更新这张表", "直接修改原文件"}
 PLAN_WORDS = {"计划", "打算", "准备"}
@@ -51,6 +56,27 @@ MARKET_WORDS = {
     "买卖点",
     "支撑",
     "压力",
+}
+IMAGE_WORDS = {
+    "图像",
+    "图片",
+    "生成图",
+    "海报",
+    "手办",
+    "肖像",
+    "q版",
+    "chibi",
+    "城市微缩",
+    "地标",
+    "场景",
+    "电影场景",
+    "logo",
+    "品牌店铺",
+    "产品广告",
+    "低多边形",
+    "knolling",
+    "表情包转3d",
+    "裸眼3d",
 }
 
 
@@ -114,6 +140,15 @@ def route_text(text: str, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
             "description": "全球股票市场分析 + 量化回测 + 免费信源抓取",
             "keywords": [w for w in MARKET_WORDS if w in low],
             "score": 90,
+        }
+
+    if any(w in low for w in IMAGE_WORDS):
+        return {
+            "section": "图像创作类",
+            "skill": "image-creator-hub",
+            "description": "多子代理图像生成中枢",
+            "keywords": [w for w in IMAGE_WORDS if w in low],
+            "score": 88,
         }
 
     plan_hits = [w for w in PLAN_WORDS if w in low]
@@ -203,6 +238,26 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                     "make stock-hub q='你的问题'",
                     "make stock-run universe='global_core' limit=30",
                     "make mcp-observe days=7",
+                ],
+            },
+        }
+
+    if skill.startswith("image-creator-hub"):
+        user_params = parse_params(params_json)
+        image_cfg = load_image_hub_cfg(IMAGE_HUB_CFG)
+        result = run_image_hub_request(image_cfg, text, user_params)
+        return {
+            "route": route,
+            "execute": {
+                "type": "image-creator-hub",
+                "config": str(IMAGE_HUB_CFG),
+            },
+            "result": result,
+            "meta": {
+                "mode": "image-generation",
+                "next_actions": [
+                    "make image-hub text='试试看低多边形风格'",
+                    "make skill-execute text='给我做一个Q版品牌店铺图' params='{\"brand\":\"Nike\"}'",
                 ],
             },
         }

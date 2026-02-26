@@ -1,0 +1,47 @@
+[defaults]
+output_dir = "产出/image_creator"
+log_dir = "日志/image_creator"
+default_style_by_group = { "character-generator" = "action_figure", "scene-generator" = "city_diorama", "product-generator" = "chibi_store", "style-transformer" = "low_poly" }
+providers_order = ["minimax", "openai_compatible", "mock"]
+rate_limit_per_minute = 30
+max_retries = 2
+retry_backoff_sec = 1.0
+request_timeout_sec = 90
+ssl_verify = true
+ssl_insecure_fallback = true
+openai_endpoint = "https://api.openai.com/v1/images/generations"
+openai_model = "gpt-image-1"
+openai_size = "1024x1024"
+openai_quality = "high"
+openai_api_key_env = "OPENAI_API_KEY"
+minimax_endpoint = "https://api.minimaxi.com/v1/image_generation"
+minimax_model = "image-01"
+minimax_aspect_ratio = "1:1"
+minimax_api_key_env = "MINIMAX_API_KEY"
+
+[routes]
+"character-generator" = ["人物", "角色", "手办", "玩偶", "肖像", "人像", "chibi", "portrait", "character"]
+"scene-generator" = ["城市", "地标", "建筑", "房间", "场景", "电影", "weather", "city", "scene", "landmark"]
+"product-generator" = ["logo", "品牌", "店铺", "产品", "广告", "brand", "product"]
+"style-transformer" = ["风格", "低多边形", "转换", "knolling", "表情包", "meme", "style", "low-poly"]
+
+[style_alias]
+"收藏级动作手办" = "action_figure"
+"动作手办" = "action_figure"
+"卡通肖像" = "caricature"
+"q版" = "chibi"
+"chibi" = "chibi"
+"城市微缩" = "city_diorama"
+"地标建筑" = "landmark_render"
+"电影场景" = "movie_scene"
+"等轴测房间" = "isometric_room"
+"天气可视化" = "city_weather"
+"贴纸轰炸" = "sticker_logo"
+"品牌店铺" = "chibi_store"
+"产品3d" = "product_3d"
+"产品广告" = "product_ad"
+"低多边形" = "low_poly"
+"表情包转3d" = "meme_3d"
+"裸眼3d" = "glassesfree_3d"
+"knolling" = "knolling"
+"风格化3d角色" = "stylized_character"

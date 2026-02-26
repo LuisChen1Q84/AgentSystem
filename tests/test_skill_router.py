@@ -31,6 +31,11 @@ class SkillRouterTest(unittest.TestCase):
         route = route_text("analyze SPY support resistance", rules)
         self.assertIn("stock-market-hub", route["skill"])
 
+    def test_route_image_hub(self):
+        rules = parse_route_doc()
+        route = route_text("帮我做一个低多边形风格人物图", rules)
+        self.assertEqual(route["skill"], "image-creator-hub")
+
 
 if __name__ == "__main__":
     unittest.main()
