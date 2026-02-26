@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 
-from scripts.stock_market_hub import pick_symbols
+from scripts.stock_market_hub import evaluate_quality_gate, pick_symbols
 
 
 class StockMarketHubTest(unittest.TestCase):
@@ -24,6 +24,12 @@ class StockMarketHubTest(unittest.TestCase):
         cfg = {"aliases": {}}
         out = pick_symbols(cfg, "analyze SPY QQQ support resistance", "")
         self.assertEqual(out, ["SPY", "QQQ"])
+
+    def test_quality_gate_limited_mode(self):
+        cfg = {"defaults": {"enforce_coverage_gate": True, "min_coverage_rate": 60.0}}
+        gate = evaluate_quality_gate(cfg, {"coverage_rate": 20.0})
+        self.assertFalse(gate["passed"])
+        self.assertEqual(gate["mode"], "limited")
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import datetime as dt
 import json
 import math
 import os
+import ssl
 import statistics
 import tomllib
 import urllib.parse
@@ -54,11 +55,39 @@ def normalize_symbol_for_stooq(symbol: str) -> str:
     return f"{s}.us"
 
 
-def fetch_stooq(symbol: str, timeout: int) -> List[Bar]:
+def _open_with_ssl_strategy(req: urllib.request.Request, timeout: int, verify_ssl: bool, insecure_fallback: bool):
+    if not str(req.full_url).lower().startswith("https://"):
+        return urllib.request.urlopen(req, timeout=timeout), "plain_http"
+
+    if not verify_ssl:
+        ctx = ssl._create_unverified_context()
+        return urllib.request.urlopen(req, timeout=timeout, context=ctx), "insecure"
+
+    try:
+        return urllib.request.urlopen(req, timeout=timeout), "verified"
+    except Exception as first_err:
+        err_msg = str(first_err).lower()
+        cert_issue = ("certificate verify failed" in err_msg) or ("ssl" in err_msg and "certificate" in err_msg)
+        if cert_issue:
+            try:
+                import certifi  # type: ignore
+
+                ctx = ssl.create_default_context(cafile=certifi.where())
+                return urllib.request.urlopen(req, timeout=timeout, context=ctx), "verified_certifi"
+            except Exception:
+                pass
+        if insecure_fallback and cert_issue:
+            ctx = ssl._create_unverified_context()
+            return urllib.request.urlopen(req, timeout=timeout, context=ctx), "insecure_fallback"
+        raise
+
+
+def fetch_stooq(symbol: str, timeout: int, verify_ssl: bool, insecure_fallback: bool) -> List[Bar]:
     sid = normalize_symbol_for_stooq(symbol)
     url = f"https://stooq.com/q/d/l/?s={urllib.parse.quote(sid)}&i=d"
     req = urllib.request.Request(url=url, headers={"User-Agent": "AgentSystem-StockQuant/1.0"}, method="GET")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    resp_obj, _ssl_mode = _open_with_ssl_strategy(req, timeout=timeout, verify_ssl=verify_ssl, insecure_fallback=insecure_fallback)
+    with resp_obj as resp:
         raw = resp.read(800_000).decode("utf-8", errors="replace")
     rows = list(csv.DictReader(raw.splitlines()))
     bars: List[Bar] = []
@@ -81,10 +110,11 @@ def fetch_stooq(symbol: str, timeout: int) -> List[Bar]:
     return [b for b in bars if b.close > 0]
 
 
-def fetch_yahoo(symbol: str, timeout: int) -> List[Bar]:
+def fetch_yahoo(symbol: str, timeout: int, verify_ssl: bool, insecure_fallback: bool) -> List[Bar]:
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?range=5y&interval=1d"
     req = urllib.request.Request(url=url, headers={"User-Agent": "AgentSystem-StockQuant/1.0"}, method="GET")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    resp_obj, _ssl_mode = _open_with_ssl_strategy(req, timeout=timeout, verify_ssl=verify_ssl, insecure_fallback=insecure_fallback)
+    with resp_obj as resp:
         payload = json.loads(resp.read().decode("utf-8", errors="replace"))
 
     result = (((payload.get("chart") or {}).get("result") or [None])[0]) or {}
@@ -833,6 +863,8 @@ def cmd_sync(cfg: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
     defaults = cfg.get("defaults", {})
     timeout = int(defaults.get("request_timeout_sec", 15))
     providers = list(defaults.get("providers", ["stooq", "yahoo"]))
+    verify_ssl = bool(defaults.get("ssl_verify", True))
+    insecure_fallback = bool(defaults.get("ssl_insecure_fallback", True))
     cache_dir = Path(str(defaults.get("cache_dir", ROOT / "日志/stock_quant/cache")))
     if not cache_dir.is_absolute():
         cache_dir = ROOT / cache_dir
@@ -851,9 +883,9 @@ def cmd_sync(cfg: Dict[str, Any], args: argparse.Namespace) -> Dict[str, Any]:
         for p in providers:
             try:
                 if p == "stooq":
-                    bars = fetch_stooq(sym, timeout)
+                    bars = fetch_stooq(sym, timeout, verify_ssl=verify_ssl, insecure_fallback=insecure_fallback)
                 elif p == "yahoo":
-                    bars = fetch_yahoo(sym, timeout)
+                    bars = fetch_yahoo(sym, timeout, verify_ssl=verify_ssl, insecure_fallback=insecure_fallback)
                 else:
                     continue
                 if bars:

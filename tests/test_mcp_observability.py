@@ -14,7 +14,7 @@ class MCPObservabilityTest(unittest.TestCase):
                 "\n".join(
                     [
                         '{"ts":"2026-02-25 10:00:00","status":"ok","server":"filesystem","tool":"read_file","duration_ms":100}',
-                        '{"ts":"2026-02-25 10:01:00","status":"error","server":"filesystem","tool":"read_file","duration_ms":300,"error":"MCPError: x"}',
+                        '{"ts":"2026-02-25 10:01:00","status":"error","server":"filesystem","tool":"read_file","duration_ms":300,"error":"ssl.SSLCertVerificationError: certificate verify failed"}',
                         '{"ts":"2026-02-26 10:01:00","status":"ok","server":"fetch","tool":"get","duration_ms":200}',
                     ]
                 )
@@ -28,6 +28,7 @@ class MCPObservabilityTest(unittest.TestCase):
             self.assertTrue(report["server_tool"])
             self.assertEqual(report["slow_calls"][0]["duration_ms"], 300)
             self.assertIn("filesystem", report["failure_heatmap"])
+            self.assertEqual(report["global"]["failure_classes"]["ssl_cert"], 1)
 
 
 if __name__ == "__main__":

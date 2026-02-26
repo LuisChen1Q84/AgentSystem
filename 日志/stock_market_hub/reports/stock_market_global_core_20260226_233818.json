@@ -1,0 +1,53 @@
+{
+  "ts": "2026-02-26 23:38:18",
+  "query": "分析SPY和QQQ",
+  "universe": "global_core",
+  "symbols": [
+    "SPY",
+    "QQQ"
+  ],
+  "sync": {
+    "skipped": true
+  },
+  "analyze": {
+    "count": 0,
+    "items": []
+  },
+  "backtest": {
+    "count": 0,
+    "items": [],
+    "note": "blocked_by_coverage_gate"
+  },
+  "portfolio": {
+    "ok": false,
+    "reason": "coverage_gate",
+    "items": []
+  },
+  "portfolio_backtest": {
+    "ok": false,
+    "reason": "coverage_gate"
+  },
+  "freefirst": {
+    "ts": "2026-02-26 23:38:18",
+    "query": "分析SPY和QQQ",
+    "topic": "market",
+    "attempted": 4,
+    "succeeded": 0,
+    "coverage_rate": 0.0,
+    "ssl_mode_counts": {},
+    "error_class_counts": {
+      "dns": 4
+    },
+    "out_jsonl": "/Volumes/Luis_MacData/AgentSystem/日志/mcp/freefirst/raw_20260226_233818.jsonl"
+  },
+  "quality_gate": {
+    "enabled": true,
+    "min_coverage_rate": 60.0,
+    "actual_coverage_rate": 0.0,
+    "passed": false,
+    "mode": "limited",
+    "reason": "coverage_below_threshold"
+  },
+  "report_md": "/Volumes/Luis_MacData/AgentSystem/日志/stock_market_hub/reports/stock_market_global_core_20260226_233818.md",
+  "report_json": "/Volumes/Luis_MacData/AgentSystem/日志/stock_market_hub/reports/stock_market_global_core_20260226_233818.json"
+}

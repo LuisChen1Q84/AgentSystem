@@ -3,6 +3,8 @@ max_sources = 6
 request_timeout_sec = 12
 output_dir = "日志/mcp/freefirst"
 user_agent = "AgentSystem-FreeFirst/1.0"
+ssl_verify = true
+ssl_insecure_fallback = true
 
 [topics.market]
 keywords = ["etf", "指数", "行情", "恒生科技", "513180", "沪深300", "纳指"]

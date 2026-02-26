@@ -2,5 +2,8 @@
 # Replace <PROJECT_ROOT> with your local repo path.
 # 15 8 * * 1 cd <PROJECT_ROOT> && /bin/bash scripts/agentsys.sh stock-sector-audit --universe global_core >> 日志/stock_quant/sector_audit/cron.log 2>&1
 
+# Daily health check (08:05 local time)
+# 5 8 * * * cd <PROJECT_ROOT> && /bin/bash scripts/agentsys.sh stock-health-check --days 7 --require-network --max-dns-ssl-fail 0 >> 日志/stock_quant/health/cron.log 2>&1
+
 # Optional: weekly ETF/macro coverage audit
 # 20 8 * * 1 cd <PROJECT_ROOT> && /bin/bash scripts/agentsys.sh stock-sector-audit --universe etf_macro >> 日志/stock_quant/sector_audit/cron.log 2>&1

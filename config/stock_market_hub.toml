@@ -4,6 +4,8 @@ report_dir = "日志/stock_market_hub/reports"
 max_sources = 6
 sync_limit = 12
 default_universe = "global_core"
+enforce_coverage_gate = true
+min_coverage_rate = 60.0
 
 [aliases]
 "513180" = "513180.SS"

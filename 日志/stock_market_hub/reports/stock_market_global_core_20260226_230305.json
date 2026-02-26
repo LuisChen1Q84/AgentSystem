@@ -1,0 +1,49 @@
+{
+  "ts": "2026-02-26 23:03:05",
+  "query": "513180",
+  "universe": "global_core",
+  "symbols": [
+    "513180.SS"
+  ],
+  "sync": {
+    "synced": 0,
+    "failed": 1,
+    "synced_items": [],
+    "failed_items": [
+      {
+        "symbol": "513180.SS",
+        "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>"
+      }
+    ]
+  },
+  "analyze": {
+    "count": 0,
+    "items": []
+  },
+  "backtest": {
+    "count": 0,
+    "items": []
+  },
+  "portfolio": {
+    "ok": false,
+    "reason": "no_candidates",
+    "target_vol_pct": 12.0,
+    "items": []
+  },
+  "portfolio_backtest": {
+    "ok": false,
+    "reason": "insufficient_symbols",
+    "symbols": []
+  },
+  "freefirst": {
+    "ts": "2026-02-26 23:03:05",
+    "query": "513180",
+    "topic": "market",
+    "attempted": 4,
+    "succeeded": 1,
+    "coverage_rate": 25.0,
+    "out_jsonl": "/Volumes/Luis_MacData/AgentSystem/日志/mcp/freefirst/raw_20260226_230303.jsonl"
+  },
+  "report_md": "/Volumes/Luis_MacData/AgentSystem/日志/stock_market_hub/reports/stock_market_global_core_20260226_230305.md",
+  "report_json": "/Volumes/Luis_MacData/AgentSystem/日志/stock_market_hub/reports/stock_market_global_core_20260226_230305.json"
+}

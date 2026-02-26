@@ -14,7 +14,7 @@ ROOT ?= $(CURDIR)
 	preflight release check ci test-all \
 	mcp-test mcp-list mcp-status mcp-enable mcp-disable mcp-add mcp-tools mcp-route mcp-call mcp-ask mcp-observe mcp-diagnose \
 	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
-	stock-env-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
+	stock-env-check stock-health-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
 	skill-route skill-execute
 
 help:
@@ -24,6 +24,7 @@ help:
 	@echo "  make gov-brief topic='广西2025交易分析' facts='产出/facts.json' forbidden='词A,词B' replace='词A->表达A'"
 	@echo "  make mcp-test|mcp-list|mcp-status|mcp-enable|mcp-disable|mcp-add|mcp-tools|mcp-route|mcp-call|mcp-ask|mcp-observe|mcp-diagnose|mcp-repair-templates|mcp-schedule|mcp-schedule-run|mcp-freefirst-sync|mcp-freefirst-report"
 	@echo "  make stock-env-check [root='$(ROOT)']"
+	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
 	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}']"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
@@ -688,6 +689,9 @@ mcp-freefirst-report:
 
 stock-env-check:
 	@python3 $(ROOT)/scripts/stock_env_check.py $(if $(root),--root "$(root)",)
+
+stock-health-check:
+	@python3 $(ROOT)/scripts/stock_health_check.py $(if $(days),--days $(days),) $(if $(require_network),--require-network,) $(if $(max_dns_ssl_fail),--max-dns-ssl-fail $(max_dns_ssl_fail),) $(if $(out_dir),--out-dir "$(out_dir)",)
 
 stock-universe:
 	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" universe --universe "$(or $(universe),global_core)"

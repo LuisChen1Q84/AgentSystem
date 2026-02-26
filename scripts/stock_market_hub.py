@@ -78,11 +78,28 @@ def signal_note(row: Dict[str, Any]) -> str:
     return f"中性震荡。区间参考 {sup} - {res}，等待突破后再加仓。"
 
 
+def evaluate_quality_gate(cfg: Dict[str, Any], freefirst: Dict[str, Any]) -> Dict[str, Any]:
+    defaults = cfg.get("defaults", {})
+    enabled = bool(defaults.get("enforce_coverage_gate", True))
+    min_cov = float(defaults.get("min_coverage_rate", 60.0))
+    actual_cov = float(freefirst.get("coverage_rate", 0.0) or 0.0)
+    passed = (not enabled) or (actual_cov >= min_cov)
+    return {
+        "enabled": enabled,
+        "min_coverage_rate": round(min_cov, 2),
+        "actual_coverage_rate": round(actual_cov, 2),
+        "passed": bool(passed),
+        "mode": "deep" if passed else "limited",
+        "reason": "" if passed else "coverage_below_threshold",
+    }
+
+
 def render_md(payload: Dict[str, Any]) -> str:
     rows = payload.get("analyze", {}).get("items", [])
     bt_rows = payload.get("backtest", {}).get("items", [])
     portfolio = payload.get("portfolio", {})
     pbt = payload.get("portfolio_backtest", {})
+    qg = payload.get("quality_gate", {})
     lines = [
         "# 全球股票市场策略报告",
         "",
@@ -90,6 +107,7 @@ def render_md(payload: Dict[str, Any]) -> str:
         f"- Query: {payload.get('query','')}",
         f"- Universe: {payload.get('universe','')}",
         f"- 覆盖标的: {payload.get('analyze',{}).get('count',0)}",
+        f"- 研究模式: {qg.get('mode','deep')}",
         "",
         "## 技术信号",
         "",
@@ -99,6 +117,16 @@ def render_md(payload: Dict[str, Any]) -> str:
     for r in rows[:20]:
         lines.append(
             f"| {r.get('symbol')} | {r.get('signal')} | {r.get('factor_score')} | {r.get('close')} | {r.get('rsi14')} | {r.get('mom20_pct')} | {signal_note(r)} |"
+        )
+    if qg and (not qg.get("passed", True)):
+        lines.extend(
+            [
+                "",
+                "## 质量闸门提示",
+                "",
+                f"- Free-First 覆盖率 {qg.get('actual_coverage_rate')}% 低于阈值 {qg.get('min_coverage_rate')}%，已自动降级为谨慎模式。",
+                "- 当前报告仅保留基础观察，不输出深度组合与组合回测建议。",
+            ]
         )
     lines.extend([
         "",
@@ -178,6 +206,9 @@ def render_md(payload: Dict[str, Any]) -> str:
         f"- topic: {ff.get('topic','')}",
         f"- attempted: {ff.get('attempted',0)} | succeeded: {ff.get('succeeded',0)}",
         f"- coverage_rate: {ff.get('coverage_rate',0)}%",
+        f"- ssl_mode_counts: {ff.get('ssl_mode_counts', {})}",
+        f"- error_class_counts: {ff.get('error_class_counts', {})}",
+        f"- quality_gate: {qg}",
         "",
         "## 风险提示",
         "",
@@ -222,6 +253,12 @@ def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str
     except Exception as e:
         freefirst = {"topic": "market", "error": str(e), "attempted": 0, "succeeded": 0, "coverage_rate": 0}
 
+    quality_gate = evaluate_quality_gate(cfg, freefirst)
+    if not quality_gate.get("passed", True):
+        backtest = {"count": 0, "items": [], "note": "blocked_by_coverage_gate"}
+        portfolio = {"ok": False, "reason": "coverage_gate", "items": []}
+        portfolio_backtest = {"ok": False, "reason": "coverage_gate"}
+
     report_dir = Path(str(defaults.get("report_dir", ROOT / "日志/stock_market_hub/reports")))
     if not report_dir.is_absolute():
         report_dir = ROOT / report_dir
@@ -242,6 +279,7 @@ def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str
         "portfolio": portfolio,
         "portfolio_backtest": portfolio_backtest,
         "freefirst": freefirst,
+        "quality_gate": quality_gate,
         "report_md": str(out_md),
         "report_json": str(out_json),
     }

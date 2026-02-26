@@ -5,6 +5,8 @@ lookback_days = 900
 request_timeout_sec = 15
 providers = ["stooq", "yahoo"]
 base_currency = "USD"
+ssl_verify = true
+ssl_insecure_fallback = true
 
 [factors]
 model = "cross_section_v1"

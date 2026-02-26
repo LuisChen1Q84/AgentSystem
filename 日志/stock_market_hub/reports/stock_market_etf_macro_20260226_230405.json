@@ -1,0 +1,74 @@
+{
+  "ts": "2026-02-26 23:04:05",
+  "query": "腾讯 阿里 美团 快手 网易 百度",
+  "universe": "etf_macro",
+  "symbols": [
+    "0700.HK",
+    "9988.HK",
+    "3690.HK",
+    "1024.HK",
+    "9999.HK",
+    "9888.HK"
+  ],
+  "sync": {
+    "synced": 0,
+    "failed": 6,
+    "synced_items": [],
+    "failed_items": [
+      {
+        "symbol": "0700.HK",
+        "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>"
+      },
+      {
+        "symbol": "9988.HK",
+        "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>"
+      },
+      {
+        "symbol": "3690.HK",
+        "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>"
+      },
+      {
+        "symbol": "1024.HK",
+        "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>"
+      },
+      {
+        "symbol": "9999.HK",
+        "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>"
+      },
+      {
+        "symbol": "9888.HK",
+        "error": "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)>"
+      }
+    ]
+  },
+  "analyze": {
+    "count": 0,
+    "items": []
+  },
+  "backtest": {
+    "count": 0,
+    "items": []
+  },
+  "portfolio": {
+    "ok": false,
+    "reason": "no_candidates",
+    "target_vol_pct": 12.0,
+    "items": []
+  },
+  "portfolio_backtest": {
+    "ok": false,
+    "reason": "insufficient_symbols",
+    "symbols": []
+  },
+  "freefirst": {
+    "ts": "2026-02-26 23:04:05",
+    "query": "腾讯 阿里 美团 快手 网易 百度",
+    "topic": "market",
+    "attempted": 4,
+    "succeeded": 1,
+    "coverage_rate": 25.0,
+    "out_jsonl": "/Volumes/Luis_MacData/AgentSystem/日志/mcp/freefirst/raw_20260226_230404.jsonl"
+  },
+  "report_md": "/Volumes/Luis_MacData/AgentSystem/日志/stock_market_hub/reports/stock_market_etf_macro_20260226_230405.md",
+  "report_json": "/Volumes/Luis_MacData/AgentSystem/日志/stock_market_hub/reports/stock_market_etf_macro_20260226_230405.json"
+}

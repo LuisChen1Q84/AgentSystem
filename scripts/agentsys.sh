@@ -1001,6 +1001,12 @@ run_stock_env_check() {
   automation_log "INFO" "stock-env-check" "done"
 }
 
+run_stock_health_check() {
+  automation_log "INFO" "stock-health-check" "start"
+  python3 "${ROOT_DIR}/scripts/stock_health_check.py" "$@" || return "${E_STOCK}"
+  automation_log "INFO" "stock-health-check" "done"
+}
+
 run_skill_route() {
   local action="${1:-route}"
   shift || true
@@ -1136,6 +1142,7 @@ Usage:
   scripts/agentsys.sh mcp-freefirst-report [--data-dir <path>]
   scripts/agentsys.sh stock-quant [universe|sync|analyze|backtest|portfolio|portfolio-backtest|report|run] [args...]
   scripts/agentsys.sh stock-env-check [--root <path>]
+  scripts/agentsys.sh stock-health-check [--days N --require-network --max-dns-ssl-fail N]
   scripts/agentsys.sh stock-sector-audit [--universe <name> --symbols <csv> --out-dir <path>]
   scripts/agentsys.sh stock-sector-patch [--audit-json <file>|--audit-dir <dir>] [--prefer suggested|fallback] [--apply]
   scripts/agentsys.sh stock-hub [--query <text> --symbols <csv> --universe <name> --no-sync]
@@ -1227,6 +1234,7 @@ case "${cmd}" in
   mcp-freefirst-report) shift; run_mcp_freefirst_report "$@" ;;
   stock-quant) shift; run_stock_quant "${1:-run}" "${@:2}" ;;
   stock-env-check) shift; run_stock_env_check "$@" ;;
+  stock-health-check) shift; run_stock_health_check "$@" ;;
   stock-sector-audit) shift; run_stock_sector_audit "$@" ;;
   stock-sector-patch) shift; run_stock_sector_patch "$@" ;;
   stock-hub) shift; run_stock_hub "$@" ;;

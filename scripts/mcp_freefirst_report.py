@@ -67,6 +67,26 @@ def calc_metrics(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         except ValueError:
             continue
     avg_age_h = round(sum(ages) / len(ages), 2) if ages else 999.0
+    ssl_modes: Dict[str, int] = {}
+    err_classes: Dict[str, int] = {}
+    for r in rows:
+        m = str(r.get("ssl_mode", ""))
+        if m:
+            ssl_modes[m] = ssl_modes.get(m, 0) + 1
+        if r.get("status") != "ok":
+            e = str(r.get("error", "")).lower()
+            c = "other"
+            if "certificate verify failed" in e or ("ssl" in e and "certificate" in e):
+                c = "ssl_cert"
+            elif "nodename nor servname provided" in e or "name or service not known" in e:
+                c = "dns"
+            elif "timed out" in e:
+                c = "timeout"
+            elif "connection refused" in e:
+                c = "conn_refused"
+            elif "http error" in e:
+                c = "http_error"
+            err_classes[c] = err_classes.get(c, 0) + 1
 
     return {
         "attempted": attempted,
@@ -75,6 +95,8 @@ def calc_metrics(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         "verifiability_rate": verifiability,
         "avg_age_hours": avg_age_h,
         "freshness_score": freshness_score(avg_age_h),
+        "ssl_mode_counts": ssl_modes,
+        "error_class_counts": err_classes,
     }
 
 
@@ -87,6 +109,8 @@ def render_md(metrics: Dict[str, Any], rows: List[Dict[str, Any]], source_file: 
         f"- 可验证率: {metrics['verifiability_rate']}%",
         f"- 平均新鲜度(小时): {metrics['avg_age_hours']}",
         f"- 新鲜度得分: {metrics['freshness_score']}",
+        f"- SSL模式分布: {metrics.get('ssl_mode_counts', {})}",
+        f"- 失败分类: {metrics.get('error_class_counts', {})}",
         "",
         "## 来源明细",
         "",

@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import re
+import ssl
 import tomllib
 import urllib.request
 from pathlib import Path
@@ -64,9 +65,37 @@ def html_to_text(html: str, max_len: int = 1200) -> str:
     return txt[:max_len]
 
 
-def fetch_one(url: str, timeout: int, user_agent: str) -> Dict[str, Any]:
+def _open_with_ssl_strategy(req: urllib.request.Request, timeout: int, verify_ssl: bool, insecure_fallback: bool):
+    if not str(req.full_url).lower().startswith("https://"):
+        return urllib.request.urlopen(req, timeout=timeout), "plain_http"
+
+    if not verify_ssl:
+        ctx = ssl._create_unverified_context()
+        return urllib.request.urlopen(req, timeout=timeout, context=ctx), "insecure"
+
+    try:
+        return urllib.request.urlopen(req, timeout=timeout), "verified"
+    except Exception as first_err:
+        err_msg = str(first_err).lower()
+        cert_issue = ("certificate verify failed" in err_msg) or ("ssl" in err_msg and "certificate" in err_msg)
+        if cert_issue:
+            try:
+                import certifi  # type: ignore
+
+                ctx = ssl.create_default_context(cafile=certifi.where())
+                return urllib.request.urlopen(req, timeout=timeout, context=ctx), "verified_certifi"
+            except Exception:
+                pass
+        if insecure_fallback and cert_issue:
+            ctx = ssl._create_unverified_context()
+            return urllib.request.urlopen(req, timeout=timeout, context=ctx), "insecure_fallback"
+        raise
+
+
+def fetch_one(url: str, timeout: int, user_agent: str, verify_ssl: bool, insecure_fallback: bool) -> Dict[str, Any]:
     req = urllib.request.Request(url=url, headers={"User-Agent": user_agent}, method="GET")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    resp_obj, ssl_mode = _open_with_ssl_strategy(req, timeout=timeout, verify_ssl=verify_ssl, insecure_fallback=insecure_fallback)
+    with resp_obj as resp:
         raw = resp.read(300_000)
         body = raw.decode("utf-8", errors="replace")
         return {
@@ -75,13 +104,31 @@ def fetch_one(url: str, timeout: int, user_agent: str) -> Dict[str, Any]:
             "bytes": len(raw),
             "title": extract_title(body),
             "snippet": html_to_text(body),
+            "ssl_mode": ssl_mode,
         }
+
+
+def classify_error(msg: str) -> str:
+    low = (msg or "").lower()
+    if "certificate verify failed" in low or ("ssl" in low and "certificate" in low):
+        return "ssl_cert"
+    if "nodename nor servname provided" in low or "name or service not known" in low:
+        return "dns"
+    if "timed out" in low:
+        return "timeout"
+    if "connection refused" in low:
+        return "conn_refused"
+    if "http error" in low:
+        return "http_error"
+    return "other"
 
 
 def run_sync(cfg: Dict[str, Any], query: str, topic: str, max_sources: int) -> Dict[str, Any]:
     defaults = cfg.get("defaults", {})
     timeout = int(defaults.get("request_timeout_sec", 12))
     ua = str(defaults.get("user_agent", "AgentSystem-FreeFirst/1.0"))
+    verify_ssl = bool(defaults.get("ssl_verify", True))
+    insecure_fallback = bool(defaults.get("ssl_insecure_fallback", True))
     out_dir = Path(str(defaults.get("output_dir", ROOT / "日志/mcp/freefirst")))
     if not out_dir.is_absolute():
         out_dir = ROOT / out_dir
@@ -107,7 +154,13 @@ def run_sync(cfg: Dict[str, Any], query: str, topic: str, max_sources: int) -> D
             "error": "",
         }
         try:
-            data = fetch_one(rec["url"], timeout=timeout, user_agent=ua)
+            data = fetch_one(
+                rec["url"],
+                timeout=timeout,
+                user_agent=ua,
+                verify_ssl=verify_ssl,
+                insecure_fallback=insecure_fallback,
+            )
             rec.update(data)
         except Exception as e:
             rec["status"] = "error"
@@ -119,6 +172,15 @@ def run_sync(cfg: Dict[str, Any], query: str, topic: str, max_sources: int) -> D
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     ok = [r for r in records if r.get("status") == "ok"]
+    ssl_modes: Dict[str, int] = {}
+    err_cls: Dict[str, int] = {}
+    for r in records:
+        mode = str(r.get("ssl_mode", ""))
+        if mode:
+            ssl_modes[mode] = ssl_modes.get(mode, 0) + 1
+        if r.get("status") == "error":
+            c = classify_error(str(r.get("error", "")))
+            err_cls[c] = err_cls.get(c, 0) + 1
     payload = {
         "ts": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "query": query,
@@ -126,6 +188,8 @@ def run_sync(cfg: Dict[str, Any], query: str, topic: str, max_sources: int) -> D
         "attempted": len(records),
         "succeeded": len(ok),
         "coverage_rate": round((len(ok) / len(records)) * 100, 2) if records else 0.0,
+        "ssl_mode_counts": ssl_modes,
+        "error_class_counts": err_cls,
         "out_jsonl": str(out_jsonl),
     }
     latest.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Dict, List
 
-ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
+ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 CONFIG = ROOT / "config" / "mcp_servers.json"
 
 
@@ -36,6 +38,21 @@ def normalize_error(e: str) -> str:
     if not e:
         return ""
     return e.split(":", 1)[0].strip()
+
+
+def classify_failure(e: str) -> str:
+    low = (e or "").lower()
+    if "certificate verify failed" in low or ("ssl" in low and "certificate" in low):
+        return "ssl_cert"
+    if "nodename nor servname provided" in low or "name or service not known" in low:
+        return "dns"
+    if "timed out" in low:
+        return "timeout"
+    if "connection refused" in low:
+        return "conn_refused"
+    if "http error" in low:
+        return "http_error"
+    return "other"
 
 
 def load_records(path: Path) -> List[Dict[str, Any]]:
@@ -64,6 +81,7 @@ def aggregate(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
     day_keys = sorted(by_day.keys())[-days:]
     summary = []
     total_errors = Counter()
+    total_failure_classes = Counter()
 
     for day in day_keys:
         rs = by_day[day]
@@ -73,7 +91,9 @@ def aggregate(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
         lat = [int(x.get("duration_ms", 0) or 0) for x in rs]
 
         err_counter = Counter(normalize_error(str(x.get("error", ""))) for x in errs)
+        cls_counter = Counter(classify_failure(str(x.get("error", ""))) for x in errs)
         total_errors.update(err_counter)
+        total_failure_classes.update(cls_counter)
 
         summary.append(
             {
@@ -85,6 +105,7 @@ def aggregate(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
                 "avg_ms": round(sum(lat) / total, 2) if total else 0.0,
                 "p95_ms": percentile(lat, 95.0),
                 "errors": dict(err_counter.most_common(5)),
+                "failure_classes": dict(cls_counter.most_common(5)),
             }
         )
 
@@ -156,6 +177,7 @@ def aggregate(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
             "avg_ms": round(sum(global_lat) / len(global_lat), 2) if global_lat else 0.0,
             "p95_ms": percentile(global_lat, 95.0),
             "errors": dict(total_errors.most_common(10)),
+            "failure_classes": dict(total_failure_classes.most_common(10)),
         },
         "server_tool": pair_summary,
         "slow_calls": slow_calls,
@@ -186,6 +208,13 @@ def render_md(report: Dict[str, Any]) -> str:
     lines.extend(["", "## 失败分类 Top10", ""])
     if report["global"]["errors"]:
         for k, v in report["global"]["errors"].items():
+            lines.append(f"- {k}: {v}")
+    else:
+        lines.append("- 无失败记录")
+
+    lines.extend(["", "## 失败原因类目 Top10（含SSL/DNS）", ""])
+    if report["global"].get("failure_classes"):
+        for k, v in report["global"]["failure_classes"].items():
             lines.append(f"- {k}: {v}")
     else:
         lines.append("- 无失败记录")
@@ -223,6 +252,7 @@ def render_html(report: Dict[str, Any]) -> str:
         for d in report["days"]
     )
     err = "".join(f"<li>{k}: {v}</li>" for k, v in report["global"]["errors"].items()) or "<li>无失败记录</li>"
+    err_cls = "".join(f"<li>{k}: {v}</li>" for k, v in report["global"].get("failure_classes", {}).items()) or "<li>无失败记录</li>"
     pair_rows = "\n".join(
         f"<tr><td>{r['server']}</td><td>{r['tool']}</td><td>{r['total']}</td><td>{r['success_rate']}%</td><td>{r['avg_ms']}</td><td>{r['p95_ms']}</td><td>{r['failed']}</td></tr>"
         for r in report["server_tool"][:10]
@@ -265,6 +295,10 @@ th {{ background:#f1f5f9; }}
 <div class='card'>
 <h2>失败分类 Top10</h2>
 <ul>{err}</ul>
+</div>
+<div class='card'>
+<h2>失败原因类目 Top10（含SSL/DNS）</h2>
+<ul>{err_cls}</ul>
 </div>
 <div class='card'>
 <h2>Server/Tool 指标 Top10</h2>

@@ -1,0 +1,94 @@
+{
+  "ts": "2026-02-26 23:38:18",
+  "window_days": 7,
+  "env_ok": false,
+  "obs_ok": false,
+  "dns_ssl_fail_total": 5,
+  "max_dns_ssl_fail": 0,
+  "status": "degraded",
+  "env": {
+    "summary": {
+      "root": "/Volumes/Luis_MacData/AgentSystem",
+      "ok": false,
+      "network_dns_ok": false,
+      "require_network": true,
+      "recommendation": "check_network_or_permissions"
+    },
+    "checks": [
+      {
+        "name": "python_version",
+        "ok": true,
+        "value": "3.11.12",
+        "need": ">=3.10"
+      },
+      {
+        "name": "root_exists",
+        "ok": true,
+        "path": "/Volumes/Luis_MacData/AgentSystem"
+      },
+      {
+        "name": "stock_config",
+        "ok": true
+      },
+      {
+        "name": "stock_script",
+        "ok": true
+      }
+    ],
+    "path_checks": [
+      {
+        "path": "/Volumes/Luis_MacData/AgentSystem/日志/stock_quant/cache",
+        "ok": true,
+        "reason": ""
+      },
+      {
+        "path": "/Volumes/Luis_MacData/AgentSystem/日志/stock_quant/reports",
+        "ok": true,
+        "reason": ""
+      },
+      {
+        "path": "/Volumes/Luis_MacData/AgentSystem/日志/stock_market_hub/reports",
+        "ok": true,
+        "reason": ""
+      },
+      {
+        "path": "/Volumes/Luis_MacData/AgentSystem/日志/mcp/freefirst",
+        "ok": true,
+        "reason": ""
+      }
+    ],
+    "dns_checks": [
+      {
+        "host": "query1.finance.yahoo.com",
+        "ok": false,
+        "reason": "[Errno 8] nodename nor servname provided, or not known"
+      },
+      {
+        "host": "stooq.com",
+        "ok": false,
+        "reason": "[Errno 8] nodename nor servname provided, or not known"
+      },
+      {
+        "host": "www.gov.cn",
+        "ok": false,
+        "reason": "[Errno 8] nodename nor servname provided, or not known"
+      }
+    ],
+    "exit_code": 1
+  },
+  "observability_global": {
+    "total": 116,
+    "success": 110,
+    "failed": 6,
+    "success_rate": 94.83,
+    "avg_ms": 936.85,
+    "p95_ms": 1031,
+    "errors": {
+      "MCPError": 6
+    },
+    "failure_classes": {
+      "dns": 5,
+      "other": 1
+    }
+  }
+}
