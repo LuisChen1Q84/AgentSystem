@@ -692,6 +692,17 @@ class OpenAICompatibleBackend:
 class MiniMaxBackend:
     name = "minimax"
 
+    # MiniMax API 错误码映射
+    ERROR_CODES = {
+        0: ("success", "成功"),
+        1002: ("rate_limit", "触发限流，请稍后再试"),
+        1004: ("auth_failed", "账号鉴权失败，请检查 API-Key 是否正确"),
+        1008: ("insufficient_balance", "账号余额不足，请充值"),
+        1026: ("content_sensitive", "图片描述涉及敏感内容，请修改prompt"),
+        2013: ("invalid_params", "传入参数异常，请检查输入格式"),
+        2049: ("invalid_api_key", "无效的API Key，请检查配置"),
+    }
+
     def __init__(self, cfg: Dict[str, Any], out_dir: Path):
         defaults = cfg.get("defaults", {})
         self.endpoint = str(defaults.get("minimax_endpoint", "https://api.minimaxi.com/v1/image_generation"))
@@ -702,6 +713,12 @@ class MiniMaxBackend:
         self.ssl_insecure_fallback = bool(defaults.get("ssl_insecure_fallback", True))
         self.api_key_env = str(defaults.get("minimax_api_key_env", "MINIMAX_API_KEY"))
         self.out_dir = out_dir
+        # 新增配置
+        self.enable_prompt_optimizer = bool(defaults.get("minimax_enable_prompt_optimizer", False))
+        self.enable_live_style = bool(defaults.get("minimax_enable_live_style", False))
+        self.default_style_type = str(defaults.get("minimax_default_style_type", "漫画"))
+        self.default_style_weight = float(defaults.get("minimax_default_style_weight", 0.8))
+        self.add_aigc_watermark = bool(defaults.get("minimax_add_aigc_watermark", False))
 
     def _save_image_bytes(self, blob: bytes, prompt: str, idx: int) -> str:
         now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -716,17 +733,51 @@ class MiniMaxBackend:
         if not key:
             raise ImageHubError("AUTH_MISSING", f"missing env: {self.api_key_env}")
 
+        # 构建payload
         payload: Dict[str, Any] = {
             "model": self.model,
             "prompt": prompt,
             "aspect_ratio": str(meta.get("aspect_ratio", self.aspect_ratio)),
             "response_format": "base64",
+            "n": min(max(1, n), 9),  # MiniMax支持1-9张
         }
+
+        # prompt_optimizer（用户可覆盖配置）
+        prompt_optimizer = meta.get("prompt_optimizer", self.enable_prompt_optimizer)
+        if prompt_optimizer:
+            payload["prompt_optimizer"] = True
+
+        # aigc_watermark（用户可覆盖配置）
+        aigc_watermark = meta.get("aigc_watermark", self.add_aigc_watermark)
+        if aigc_watermark:
+            payload["aigc_watermark"] = True
+
+        # seed（用于结果复现）
+        seed = meta.get("seed")
+        if seed is not None:
+            payload["seed"] = int(seed)
+
+        # style参数（仅image-01-live支持）
+        style_type = meta.get("style_type")
+        if not style_type:
+            style_type = self.default_style_type if self.enable_live_style else None
+        if style_type and self.model == "image-01-live":
+            style_weight = meta.get("style_weight", self.default_style_weight)
+            payload["style"] = {
+                "style_type": style_type,
+                "style_weight": style_weight
+            }
+
+        # 图生图：subject_reference
         if reference_files:
             refs = []
             for ref in reference_files[:4]:
                 url = str(ref).strip()
+                # 支持 http/https URL
                 if url.startswith("http://") or url.startswith("https://"):
+                    refs.append({"type": "character", "image_file": url})
+                # 支持 Base64 Data URL
+                elif url.startswith("data:image/"):
                     refs.append({"type": "character", "image_file": url})
             if refs:
                 payload["subject_reference"] = refs
@@ -759,6 +810,18 @@ class MiniMaxBackend:
             parsed = json.loads(raw)
         except Exception as e:
             raise ImageHubError("PARSE", f"invalid response json: {e}") from e
+
+        # 检查API错误码
+        base_resp = parsed.get("base_resp", {})
+        status_code = base_resp.get("status_code", 0)
+        if status_code != 0:
+            error_info = self.ERROR_CODES.get(status_code, ("unknown", f"未知错误码: {status_code}"))
+            error_code, error_msg = error_info
+            detail_msg = base_resp.get("status_msg", "")
+            raise ImageHubError(
+                f"API_{error_code}",
+                f"[{status_code}] {error_msg}" + (f" - {detail_msg}" if detail_msg else "")
+            )
 
         data = parsed.get("data", {})
         b64_list = data.get("image_base64", []) if isinstance(data, dict) else []
@@ -969,6 +1032,24 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
         ref_files.append(str(values.get("reference_image")))
 
     n = 2 if try_mode else 1
+
+    # 提取用户传递的新参数
+    user_params = {
+        "prompt_optimizer": values.get("prompt_optimizer"),
+        "seed": values.get("seed"),
+        "aspect_ratio": values.get("aspect_ratio"),
+        "style_type": values.get("style_type"),
+        "style_weight": values.get("style_weight"),
+        "aigc_watermark": values.get("aigc_watermark"),
+        "n": values.get("n"),  # 用户可指定生成数量(1-9)
+    }
+    # 过滤掉 None 值
+    user_params = {k: v for k, v in user_params.items() if v is not None}
+
+    # 如果用户指定了n，覆盖默认值
+    if "n" in user_params:
+        n = min(max(1, int(user_params["n"])), 9)
+
     paths, gen_meta = _generate_with_fallback(
         cfg,
         prompt,
@@ -979,6 +1060,7 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
             "subagent": spec.group,
             "try_mode": try_mode,
             "values": values,
+            **user_params,  # 合并用户参数
         },
         logger=logger,
     )
