@@ -11,13 +11,18 @@ ROOT := /Volumes/Luis_MacData/AgentSystem
 	datahub-init datahub-ingest datahub-quality-gate datahub-clean datahub-model datahub-quality datahub-analyze datahub-api datahub-cycle datahub-table1 datahub-table2 \
 	report-xlsx-plan report-xlsx-apply report-xlsx-run table5-v2-reconcile table5-new-backfill table5-new-generate table4-quarterly-export table4-generate table3-ingest table6-generate report-regression report-anomaly report-explain report-dashboard report-digest report-archive report-publish report-rollback report-replay report-auto-run report-orchestrate report-schedule report-watch report-governance report-tower report-remediation report-remediation-run report-learning report-escalation report-release-gate report-registry report-task-reconcile report-ops-brief report-sla report-action-center report-data-readiness \
 	cycle-daily cycle-weekly cycle-monthly cycle-intel cycle-evolve cycle-autonomous cycle-ultimate \
-	preflight release check ci test-all
+	preflight release check ci test-all \
+	mcp-test mcp-list mcp-status mcp-enable mcp-disable mcp-add mcp-tools mcp-route mcp-call mcp-ask mcp-observe mcp-diagnose \
+	mcp-repair-templates mcp-schedule mcp-schedule-run \
+	skill-route skill-execute
 
 help:
 	@echo "Available targets:"
 	@echo "  make morning|done|iterate|archive|health|index|lifecycle"
 	@echo "  make summary|weekly-summary|guard|recommend|metrics|pipeline|preflight|release"
 	@echo "  make gov-brief topic='广西2025交易分析' facts='产出/facts.json' forbidden='词A,词B' replace='词A->表达A'"
+	@echo "  make mcp-test|mcp-list|mcp-status|mcp-enable|mcp-disable|mcp-add|mcp-tools|mcp-route|mcp-call|mcp-ask|mcp-observe|mcp-diagnose|mcp-repair-templates|mcp-schedule|mcp-schedule-run"
+	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}']"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
@@ -618,3 +623,63 @@ check:
 ci: check
 
 test-all: check morning health index summary guard weekly-summary recommend risk metrics dashboard decision optimize strategy forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief anomaly resilience northstar capital autonomy-audit board-packet datahub-quality-gate datahub-cycle
+
+# MCP Commands
+mcp-test:
+	@python3 $(ROOT)/scripts/mcp_manager.py test
+
+mcp-list:
+	@python3 $(ROOT)/scripts/mcp_manager.py list
+
+mcp-status:
+	@python3 $(ROOT)/scripts/mcp_manager.py status
+
+mcp-enable:
+	@if [ -z "$(name)" ]; then echo "Usage: make mcp-enable name=<server_name>"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_manager.py enable "$(name)"
+
+mcp-disable:
+	@if [ -z "$(name)" ]; then echo "Usage: make mcp-disable name=<server_name>"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_manager.py disable "$(name)"
+
+mcp-add:
+	@if [ -z "$(name)" ]; then echo "Usage: make mcp-add name=<name> package=<npm-package> [enabled=true|false] [transport=stdio|sse] [endpoint=<url>]"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_manager.py add "$(name)" "$(or $(package),)" "$(or $(enabled),false)" "$(or $(transport),stdio)" "$(or $(endpoint),)"
+
+mcp-tools:
+	@python3 $(ROOT)/scripts/mcp_connector.py tools $(if $(server),--server "$(server)",)
+
+mcp-route:
+	@if [ -z "$(text)" ]; then echo "Usage: make mcp-route text='<query>'"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_connector.py route --text "$(text)"
+
+mcp-call:
+	@if [ -z "$(server)" ] || [ -z "$(tool)" ]; then echo "Usage: make mcp-call server=<name> tool=<tool> [params='{\"k\":\"v\"}']"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_connector.py call --server "$(server)" --tool "$(tool)" --params-json '$(or $(params),{})'
+
+mcp-ask:
+	@if [ -z "$(text)" ]; then echo "Usage: make mcp-ask text='<query>' [params='{\"k\":\"v\"}']"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_connector.py ask --text "$(text)" --params-json '$(or $(params),{})'
+
+mcp-observe:
+	@python3 $(ROOT)/scripts/mcp_observability.py $(if $(days),--days $(days),) $(if $(log),--log "$(log)",) $(if $(out_md),--out-md "$(out_md)",) $(if $(out_html),--out-html "$(out_html)",)
+
+mcp-diagnose:
+	@python3 $(ROOT)/scripts/mcp_connector.py diagnose $(if $(server),--server "$(server)",) $(if $(probe),--probe-call,)
+
+mcp-repair-templates:
+	@python3 $(ROOT)/scripts/mcp_repair_templates.py $(if $(server),--server "$(server)",) $(if $(probe),--probe,)
+
+mcp-schedule:
+	@python3 $(ROOT)/scripts/mcp_scheduler.py --config "$(or $(config),$(ROOT)/config/mcp_schedule.toml)" $(if $(asof),--as-of "$(asof)",) $(if $(dry),--dry-run,)
+
+mcp-schedule-run:
+	@python3 $(ROOT)/scripts/mcp_scheduler.py --run --config "$(or $(config),$(ROOT)/config/mcp_schedule.toml)" $(if $(asof),--as-of "$(asof)",) $(if $(dry),--dry-run,)
+
+skill-route:
+	@if [ -z "$(text)" ]; then echo "Usage: make skill-route text='<query>'"; exit 2; fi
+	@python3 $(ROOT)/scripts/skill_router.py route --text "$(text)"
+
+skill-execute:
+	@if [ -z "$(text)" ]; then echo "Usage: make skill-execute text='<query>' [params='{\"k\":\"v\"}']"; exit 2; fi
+	@python3 $(ROOT)/scripts/skill_router.py execute --text "$(text)" --params-json '$(or $(params),{})'

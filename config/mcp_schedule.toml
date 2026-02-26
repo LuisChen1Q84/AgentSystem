@@ -1,0 +1,15 @@
+[defaults]
+lock_file = "/Volumes/Luis_MacData/AgentSystem/日志/mcp/mcp_schedule.lock"
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/mcp"
+stale_lock_seconds = 7200
+
+[schedule]
+hour = 8
+minute = 30
+allow_delay_minutes = 120
+
+[observe]
+days = 14
+log = "/Volumes/Luis_MacData/AgentSystem/日志/mcp/mcp_calls.log"
+out_md = "/Volumes/Luis_MacData/AgentSystem/日志/mcp/observability.md"
+out_html = "/Volumes/Luis_MacData/AgentSystem/日志/mcp/observability.html"

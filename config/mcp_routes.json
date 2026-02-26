@@ -1,0 +1,81 @@
+{
+  "rules": [
+    {
+      "name": "filesystem_ops",
+      "server": "filesystem",
+      "tool": "read_file",
+      "keywords": ["读取文件", "读文件", "打开文件", "遍历目录", "列目录"],
+      "default_params": {
+        "path": "."
+      },
+      "workflow_hints": [
+        "make search q='关键词'",
+        "make index-full"
+      ]
+    },
+    {
+      "name": "fetch_ops",
+      "server": "fetch",
+      "tool": "get",
+      "keywords": ["获取网页", "搜索网页", "API请求", "抓取", "http"],
+      "default_params": {
+        "url": "https://www.gov.cn"
+      },
+      "workflow_hints": [
+        "make policy-eval",
+        "make gov-brief --topic '<主题>'"
+      ]
+    },
+    {
+      "name": "sqlite_query",
+      "server": "sqlite",
+      "tool": "query",
+      "keywords": ["查数据库", "sql查询", "数据库"],
+      "default_params": {
+        "sql": "SELECT name FROM sqlite_master LIMIT 20"
+      },
+      "workflow_hints": [
+        "make datahub-query sql='SELECT * FROM gold_daily_metrics LIMIT 20'"
+      ]
+    },
+    {
+      "name": "github_search",
+      "server": "github",
+      "tool": "search_code",
+      "keywords": ["github", "代码搜索", "仓库检索"],
+      "default_params": {
+        "query": "repo:owner/repo TODO"
+      },
+      "workflow_hints": [
+        "make preflight",
+        "make writing-policy action='show'"
+      ]
+    },
+    {
+      "name": "brave_search",
+      "server": "brave-search",
+      "tool": "search",
+      "keywords": ["网络搜索", "全网搜索", "brave"],
+      "default_params": {
+        "query": "支付监管 最新"
+      },
+      "workflow_hints": [
+        "make summary",
+        "make recommend"
+      ]
+    },
+    {
+      "name": "thinking",
+      "server": "sequential-thinking",
+      "tool": "think",
+      "keywords": ["拆解", "分步", "推演", "思考链"],
+      "default_params": {
+        "problem": "请拆解当前任务"
+      },
+      "workflow_hints": [
+        "make decision",
+        "make optimize"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+# 每日 08:35 执行 MCP 可观测面板刷新（按调度窗口校验）
+35 8 * * * cd /Volumes/Luis_MacData/AgentSystem && /usr/bin/env bash -lc 'make mcp-schedule-run >> 日志/mcp/mcp_schedule_cron.log 2>&1'

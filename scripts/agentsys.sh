@@ -96,6 +96,8 @@ E_BOARD=48
 E_DATAHUB=49
 E_SECURITY=50
 E_WRITING=51
+E_MCP=52
+E_SKILL=53
 
 code_hint() {
   case "$1" in
@@ -142,6 +144,8 @@ code_hint() {
     49) echo "DataHub失败" ;;
     50) echo "安全审计失败" ;;
     51) echo "公文写作模块失败" ;;
+    52) echo "MCP连接器执行失败" ;;
+    53) echo "技能路由执行失败" ;;
     *) echo "未分类错误" ;;
   esac
 }
@@ -802,6 +806,7 @@ run_datahub_expert_cycle() {
 
 run_cycle_daily() {
   automation_log "INFO" "cycle-daily" "start"
+  run_cycle_preroute "cycle-daily" "${SKILL_ROUTER_CYCLE_DAILY_TEXT:-}" || return "${E_CYCLE}"
   run_morning || return "${E_CYCLE}"
   run_recommend || return "${E_CYCLE}"
   run_risk || return "${E_CYCLE}"
@@ -812,6 +817,7 @@ run_cycle_daily() {
 
 run_cycle_weekly() {
   automation_log "INFO" "cycle-weekly" "start"
+  run_cycle_preroute "cycle-weekly" "${SKILL_ROUTER_CYCLE_WEEKLY_TEXT:-}" || return "${E_CYCLE}"
   run_weekly_summary || return "${E_CYCLE}"
   run_metrics || return "${E_CYCLE}"
   run_risk || return "${E_CYCLE}"
@@ -825,6 +831,7 @@ run_cycle_weekly() {
 
 run_cycle_monthly() {
   automation_log "INFO" "cycle-monthly" "start"
+  run_cycle_preroute "cycle-monthly" "${SKILL_ROUTER_CYCLE_MONTHLY_TEXT:-}" || return "${E_CYCLE}"
   run_metrics || return "${E_CYCLE}"
   run_decision || return "${E_CYCLE}"
   run_optimize || return "${E_CYCLE}"
@@ -839,6 +846,7 @@ run_cycle_monthly() {
 
 run_cycle_intel() {
   automation_log "INFO" "cycle-intel" "start"
+  run_cycle_preroute "cycle-intel" "${SKILL_ROUTER_CYCLE_INTEL_TEXT:-}" || return "${E_CYCLE}"
   run_metrics || return "${E_CYCLE}"
   run_risk || return "${E_CYCLE}"
   run_decision || return "${E_CYCLE}"
@@ -852,6 +860,7 @@ run_cycle_intel() {
 
 run_cycle_evolve() {
   automation_log "INFO" "cycle-evolve" "start"
+  run_cycle_preroute "cycle-evolve" "${SKILL_ROUTER_CYCLE_EVOLVE_TEXT:-}" || return "${E_CYCLE}"
   run_cycle_intel || return "${E_CYCLE}"
   run_weekly_review || return "${E_CYCLE}"
   run_dashboard || return "${E_CYCLE}"
@@ -860,6 +869,7 @@ run_cycle_evolve() {
 
 run_cycle_autonomous() {
   automation_log "INFO" "cycle-autonomous" "start"
+  run_cycle_preroute "cycle-autonomous" "${SKILL_ROUTER_CYCLE_AUTONOMOUS_TEXT:-}" || return "${E_CYCLE}"
   run_cycle_evolve || return "${E_CYCLE}"
   run_autopilot || return "${E_CYCLE}"
   run_agents || return "${E_CYCLE}"
@@ -872,6 +882,7 @@ run_cycle_autonomous() {
 
 run_cycle_ultimate() {
   automation_log "INFO" "cycle-ultimate" "start"
+  run_cycle_preroute "cycle-ultimate" "${SKILL_ROUTER_CYCLE_ULTIMATE_TEXT:-}" || return "${E_CYCLE}"
   run_cycle_autonomous || return "${E_CYCLE}"
   run_datahub_cycle || return "${E_CYCLE}"
   run_anomaly || return "${E_CYCLE}"
@@ -904,6 +915,80 @@ run_preflight() {
     --out-dir "${SECURITY_AUDIT_DIR}" \
     --strict || return "${E_PREFLIGHT}"
   automation_log "INFO" "preflight" "done"
+}
+
+run_mcp() {
+  local action="${1:-ask}"
+  shift || true
+  automation_log "INFO" "mcp" "action=${action}"
+  python3 "${ROOT_DIR}/scripts/mcp_connector.py" "${action}" "$@" || return "${E_MCP}"
+}
+
+run_mcp_observe() {
+  automation_log "INFO" "mcp-observe" "start"
+  python3 "${ROOT_DIR}/scripts/mcp_observability.py" "$@" || return "${E_MCP}"
+  automation_log "INFO" "mcp-observe" "done"
+}
+
+run_mcp_schedule() {
+  automation_log "INFO" "mcp-schedule" "start"
+  python3 "${ROOT_DIR}/scripts/mcp_scheduler.py" "$@" || return "${E_MCP}"
+  automation_log "INFO" "mcp-schedule" "done"
+}
+
+run_mcp_repair_templates() {
+  automation_log "INFO" "mcp-repair-templates" "start"
+  python3 "${ROOT_DIR}/scripts/mcp_repair_templates.py" "$@" || return "${E_MCP}"
+  automation_log "INFO" "mcp-repair-templates" "done"
+}
+
+run_skill_route() {
+  local action="${1:-route}"
+  shift || true
+  automation_log "INFO" "skill-route" "action=${action}"
+  python3 "${ROOT_DIR}/scripts/skill_router.py" "${action}" "$@" || return "${E_SKILL}"
+}
+
+run_cycle_preroute() {
+  local cycle_name="${1:-cycle}"
+  local text="${2:-}"
+  local mode="${SKILL_ROUTER_CYCLE_MODE:-route}"
+  local strict="${SKILL_ROUTER_CYCLE_STRICT:-0}"
+  local payload="${text:-执行 ${cycle_name} 节奏编排前置路由}"
+  local tmp_dir
+  tmp_dir="$(get_cfg_path "mcp_preroute_tmp_dir" "日志/mcp/preroute/tmp")"
+  mkdir -p "${tmp_dir}"
+  local result_file="${tmp_dir}/${cycle_name}_$$_result.json"
+  local error_file="${tmp_dir}/${cycle_name}_$$_error.log"
+
+  automation_log "INFO" "cycle-preroute" "cycle=${cycle_name} mode=${mode}"
+  if python3 "${ROOT_DIR}/scripts/skill_router.py" "${mode}" --text "${payload}" --params-json '{}' >"${result_file}" 2>"${error_file}"; then
+    python3 "${ROOT_DIR}/scripts/cycle_preroute_audit.py" \
+      --cycle "${cycle_name}" \
+      --mode "${mode}" \
+      --text "${payload}" \
+      --ok 1 \
+      --strict "${strict}" \
+      --result-file "${result_file}" \
+      --error-file "${error_file}" >/dev/null 2>&1 || true
+    rm -f "${result_file}" "${error_file}"
+    automation_log "INFO" "cycle-preroute" "cycle=${cycle_name} ok"
+    return 0
+  fi
+  python3 "${ROOT_DIR}/scripts/cycle_preroute_audit.py" \
+    --cycle "${cycle_name}" \
+    --mode "${mode}" \
+    --text "${payload}" \
+    --ok 0 \
+    --strict "${strict}" \
+    --result-file "${result_file}" \
+    --error-file "${error_file}" >/dev/null 2>&1 || true
+  rm -f "${result_file}" "${error_file}"
+  automation_log "WARN" "cycle-preroute" "cycle=${cycle_name} failed mode=${mode}"
+  if [ "${strict}" = "1" ]; then
+    return "${E_SKILL}"
+  fi
+  return 0
 }
 
 usage() {
@@ -983,6 +1068,11 @@ Usage:
   scripts/agentsys.sh cycle-autonomous
   scripts/agentsys.sh cycle-ultimate
   scripts/agentsys.sh preflight
+  scripts/agentsys.sh mcp [status|tools|route|call|ask|diagnose] [args...]
+  scripts/agentsys.sh mcp-observe [--days N --out-md path --out-html path]
+  scripts/agentsys.sh mcp-schedule [--run --config <path> --as-of YYYY-MM-DD --dry-run]
+  scripts/agentsys.sh mcp-repair-templates [--server <name> --probe]
+  scripts/agentsys.sh skill-route [route|execute|dump] [args...]
 EOF
 }
 
@@ -1062,5 +1152,10 @@ case "${cmd}" in
   cycle-autonomous) run_cycle_autonomous ;;
   cycle-ultimate) run_cycle_ultimate ;;
   preflight) run_preflight ;;
+  mcp) shift; run_mcp "${1:-ask}" "${@:2}" ;;
+  mcp-observe) shift; run_mcp_observe "$@" ;;
+  mcp-schedule) shift; run_mcp_schedule "$@" ;;
+  mcp-repair-templates) shift; run_mcp_repair_templates "$@" ;;
+  skill-route) shift; run_skill_route "${1:-route}" "${@:2}" ;;
   *) usage; send_alert "WARN" "agentsys参数错误" "invalid command: ${cmd:-<empty>}"; exit "${E_USAGE}" ;;
 esac

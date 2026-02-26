@@ -1,0 +1,109 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Volumes/Luis_MacData/AgentSystem"
+      ],
+      "description": "本地文件系统操作",
+      "enabled": true,
+      "categories": ["file", "io"]
+    },
+    "fetch": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "description": "网络请求（需配置域名白名单）",
+      "enabled": true,
+      "categories": ["network", "api"],
+      "env": {
+        "FETCH_DOMAIN_WHITELIST": "api.github.com,www.pbc.gov.cn,www.gov.cn"
+      }
+    },
+    "sqlite": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "/Volumes/Luis_MacData/AgentSystem/私有数据/oltp/business.db"
+      ],
+      "description": "SQLite数据库查询",
+      "enabled": false,
+      "categories": ["database", "sql"]
+    },
+    "github": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "description": "GitHub API操作",
+      "enabled": false,
+      "categories": ["git", "api"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "brave-search": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "description": "Brave搜索API",
+      "enabled": false,
+      "categories": ["search", "web"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      }
+    },
+    "sequential-thinking": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
+      "description": "结构化思维链工具",
+      "enabled": true,
+      "categories": ["thinking", " reasoning"]
+    }
+  },
+  "settings": {
+    "autoEnableNewServers": false,
+    "protocolPreferred": true,
+    "protocolTimeoutMs": 1500,
+    "timeout": 30000,
+    "maxConcurrentCalls": 5,
+    "logging": {
+      "level": "info",
+      "saveToFile": true,
+      "filePath": "日志/mcp/mcp_calls.log"
+    },
+    "security": {
+      "allowedPaths": [
+        "/Volumes/Luis_MacData/AgentSystem"
+      ],
+      "blockedCommands": [
+        "rm -rf",
+        "format",
+        "mkfs",
+        "dd"
+      ],
+      "requireConfirmation": [
+        "write",
+        "delete",
+        "execute"
+      ]
+    }
+  }
+}
