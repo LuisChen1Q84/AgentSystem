@@ -1,0 +1,6 @@
+# Weekly sector map audit (Monday 08:15 local time)
+# Replace <PROJECT_ROOT> with your local repo path.
+# 15 8 * * 1 cd <PROJECT_ROOT> && /bin/bash scripts/agentsys.sh stock-sector-audit --universe global_core >> 日志/stock_quant/sector_audit/cron.log 2>&1
+
+# Optional: weekly ETF/macro coverage audit
+# 20 8 * * 1 cd <PROJECT_ROOT> && /bin/bash scripts/agentsys.sh stock-sector-audit --universe etf_macro >> 日志/stock_quant/sector_audit/cron.log 2>&1

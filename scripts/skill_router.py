@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import traceback
@@ -13,17 +14,43 @@ from typing import Any, Dict, List, Tuple
 
 try:
     from scripts.mcp_connector import Registry, Runtime, parse_params
+    from scripts.stock_market_hub import run_report as run_stock_hub_report
+    from scripts.stock_market_hub import load_cfg as load_stock_hub_cfg
+    from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
 except ModuleNotFoundError:  # direct script execution
     from mcp_connector import Registry, Runtime, parse_params
+    from stock_market_hub import run_report as run_stock_hub_report  # type: ignore
+    from stock_market_hub import load_cfg as load_stock_hub_cfg  # type: ignore
+    from stock_market_hub import pick_symbols as pick_stock_symbols  # type: ignore
 
-ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
+ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 ROUTE_DOC = ROOT / "工作流" / "技能路由.md"
+STOCK_HUB_CFG = ROOT / "config" / "stock_market_hub.toml"
 
 STRONG_EXEC_KEYWORDS = {"xlsx", "excel", "表1", "表2", "填报日期", "更新这张表", "直接修改原文件"}
 PLAN_WORDS = {"计划", "打算", "准备"}
 SECTION_BONUS = {
     "MCP连接类": 3,
     "文档处理类": 2,
+}
+MARKET_WORDS = {
+    "etf",
+    "index",
+    "stock",
+    "kline",
+    "support",
+    "resistance",
+    "buy",
+    "sell",
+    "指数",
+    "行情",
+    "k线",
+    "恒生科技",
+    "513180",
+    "买卖点",
+    "支撑",
+    "压力",
 }
 
 
@@ -78,6 +105,15 @@ def route_text(text: str, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
             "description": "强优先执行类",
             "keywords": [k for k in STRONG_EXEC_KEYWORDS if k in low],
             "score": 100,
+        }
+
+    if any(w in low for w in MARKET_WORDS):
+        return {
+            "section": "市场量化类",
+            "skill": "stock-market-hub + mcp-freefirst",
+            "description": "全球股票市场分析 + 量化回测 + 免费信源抓取",
+            "keywords": [w for w in MARKET_WORDS if w in low],
+            "score": 90,
         }
 
     plan_hits = [w for w in PLAN_WORDS if w in low]
@@ -147,6 +183,30 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
     route = route_text(text, rules)
     skill = route["skill"]
 
+    if skill.startswith("stock-market-hub"):
+        user_params = parse_params(params_json)
+        hub_cfg = load_stock_hub_cfg(STOCK_HUB_CFG)
+        symbols = pick_stock_symbols(hub_cfg, text, str(user_params.get("symbols", "")))
+        universe = str(user_params.get("universe", "")).strip() or str(
+            hub_cfg.get("defaults", {}).get("default_universe", "global_core")
+        )
+        no_sync = bool(user_params.get("no_sync", False))
+        hub = run_stock_hub_report(hub_cfg, text, universe, symbols, no_sync)
+        return {
+            "route": route,
+            "execute": {"type": "stock-market-hub", "symbols": symbols, "universe": universe, "no_sync": no_sync},
+            "result": hub,
+            "meta": {
+                "mode": "free-first-global-stock",
+                "risk_tags": ["non_realtime", "public_web_sources_only", "not_investment_advice"],
+                "next_actions": [
+                    "make stock-hub q='你的问题'",
+                    "make stock-run universe='global_core' limit=30",
+                    "make mcp-observe days=7",
+                ],
+            },
+        }
+
     if "mcp-connector" in skill:
         server = _server_from_skill(skill)
         tool, base_params = _default_call(server, text)
@@ -160,10 +220,21 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
 
         runtime = Runtime(Registry())
         result = runtime.call(server, tool, base_params, route_meta={"source": "skill-router", **route})
+        low = text.lower()
+        market_mode = any(w in low for w in MARKET_WORDS)
+        freefirst = {
+            "mode": "free-first",
+            "risk_tags": ["non_realtime", "public_web_sources_only"] if market_mode else ["public_web_sources_only"],
+            "next_actions": [
+                "make mcp-freefirst-sync q='你的问题'",
+                "make mcp-freefirst-report",
+            ] if market_mode else ["make mcp-observe days=7"],
+        }
         return {
             "route": route,
             "execute": {"type": "mcp", "server": server, "tool": tool, "params": base_params},
             "result": result,
+            "meta": freefirst,
         }
 
     if skill == "clarify":

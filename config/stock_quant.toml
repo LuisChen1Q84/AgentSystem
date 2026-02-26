@@ -1,0 +1,204 @@
+[defaults]
+cache_dir = "日志/stock_quant/cache"
+report_dir = "日志/stock_quant/reports"
+lookback_days = 900
+request_timeout_sec = 15
+providers = ["stooq", "yahoo"]
+base_currency = "USD"
+
+[factors]
+model = "cross_section_v1"
+
+[factors.weights]
+momentum = 0.30
+trend = 0.25
+volatility = 0.20
+rsi_regime = 0.15
+liquidity = 0.10
+
+[portfolio]
+target_vol_pct = 12.0
+max_leverage = 1.5
+max_single_weight_pct = 18.0
+max_market_weight_pct = 45.0
+max_region_weight_pct = 70.0
+max_sector_weight_pct = 35.0
+min_factor_score = 60.0
+
+[portfolio_backtest]
+rebalance_days = 20
+transaction_cost_bps = 4.0
+slippage_bps = 3.0
+warmup_bars = 120
+benchmark_symbol = "SPY"
+drawdown_circuit_pct = 12.0
+recovery_drawdown_pct = 6.0
+delever_to = 0.35
+
+[sectors]
+default = "Other"
+
+[sectors.map]
+SPY = "DiversifiedETF"
+QQQ = "DiversifiedETF"
+DIA = "DiversifiedETF"
+IWM = "DiversifiedETF"
+VTI = "DiversifiedETF"
+EEM = "DiversifiedETF"
+EWJ = "DiversifiedETF"
+EWZ = "DiversifiedETF"
+FXI = "DiversifiedETF"
+KWEB = "DiversifiedETF"
+TLT = "RatesETF"
+IEF = "RatesETF"
+HYG = "CreditETF"
+LQD = "CreditETF"
+GLD = "CommodityETF"
+SLV = "CommodityETF"
+USO = "CommodityETF"
+AAPL = "Technology"
+MSFT = "Technology"
+NVDA = "Technology"
+AMZN = "ConsumerDiscretionary"
+GOOGL = "CommunicationServices"
+META = "CommunicationServices"
+TSLA = "ConsumerDiscretionary"
+JPM = "Financials"
+XOM = "Energy"
+JNJ = "Healthcare"
+"0700.HK" = "CommunicationServices"
+"9988.HK" = "ConsumerDiscretionary"
+"3690.HK" = "ConsumerDiscretionary"
+"1810.HK" = "Technology"
+"9618.HK" = "ConsumerDiscretionary"
+"600519.SS" = "ConsumerStaples"
+"300750.SZ" = "Industrials"
+"601318.SS" = "Financials"
+"7203.T" = "ConsumerDiscretionary"
+"6758.T" = "Technology"
+"9984.T" = "CommunicationServices"
+"RELIANCE.NS" = "Energy"
+"TCS.NS" = "Technology"
+"HDFCBANK.NS" = "Financials"
+"INFY.NS" = "Technology"
+"SHEL.L" = "Energy"
+"HSBA.L" = "Financials"
+"AZN.L" = "Healthcare"
+"BP.L" = "Energy"
+"SAP.DE" = "Technology"
+"SIE.DE" = "Industrials"
+"SHOP.TO" = "Technology"
+"RY.TO" = "Financials"
+"TD.TO" = "Financials"
+"SU.TO" = "Energy"
+"BHP.AX" = "Materials"
+"CBA.AX" = "Financials"
+"CSL.AX" = "Healthcare"
+"VALE3.SA" = "Materials"
+"PETR4.SA" = "Energy"
+"ITUB4.SA" = "Financials"
+"005930.KS" = "Technology"
+"000660.KS" = "Technology"
+"2800.HK" = "DiversifiedETF"
+"3033.HK" = "DiversifiedETF"
+"513180.SS" = "DiversifiedETF"
+"510300.SS" = "DiversifiedETF"
+"159915.SZ" = "DiversifiedETF"
+"8306.T" = "Financials"
+"1306.T" = "DiversifiedETF"
+"NIFTYBEES.NS" = "DiversifiedETF"
+"VOD.L" = "CommunicationServices"
+"AIR.PA" = "Industrials"
+"MC.PA" = "ConsumerDiscretionary"
+"ISP.MI" = "Financials"
+"XIU.TO" = "DiversifiedETF"
+"WBC.AX" = "Financials"
+"VAS.AX" = "DiversifiedETF"
+"BOVA11.SA" = "DiversifiedETF"
+"069500.KS" = "DiversifiedETF"
+"D05.SI" = "Financials"
+"O39.SI" = "Financials"
+"U11.SI" = "Financials"
+"ES3.SI" = "DiversifiedETF"
+
+[markets.US]
+name = "United States"
+timezone = "America/New_York"
+currency = "USD"
+
+[markets.CN]
+name = "China A"
+timezone = "Asia/Shanghai"
+currency = "CNY"
+
+[markets.HK]
+name = "Hong Kong"
+timezone = "Asia/Hong_Kong"
+currency = "HKD"
+
+[markets.JP]
+name = "Japan"
+timezone = "Asia/Tokyo"
+currency = "JPY"
+
+[markets.IN]
+name = "India"
+timezone = "Asia/Kolkata"
+currency = "INR"
+
+[markets.UK]
+name = "United Kingdom"
+timezone = "Europe/London"
+currency = "GBP"
+
+[markets.EU]
+name = "Eurozone"
+timezone = "Europe/Berlin"
+currency = "EUR"
+
+[markets.CA]
+name = "Canada"
+timezone = "America/Toronto"
+currency = "CAD"
+
+[markets.AU]
+name = "Australia"
+timezone = "Australia/Sydney"
+currency = "AUD"
+
+[markets.BR]
+name = "Brazil"
+timezone = "America/Sao_Paulo"
+currency = "BRL"
+
+[markets.KR]
+name = "South Korea"
+timezone = "Asia/Seoul"
+currency = "KRW"
+
+[markets.SG]
+name = "Singapore"
+timezone = "Asia/Singapore"
+currency = "SGD"
+
+[universes.global_core]
+symbols = [
+  "SPY", "QQQ", "DIA", "IWM", "VTI", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "XOM", "JNJ",
+  "0700.HK", "9988.HK", "3690.HK", "1810.HK", "9618.HK", "2800.HK", "3033.HK",
+  "513180.SS", "510300.SS", "159915.SZ", "600519.SS", "300750.SZ", "601318.SS",
+  "7203.T", "6758.T", "9984.T", "8306.T", "1306.T",
+  "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "NIFTYBEES.NS",
+  "SHEL.L", "HSBA.L", "AZN.L", "BP.L", "VOD.L",
+  "SAP.DE", "SIE.DE", "AIR.PA", "MC.PA", "ISP.MI",
+  "SHOP.TO", "RY.TO", "TD.TO", "SU.TO", "XIU.TO",
+  "BHP.AX", "CBA.AX", "CSL.AX", "WBC.AX", "VAS.AX",
+  "VALE3.SA", "PETR4.SA", "ITUB4.SA", "BOVA11.SA", "EWZ",
+  "005930.KS", "000660.KS", "069500.KS",
+  "D05.SI", "O39.SI", "U11.SI", "ES3.SI"
+]
+
+[universes.etf_macro]
+symbols = [
+  "SPY", "QQQ", "IWM", "EEM", "EWJ", "EWZ", "FXI", "KWEB", "GLD", "SLV", "USO", "TLT", "IEF", "HYG", "LQD",
+  "513180.SS", "510300.SS", "159915.SZ", "2800.HK", "3033.HK", "NIFTYBEES.NS", "XIU.TO", "VAS.AX", "BOVA11.SA"
+]

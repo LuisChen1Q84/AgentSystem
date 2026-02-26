@@ -21,6 +21,16 @@ class SkillRouterTest(unittest.TestCase):
         route = route_text("我打算更新这张表，excel直接修改原文件", rules)
         self.assertEqual(route["skill"], "minimax-xlsx")
 
+    def test_route_market_to_stock_hub(self):
+        rules = parse_route_doc()
+        route = route_text("请分析513180的K线和买卖点", rules)
+        self.assertIn("stock-market-hub", route["skill"])
+
+    def test_route_market_to_stock_hub_en(self):
+        rules = parse_route_doc()
+        route = route_text("analyze SPY support resistance", rules)
+        self.assertIn("stock-market-hub", route["skill"])
+
 
 if __name__ == "__main__":
     unittest.main()

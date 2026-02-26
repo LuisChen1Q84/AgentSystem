@@ -98,6 +98,7 @@ E_SECURITY=50
 E_WRITING=51
 E_MCP=52
 E_SKILL=53
+E_STOCK=54
 
 code_hint() {
   case "$1" in
@@ -146,6 +147,7 @@ code_hint() {
     51) echo "公文写作模块失败" ;;
     52) echo "MCP连接器执行失败" ;;
     53) echo "技能路由执行失败" ;;
+    54) echo "股票量化模块执行失败" ;;
     *) echo "未分类错误" ;;
   esac
 }
@@ -908,12 +910,25 @@ run_plan_task() {
 }
 
 run_preflight() {
+  local stock_strict="${PREFLIGHT_STOCK_STRICT:-0}"
   automation_log "INFO" "preflight" "start"
   METADATA_STRICT_STAGED=1 bash "${ROOT_DIR}/scripts/checks.sh" || return "${E_PREFLIGHT}"
   python3 "${ROOT_DIR}/scripts/security_audit.py" \
     --root "${ROOT_DIR}" \
     --out-dir "${SECURITY_AUDIT_DIR}" \
     --strict || return "${E_PREFLIGHT}"
+  local stock_args=(--root "${ROOT_DIR}")
+  if [ "${stock_strict}" = "1" ]; then
+    stock_args+=(--require-network)
+  fi
+  if python3 "${ROOT_DIR}/scripts/stock_env_check.py" "${stock_args[@]}" >/dev/null 2>&1; then
+    automation_log "INFO" "preflight" "stock-env-check ok"
+  else
+    automation_log "WARN" "preflight" "stock-env-check failed strict=${stock_strict}"
+    if [ "${stock_strict}" = "1" ]; then
+      return "${E_PREFLIGHT}"
+    fi
+  fi
   automation_log "INFO" "preflight" "done"
 }
 
@@ -940,6 +955,50 @@ run_mcp_repair_templates() {
   automation_log "INFO" "mcp-repair-templates" "start"
   python3 "${ROOT_DIR}/scripts/mcp_repair_templates.py" "$@" || return "${E_MCP}"
   automation_log "INFO" "mcp-repair-templates" "done"
+}
+
+run_mcp_freefirst_sync() {
+  automation_log "INFO" "mcp-freefirst-sync" "start"
+  python3 "${ROOT_DIR}/scripts/mcp_freefirst_hub.py" "$@" || return "${E_MCP}"
+  automation_log "INFO" "mcp-freefirst-sync" "done"
+}
+
+run_mcp_freefirst_report() {
+  automation_log "INFO" "mcp-freefirst-report" "start"
+  python3 "${ROOT_DIR}/scripts/mcp_freefirst_report.py" "$@" || return "${E_MCP}"
+  automation_log "INFO" "mcp-freefirst-report" "done"
+}
+
+run_stock_quant() {
+  local action="${1:-run}"
+  shift || true
+  automation_log "INFO" "stock-quant" "action=${action}"
+  python3 "${ROOT_DIR}/scripts/stock_quant.py" "${action}" "$@" || return "${E_STOCK}"
+  automation_log "INFO" "stock-quant" "done action=${action}"
+}
+
+run_stock_hub() {
+  automation_log "INFO" "stock-hub" "start"
+  python3 "${ROOT_DIR}/scripts/stock_market_hub.py" "$@" || return "${E_STOCK}"
+  automation_log "INFO" "stock-hub" "done"
+}
+
+run_stock_sector_audit() {
+  automation_log "INFO" "stock-sector-audit" "start"
+  python3 "${ROOT_DIR}/scripts/stock_sector_audit.py" "$@" || return "${E_STOCK}"
+  automation_log "INFO" "stock-sector-audit" "done"
+}
+
+run_stock_sector_patch() {
+  automation_log "INFO" "stock-sector-patch" "start"
+  python3 "${ROOT_DIR}/scripts/stock_sector_patch.py" "$@" || return "${E_STOCK}"
+  automation_log "INFO" "stock-sector-patch" "done"
+}
+
+run_stock_env_check() {
+  automation_log "INFO" "stock-env-check" "start"
+  python3 "${ROOT_DIR}/scripts/stock_env_check.py" "$@" || return "${E_STOCK}"
+  automation_log "INFO" "stock-env-check" "done"
 }
 
 run_skill_route() {
@@ -1068,10 +1127,18 @@ Usage:
   scripts/agentsys.sh cycle-autonomous
   scripts/agentsys.sh cycle-ultimate
   scripts/agentsys.sh preflight
+    env: PREFLIGHT_STOCK_STRICT=1  (stock-env-check失败时阻断)
   scripts/agentsys.sh mcp [status|tools|route|call|ask|diagnose] [args...]
   scripts/agentsys.sh mcp-observe [--days N --out-md path --out-html path]
   scripts/agentsys.sh mcp-schedule [--run --config <path> --as-of YYYY-MM-DD --dry-run]
   scripts/agentsys.sh mcp-repair-templates [--server <name> --probe]
+  scripts/agentsys.sh mcp-freefirst-sync [--query <text> --topic <market|macro|general>]
+  scripts/agentsys.sh mcp-freefirst-report [--data-dir <path>]
+  scripts/agentsys.sh stock-quant [universe|sync|analyze|backtest|portfolio|portfolio-backtest|report|run] [args...]
+  scripts/agentsys.sh stock-env-check [--root <path>]
+  scripts/agentsys.sh stock-sector-audit [--universe <name> --symbols <csv> --out-dir <path>]
+  scripts/agentsys.sh stock-sector-patch [--audit-json <file>|--audit-dir <dir>] [--prefer suggested|fallback] [--apply]
+  scripts/agentsys.sh stock-hub [--query <text> --symbols <csv> --universe <name> --no-sync]
   scripts/agentsys.sh skill-route [route|execute|dump] [args...]
 EOF
 }
@@ -1156,6 +1223,13 @@ case "${cmd}" in
   mcp-observe) shift; run_mcp_observe "$@" ;;
   mcp-schedule) shift; run_mcp_schedule "$@" ;;
   mcp-repair-templates) shift; run_mcp_repair_templates "$@" ;;
+  mcp-freefirst-sync) shift; run_mcp_freefirst_sync "$@" ;;
+  mcp-freefirst-report) shift; run_mcp_freefirst_report "$@" ;;
+  stock-quant) shift; run_stock_quant "${1:-run}" "${@:2}" ;;
+  stock-env-check) shift; run_stock_env_check "$@" ;;
+  stock-sector-audit) shift; run_stock_sector_audit "$@" ;;
+  stock-sector-patch) shift; run_stock_sector_patch "$@" ;;
+  stock-hub) shift; run_stock_hub "$@" ;;
   skill-route) shift; run_skill_route "${1:-route}" "${@:2}" ;;
   *) usage; send_alert "WARN" "agentsys参数错误" "invalid command: ${cmd:-<empty>}"; exit "${E_USAGE}" ;;
 esac

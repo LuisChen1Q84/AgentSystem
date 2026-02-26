@@ -152,6 +152,14 @@ make mcp-add name="server-name" package="@scope/server-name" enabled="false" tra
   - `日志/mcp/mcp_scheduler_latest.json`
   - `日志/mcp/mcp_scheduler_history.jsonl`
 
+## Free-First 升级（免费优先）
+
+- 配置：`config/mcp_freefirst.toml`
+- 多源抓取：`make mcp-freefirst-sync q="513180 恒生科技ETF 走势"`
+- 质量报告：`make mcp-freefirst-report`
+- 指标：新鲜度得分、来源覆盖率、可验证率
+- 场景说明：在无付费行情API时，优先使用官方/公开来源并输出风险标签（非实时）
+
 ---
 
 ## 安全约束

@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-ROOT := /Volumes/Luis_MacData/AgentSystem
+ROOT ?= $(CURDIR)
 
 .PHONY: help morning done iterate archive health index search lifecycle \
 	task-add task-complete task-bulk task-update task-list task-render \
@@ -13,7 +13,8 @@ ROOT := /Volumes/Luis_MacData/AgentSystem
 	cycle-daily cycle-weekly cycle-monthly cycle-intel cycle-evolve cycle-autonomous cycle-ultimate \
 	preflight release check ci test-all \
 	mcp-test mcp-list mcp-status mcp-enable mcp-disable mcp-add mcp-tools mcp-route mcp-call mcp-ask mcp-observe mcp-diagnose \
-	mcp-repair-templates mcp-schedule mcp-schedule-run \
+	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
+	stock-env-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
 	skill-route skill-execute
 
 help:
@@ -21,7 +22,9 @@ help:
 	@echo "  make morning|done|iterate|archive|health|index|lifecycle"
 	@echo "  make summary|weekly-summary|guard|recommend|metrics|pipeline|preflight|release"
 	@echo "  make gov-brief topic='广西2025交易分析' facts='产出/facts.json' forbidden='词A,词B' replace='词A->表达A'"
-	@echo "  make mcp-test|mcp-list|mcp-status|mcp-enable|mcp-disable|mcp-add|mcp-tools|mcp-route|mcp-call|mcp-ask|mcp-observe|mcp-diagnose|mcp-repair-templates|mcp-schedule|mcp-schedule-run"
+	@echo "  make mcp-test|mcp-list|mcp-status|mcp-enable|mcp-disable|mcp-add|mcp-tools|mcp-route|mcp-call|mcp-ask|mcp-observe|mcp-diagnose|mcp-repair-templates|mcp-schedule|mcp-schedule-run|mcp-freefirst-sync|mcp-freefirst-report"
+	@echo "  make stock-env-check [root='$(ROOT)']"
+	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
 	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}']"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
@@ -76,6 +79,7 @@ help:
 	@echo "  make task-list"
 	@echo "  make task-render"
 	@echo "  make check|ci|test-all"
+	@echo "  make preflight [strict_stock=1]"
 
 morning:
 	@$(ROOT)/scripts/agentsys.sh morning
@@ -582,7 +586,7 @@ cycle-ultimate:
 	@$(ROOT)/scripts/agentsys.sh cycle-ultimate
 
 preflight:
-	@$(ROOT)/scripts/agentsys.sh preflight
+	@PREFLIGHT_STOCK_STRICT=$(if $(strict_stock),1,0) $(ROOT)/scripts/agentsys.sh preflight
 
 release: preflight
 	@echo "release gate passed"
@@ -675,6 +679,48 @@ mcp-schedule:
 
 mcp-schedule-run:
 	@python3 $(ROOT)/scripts/mcp_scheduler.py --run --config "$(or $(config),$(ROOT)/config/mcp_schedule.toml)" $(if $(asof),--as-of "$(asof)",) $(if $(dry),--dry-run,)
+
+mcp-freefirst-sync:
+	@python3 $(ROOT)/scripts/mcp_freefirst_hub.py --config "$(or $(config),$(ROOT)/config/mcp_freefirst.toml)" $(if $(q),--query "$(q)",) $(if $(topic),--topic "$(topic)",) $(if $(max),--max-sources $(max),)
+
+mcp-freefirst-report:
+	@python3 $(ROOT)/scripts/mcp_freefirst_report.py $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(out_md),--out-md "$(out_md)",) $(if $(out_json),--out-json "$(out_json)",)
+
+stock-env-check:
+	@python3 $(ROOT)/scripts/stock_env_check.py $(if $(root),--root "$(root)",)
+
+stock-universe:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" universe --universe "$(or $(universe),global_core)"
+
+stock-sync:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" sync --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(limit),--limit $(limit),)
+
+stock-analyze:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" analyze --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(limit),--limit $(limit),)
+
+stock-backtest:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" backtest --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(limit),--limit $(limit),)
+
+stock-portfolio:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" portfolio --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(limit),--limit $(limit),)
+
+stock-portfolio-bt:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" portfolio-backtest --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(limit),--limit $(limit),)
+
+stock-sector-audit:
+	@python3 $(ROOT)/scripts/stock_sector_audit.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(out_dir),--out-dir "$(out_dir)",)
+
+stock-sector-patch:
+	@python3 $(ROOT)/scripts/stock_sector_patch.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" $(if $(audit_json),--audit-json "$(audit_json)",) $(if $(audit_dir),--audit-dir "$(audit_dir)",) $(if $(prefer),--prefer "$(prefer)",) $(if $(apply),--apply,) $(if $(out_dir),--out-dir "$(out_dir)",)
+
+stock-report:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" report --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(limit),--limit $(limit),)
+
+stock-run:
+	@python3 $(ROOT)/scripts/stock_quant.py --config "$(or $(config),$(ROOT)/config/stock_quant.toml)" run --universe "$(or $(universe),global_core)" $(if $(symbols),--symbols "$(symbols)",) $(if $(limit),--limit $(limit),)
+
+stock-hub:
+	@python3 $(ROOT)/scripts/stock_market_hub.py --config "$(or $(config),$(ROOT)/config/stock_market_hub.toml)" $(if $(q),--query "$(q)",) $(if $(universe),--universe "$(universe)",) $(if $(symbols),--symbols "$(symbols)",) $(if $(nosync),--no-sync,)
 
 skill-route:
 	@if [ -z "$(text)" ]; then echo "Usage: make skill-route text='<query>'"; exit 2; fi

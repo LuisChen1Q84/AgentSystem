@@ -1,0 +1,65 @@
+[defaults]
+max_sources = 6
+request_timeout_sec = 12
+output_dir = "日志/mcp/freefirst"
+user_agent = "AgentSystem-FreeFirst/1.0"
+
+[topics.market]
+keywords = ["etf", "指数", "行情", "恒生科技", "513180", "沪深300", "纳指"]
+sources = ["eastmoney_etf", "sina_finance", "csindex", "hkex_news"]
+
+[topics.macro]
+keywords = ["政策", "监管", "宏观", "央行", "pbc", "利率"]
+sources = ["gov_cn", "pbc", "csrc", "stats_bureau"]
+
+[topics.general]
+keywords = []
+sources = ["gov_cn", "sina_finance", "eastmoney_etf"]
+
+[sources.gov_cn]
+name = "中国政府网"
+url = "https://www.gov.cn"
+tier = "L1_official"
+kind = "policy"
+
+[sources.pbc]
+name = "中国人民银行"
+url = "http://www.pbc.gov.cn"
+tier = "L1_official"
+kind = "policy"
+
+[sources.csrc]
+name = "中国证监会"
+url = "http://www.csrc.gov.cn"
+tier = "L1_official"
+kind = "policy"
+
+[sources.stats_bureau]
+name = "国家统计局"
+url = "http://www.stats.gov.cn"
+tier = "L1_official"
+kind = "macro"
+
+[sources.csindex]
+name = "中证指数"
+url = "http://www.csindex.com.cn"
+tier = "L1_official"
+kind = "market"
+
+[sources.hkex_news]
+name = "港交所"
+url = "https://www.hkex.com.hk"
+tier = "L1_official"
+kind = "market"
+
+[sources.eastmoney_etf]
+name = "东方财富ETF"
+url = "https://fund.eastmoney.com"
+tier = "L2_public"
+kind = "market"
+
+[sources.sina_finance]
+name = "新浪财经"
+url = "https://finance.sina.com.cn"
+tier = "L2_public"
+kind = "market"
