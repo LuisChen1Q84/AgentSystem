@@ -1,0 +1,143 @@
+# Skill Tools Configuration
+# 定义每个技能需要的工具及其来源
+
+# 工具来源类型：
+# - mcp: 通过 MCP 服务器执行
+# - minimax: 通过 MiniMax 原生 Tool Use
+# - function: 本地函数
+
+skills:
+  # 文档处理技能
+  minimax-docx:
+    source: mcp
+    server: filesystem
+    tools:
+      - name: read_file
+        description: 读取文件内容
+      - name: write_file
+        description: 写入文件内容
+      - name: list_dir
+        description: 列出目录内容
+
+  # Excel 处理技能
+  minimax-xlsx:
+    source: mcp
+    server: filesystem
+    tools:
+      - name: read_file
+        description: 读取 Excel 文件
+      - name: write_file
+        description: 写入 Excel 文件
+
+  # PPT 制作技能
+  mckinsey-ppt:
+    source: minimax
+    tools:
+      - name: create_outline
+        description: 创建 PPT 大纲
+      - name: generate_slide
+        description: 生成幻灯片
+      - name: apply_template
+        description: 应用模板
+
+  # 政策分析技能
+  policy-pbc:
+    source: minimax
+    tools:
+      - name: search_policy
+        description: 搜索政策文件
+      - name: analyze_policy
+        description: 分析政策内容
+      - name: compare_versions
+        description: 对比政策版本
+
+  # 图像生成技能
+  image-creator-hub:
+    source: mcp
+    server: MiniMax
+    tools:
+      - name: generate_image
+        description: 生成图片
+      - name: understand_image
+        description: 理解图片内容
+
+  # 股票分析技能
+  stock-market-hub:
+    source: minimax
+    tools:
+      - name: get_stock_price
+        description: 获取股票价格
+      - name: get_kline_data
+        description: 获取 K 线数据
+      - name: calculate_technical
+        description: 计算技术指标
+      - name: analyze_fundamental
+        description: 基本面分析
+
+  # 金融研究报告技能
+  finance-industry:
+    source: minimax
+    tools:
+      - name: search_industry_data
+        description: 搜索行业数据
+      - name: analyze_company
+        description: 分析公司
+      - name: generate_report
+        description: 生成报告
+
+# 本地函数定义
+local_functions:
+  - name: calculate_roi
+    description: 计算投资回报率
+    parameters:
+      - name: investment
+        type: float
+        description: 投资金额
+      - name: return_rate
+        type: float
+        description: 年化收益率(%)
+      - name: years
+        type: int
+        description: 投资年限
+
+  - name: format_currency
+    description: 格式化货币
+    parameters:
+      - name: amount
+        type: float
+        description: 金额
+      - name: currency
+        type: string
+        description: 货币类型 (CNY/USD/EUR)
+
+  - name: calculate_risk
+    description: 计算风险指标
+    parameters:
+      - name: volatility
+        type: float
+        description: 波动率
+      - name: confidence
+        type: float
+        description: 置信度
+
+# 默认工具配置
+defaults:
+  # 默认使用 MCP
+  default_source: mcp
+
+  # MCP 服务器优先级
+  mcp_priority:
+    - filesystem
+    - MiniMax
+    - fetch
+    - sequential-thinking
+
+  # 缓存配置
+  cache:
+    enabled: true
+    ttl: 300  # 5分钟
+
+  # 工具调用配置
+  tool_call:
+    max_retries: 3
+    timeout: 30000  # 30秒
