@@ -1,0 +1,10 @@
+[defaults]
+db_path = "/Volumes/Luis_MacData/AgentSystem/私有数据/降费让利原始数据.db"
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+
+[rules]
+require_table2 = true
+require_table3 = true
+min_rows_table2 = 1
+min_rows_table3 = 1
+

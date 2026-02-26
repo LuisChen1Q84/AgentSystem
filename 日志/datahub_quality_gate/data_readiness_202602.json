@@ -1,0 +1,11 @@
+{
+  "as_of": "2026-02-10",
+  "target_month": "202602",
+  "ready": 0,
+  "table2_rows": 0,
+  "table3_rows": 0,
+  "required": {
+    "table2": 1,
+    "table3": 1
+  }
+}

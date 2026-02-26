@@ -1,0 +1,15 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+out_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+
+[policy]
+warns_high = 5
+warns_medium = 3
+error_any = 1
+drop_ratio_critical = -0.8
+
+[owners]
+data = "数据治理"
+pipeline = "报表流水线"
+business = "业务分析"
+

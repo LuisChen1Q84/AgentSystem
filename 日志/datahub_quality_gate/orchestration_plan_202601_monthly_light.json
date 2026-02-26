@@ -1,0 +1,82 @@
+{
+  "profile": "monthly_light",
+  "description": "轻量月度：仅表5/表6与告警解释，不跑发布",
+  "as_of": "2026-01-25",
+  "target_month": "202601",
+  "dry_run": true,
+  "steps": [
+    {
+      "step": "table5_generate",
+      "cmd": [
+        "make",
+        "-C",
+        "/Volumes/Luis_MacData/AgentSystem",
+        "table5-new-generate",
+        "target=202601",
+        "template=/Users/luis/Desktop/维护表/新表5.xlsx",
+        "out=/Volumes/Luis_MacData/AgentSystem/产出/新表5_2026年1月_自动生成.xlsx",
+        "reference=/Users/luis/Desktop/维护表/新表5.xlsx"
+      ]
+    },
+    {
+      "step": "table6_generate",
+      "cmd": [
+        "make",
+        "-C",
+        "/Volumes/Luis_MacData/AgentSystem",
+        "table6-generate",
+        "target=202601",
+        "template=/Users/luis/Desktop/维护表/表6.xlsx",
+        "out=/Volumes/Luis_MacData/AgentSystem/产出/表6_2026年1月_自动生成.xlsx",
+        "reference=/Users/luis/Desktop/维护表/表6.xlsx"
+      ]
+    },
+    {
+      "step": "anomaly",
+      "cmd": [
+        "make",
+        "-C",
+        "/Volumes/Luis_MacData/AgentSystem",
+        "report-anomaly",
+        "target=202601",
+        "out=/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_202601.json"
+      ]
+    },
+    {
+      "step": "explain",
+      "cmd": [
+        "make",
+        "-C",
+        "/Volumes/Luis_MacData/AgentSystem",
+        "report-explain",
+        "target=202601",
+        "out_json=/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202601.json",
+        "out_md=/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202601.md"
+      ]
+    },
+    {
+      "step": "dashboard",
+      "cmd": [
+        "make",
+        "-C",
+        "/Volumes/Luis_MacData/AgentSystem",
+        "report-dashboard",
+        "explain=/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202601.json",
+        "anomaly=/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_202601.json",
+        "out=/Volumes/Luis_MacData/AgentSystem/产出/智能看板_202601.html"
+      ]
+    },
+    {
+      "step": "digest",
+      "cmd": [
+        "make",
+        "-C",
+        "/Volumes/Luis_MacData/AgentSystem",
+        "report-digest",
+        "explain=/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202601.json",
+        "anomaly=/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_202601.json",
+        "out=/Volumes/Luis_MacData/AgentSystem/产出/日报摘要_202601.md"
+      ]
+    }
+  ]
+}

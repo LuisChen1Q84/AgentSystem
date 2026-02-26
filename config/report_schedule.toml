@@ -1,0 +1,91 @@
+[defaults]
+orchestrator_config = "/Volumes/Luis_MacData/AgentSystem/config/report_orchestration.toml"
+lock_file = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_schedule.lock"
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+stale_lock_seconds = 21600
+max_attempts = 3
+backoff_seconds = 20
+backoff_multiplier = 2.0
+
+[calendar]
+default_profile = "monthly_light"
+full_profile = "monthly_full"
+full_run_day = 25
+allow_after_day = true
+quarter_months = [1, 4, 7, 10]
+
+[watch]
+enabled = true
+watch_config = "/Volumes/Luis_MacData/AgentSystem/config/report_watch.toml"
+auto_task_on_run = true
+fail_on_watchdog_error = false
+
+[governance]
+enabled = true
+governance_config = "/Volumes/Luis_MacData/AgentSystem/config/report_governance.toml"
+fail_on_governance_error = false
+
+[control_tower]
+enabled = true
+fail_on_control_tower_error = false
+
+[remediation]
+enabled = true
+remediation_config = "/Volumes/Luis_MacData/AgentSystem/config/report_remediation.toml"
+fail_on_remediation_error = false
+
+[remediation_runner]
+enabled = true
+runner_config = "/Volumes/Luis_MacData/AgentSystem/config/report_remediation_runner.toml"
+run_on_schedule = false
+auto_close_on_run = true
+fail_on_runner_error = false
+
+[learning]
+enabled = true
+learning_config = "/Volumes/Luis_MacData/AgentSystem/config/report_learning.toml"
+fail_on_learning_error = false
+
+[escalation]
+enabled = true
+escalation_config = "/Volumes/Luis_MacData/AgentSystem/config/report_escalation.toml"
+auto_task_on_run = true
+fail_on_escalation_error = false
+
+[release_gate]
+enabled = true
+gate_config = "/Volumes/Luis_MacData/AgentSystem/config/report_release_gate.toml"
+fail_on_hold = false
+
+[registry]
+enabled = true
+registry_config = "/Volumes/Luis_MacData/AgentSystem/config/report_registry.toml"
+fail_on_registry_error = false
+
+[task_reconcile]
+enabled = true
+reconcile_config = "/Volumes/Luis_MacData/AgentSystem/config/report_task_reconcile.toml"
+run_on_schedule = false
+fail_on_reconcile_error = false
+
+[ops_brief]
+enabled = true
+ops_config = "/Volumes/Luis_MacData/AgentSystem/config/report_ops.toml"
+fail_on_ops_error = false
+
+[sla]
+enabled = true
+sla_config = "/Volumes/Luis_MacData/AgentSystem/config/report_sla.toml"
+auto_task_on_run = true
+fail_on_sla_error = false
+
+[action_center]
+enabled = true
+action_config = "/Volumes/Luis_MacData/AgentSystem/config/report_action_center.toml"
+fail_on_action_error = false
+
+[data_readiness]
+enabled = true
+readiness_config = "/Volumes/Luis_MacData/AgentSystem/config/report_data_readiness.toml"
+fail_on_not_ready = false
+skip_pipeline_when_not_ready = true

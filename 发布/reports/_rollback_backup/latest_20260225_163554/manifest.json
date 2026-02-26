@@ -1,0 +1,68 @@
+{
+  "target_month": "202601",
+  "target_label": "2026年1月",
+  "as_of": "2026-01-25",
+  "created_at": "2026-02-25T16:33:31",
+  "git_head": "ac89c64d33d3833d8e97a0dae4b17cfeee572b11",
+  "files": [
+    {
+      "key": "table5_monthly",
+      "name": "新表5_2026年1月_自动生成.xlsx",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/新表5_2026年1月_自动生成.xlsx",
+      "size": 19140,
+      "sha256": "7c676bbd3e9ceccd75c5ab4437062c962061050517f41779d3e36292d3ed29d6"
+    },
+    {
+      "key": "table6_monthly",
+      "name": "表6_2026年1月_自动生成.xlsx",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/表6_2026年1月_自动生成.xlsx",
+      "size": 10723,
+      "sha256": "abb7e74fa1d523c62408b00ff627f92d772f086930e997fd2701545fc53406af"
+    },
+    {
+      "key": "dashboard_html",
+      "name": "智能看板_202601.html",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/智能看板_202601.html",
+      "size": 5352,
+      "sha256": "aa7d16a252676bbbede64f40bde02f0304ff9172fcea8cb8a72f4b8613513427"
+    },
+    {
+      "key": "digest_md",
+      "name": "日报摘要_202601.md",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/日报摘要_202601.md",
+      "size": 1137,
+      "sha256": "349cd28f2edfe4c3f357e955919653b1d9ced2802ec69d977265000b85b99a16"
+    },
+    {
+      "key": "anomaly_json",
+      "name": "anomaly_guard_202601.json",
+      "source": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_202601.json",
+      "size": 181,
+      "sha256": "2976bf0fd5fc95bd463c3247d337fdad049b513a765dd2c2354c421e7b027188"
+    },
+    {
+      "key": "explain_json",
+      "name": "change_explain_202601.json",
+      "source": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202601.json",
+      "size": 5642,
+      "sha256": "12421c36d2667db3b449dbe2956f43897bd9de9e696563dc348db3d47d7c0b7a"
+    },
+    {
+      "key": "explain_md",
+      "name": "change_explain_202601.md",
+      "source": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202601.md",
+      "size": 2217,
+      "sha256": "d4d699f7f8a14c27331fb567268f18c7b4747d0cfa14892e5058171d479c50a5"
+    },
+    {
+      "key": "table4_quarterly",
+      "name": "表4_2025Q4_季度数据表.xlsx",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/表4_2025Q4_季度数据表.xlsx",
+      "size": 10953,
+      "sha256": "4e568eb64944bb1d4f73d9d9eb6114b6be298de4da4a0beae0bf6b88b6d9994c"
+    }
+  ],
+  "counts": {
+    "files": 8
+  }
+}

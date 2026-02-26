@@ -1,0 +1,52 @@
+[global]
+numeric_tolerance = 0.000001
+
+[table5]
+formula_tolerance = 0.000000001
+carry_cols = ["I", "J", "K", "O", "P", "Q", "U", "V", "Z", "AA", "AE", "AF", "AG"]
+province_rows_start = 3
+province_rows_end = 33
+national_row = 34
+special_row = 39
+
+[table6]
+formula_tolerance = 0.000000001
+rows_start = 2
+rows_end = 37
+
+[table6.region_alias]
+"福建省(不含厦门)" = ["福建省"]
+"广东省（不含深圳）" = ["广东省"]
+"辽宁省(不含大连)" = ["辽宁省"]
+"山东省(不含青岛)" = ["山东省"]
+"浙江省(不含宁波)" = ["浙江省"]
+"深圳（含其他）" = ["深圳市", "其他"]
+
+[table4]
+compare_tolerance = 0.0001
+key_cells = [
+  "B36", "C36", "D36", "E36", "H36", "I36", "J36", "K36",
+  "B38", "C38", "D38", "H38", "I38", "J38",
+  "B43", "C43", "D43", "E43", "H43", "I43", "J43", "K43",
+  "B44", "C44", "D44", "H44", "I44", "J44"
+]
+
+[regression]
+default_cells = []
+default_tolerance = 0.000001
+
+[anomaly]
+default_mom_threshold = 0.3
+
+[anomaly.table5]
+row = 34
+checks = ["C", "H", "N", "T", "Y", "AD"]
+mom_threshold = 0.2
+required = ["B", "C", "D", "H", "N", "T", "Y", "AD"]
+
+[anomaly.table6]
+rows_start = 2
+rows_end = 37
+checks = ["E", "J", "N", "Q"]
+mom_threshold = 0.35
+required = ["C", "D", "F", "H", "I", "L", "M", "O", "P"]

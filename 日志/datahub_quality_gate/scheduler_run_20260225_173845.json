@@ -1,0 +1,190 @@
+{
+  "as_of": "2026-01-25",
+  "profile": "monthly_full",
+  "target_month": "202601",
+  "dry_run": 0,
+  "ok": 0,
+  "lock_file": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_schedule.lock",
+  "lock_ts": 1772012220,
+  "cmd": [
+    "python3",
+    "/Volumes/Luis_MacData/AgentSystem/scripts/report_orchestrator.py",
+    "--config",
+    "/Volumes/Luis_MacData/AgentSystem/config/report_orchestration.toml",
+    "--profile",
+    "monthly_full",
+    "--as-of",
+    "2026-01-25",
+    "--run"
+  ],
+  "retry": {
+    "max_attempts": 3,
+    "backoff_seconds": 20,
+    "backoff_multiplier": 2.0
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "returncode": 2,
+      "started_at": "2026-02-25T17:37:00",
+      "ended_at": "2026-02-25T17:37:18",
+      "duration_sec": 17.909
+    },
+    {
+      "attempt": 2,
+      "returncode": 2,
+      "started_at": "2026-02-25T17:37:38",
+      "ended_at": "2026-02-25T17:37:45",
+      "duration_sec": 7.665
+    },
+    {
+      "attempt": 3,
+      "returncode": 2,
+      "started_at": "2026-02-25T17:38:25",
+      "ended_at": "2026-02-25T17:38:45",
+      "duration_sec": 19.472
+    }
+  ],
+  "watchdog": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_watchdog.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_watch.toml",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601",
+      "--auto-task"
+    ],
+    "fail_on_error": false
+  },
+  "governance": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_governance_score.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_governance.toml",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601"
+    ],
+    "fail_on_error": false
+  },
+  "control_tower": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_control_tower.py",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601"
+    ],
+    "fail_on_error": false
+  },
+  "remediation": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_remediation_plan.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_remediation.toml",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601"
+    ],
+    "fail_on_error": false
+  },
+  "remediation_runner": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_remediation_runner.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_remediation_runner.toml",
+      "--target-month",
+      "202601"
+    ],
+    "fail_on_error": false
+  },
+  "learning": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_learning_card.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_learning.toml",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601"
+    ],
+    "fail_on_error": false
+  },
+  "escalation": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_escalation_guard.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_escalation.toml",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601",
+      "--auto-task"
+    ],
+    "fail_on_error": false
+  },
+  "release_gate": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_release_gate.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_release_gate.toml",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601"
+    ],
+    "fail_on_hold": false
+  },
+  "registry": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_registry_update.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_registry.toml",
+      "--as-of",
+      "2026-01-25",
+      "--target-month",
+      "202601"
+    ],
+    "fail_on_error": false
+  }
+}

@@ -1,0 +1,18 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+history_jsonl = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/governance_history.jsonl"
+
+[weights]
+scheduler_fail = 40
+retry_extra_attempt = 5
+anomaly_error = 15
+anomaly_warn = 3
+watchdog_finding_base = 10
+watchdog_finding_step = 2
+watchdog_finding_cap = 25
+
+[grades]
+a_min = 90
+b_min = 75
+c_min = 60
+

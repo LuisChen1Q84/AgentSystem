@@ -1,0 +1,22 @@
+[publish]
+root_dir = "/Volumes/Luis_MacData/AgentSystem/发布/reports"
+archive_root = "/Volumes/Luis_MacData/AgentSystem/任务归档/reports"
+
+[publish.outputs]
+manifest_name = "manifest.json"
+package_suffix = "_report_package.zip"
+
+[[subscriptions]]
+id = "ops"
+name = "运营值班"
+focus = ["anomaly", "package", "manifest"]
+
+[[subscriptions]]
+id = "management"
+name = "管理层"
+focus = ["digest", "dashboard", "package"]
+
+[[subscriptions]]
+id = "analysis"
+name = "分析团队"
+focus = ["explain", "dashboard", "manifest", "package"]

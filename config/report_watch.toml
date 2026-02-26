@@ -1,0 +1,11 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+task_events = "/Volumes/Luis_MacData/AgentSystem/任务系统/tasks.jsonl"
+task_md = "/Volumes/Luis_MacData/AgentSystem/任务系统/任务清单.md"
+release_root = "/Volumes/Luis_MacData/AgentSystem/发布/reports"
+
+[rules]
+warn_task_threshold = 3
+error_task_threshold = 1
+missing_release_days = 3
+

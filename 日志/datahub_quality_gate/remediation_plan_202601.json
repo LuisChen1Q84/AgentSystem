@@ -1,0 +1,14 @@
+{
+  "as_of": "2026-01-25",
+  "target_month": "202601",
+  "score": 100,
+  "grade": "A",
+  "anomaly_errors": 0,
+  "anomaly_warns": 0,
+  "actions": [],
+  "sources": {
+    "anomaly_json": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_202601.json",
+    "governance_json": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/governance_score_202601.json",
+    "explain_json": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202601.json"
+  }
+}

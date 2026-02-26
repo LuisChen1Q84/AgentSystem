@@ -1,0 +1,5 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+knowledge_md = "/Volumes/Luis_MacData/AgentSystem/记忆库/语义记忆/报表治理学习卡.md"
+history_jsonl = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/learning_history.jsonl"
+

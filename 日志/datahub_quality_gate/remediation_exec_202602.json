@@ -1,0 +1,16 @@
+{
+  "target_month": "202602",
+  "dry_run": 1,
+  "ok": 1,
+  "plan_json": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/remediation_plan_202602.json",
+  "selected_actions": 1,
+  "closed_task_ids": [],
+  "executions": [
+    {
+      "title": "数据未就绪，先完成表2/表3当月入库",
+      "level": "critical",
+      "command": "make -C /Volumes/Luis_MacData/AgentSystem table3-ingest xlsx='/Users/luis/Desktop/维护表/表3.xlsx'",
+      "status": "SKIP_NOT_ALLOWED"
+    }
+  ]
+}

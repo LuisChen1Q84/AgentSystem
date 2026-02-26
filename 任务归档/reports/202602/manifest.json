@@ -1,0 +1,61 @@
+{
+  "target_month": "202602",
+  "target_label": "2026年2月",
+  "as_of": "2026-02-10",
+  "created_at": "2026-02-25T17:29:36",
+  "git_head": "ac89c64d33d3833d8e97a0dae4b17cfeee572b11",
+  "files": [
+    {
+      "key": "table5_monthly",
+      "name": "新表5_2026年2月_自动生成.xlsx",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/新表5_2026年2月_自动生成.xlsx",
+      "size": 18303,
+      "sha256": "59acd53126143d5fa835a8679e5089ab764d6b0a7261234499322b5cf4d218ef"
+    },
+    {
+      "key": "table6_monthly",
+      "name": "表6_2026年2月_自动生成.xlsx",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/表6_2026年2月_自动生成.xlsx",
+      "size": 10083,
+      "sha256": "89b90dbe68363cc159fd2e4728e3439ffeb117c478d3987a8e413ecde96c8ad1"
+    },
+    {
+      "key": "dashboard_html",
+      "name": "智能看板_202602.html",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/智能看板_202602.html",
+      "size": 5991,
+      "sha256": "3c5c92263613cc3295af1e03c3c00ea71f2483e16079173b404029a0dff16e22"
+    },
+    {
+      "key": "digest_md",
+      "name": "日报摘要_202602.md",
+      "source": "/Volumes/Luis_MacData/AgentSystem/产出/日报摘要_202602.md",
+      "size": 1259,
+      "sha256": "843136294c2657554e9b10f8283212b244b97604dd6df05e28088cbbba8c87e0"
+    },
+    {
+      "key": "anomaly_json",
+      "name": "anomaly_guard_202602.json",
+      "source": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_202602.json",
+      "size": 1311,
+      "sha256": "927f2f73125a88fc6b726781c7efdd9c4ca779a20aa50a8f2f9523db941eafc9"
+    },
+    {
+      "key": "explain_json",
+      "name": "change_explain_202602.json",
+      "source": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202602.json",
+      "size": 2816,
+      "sha256": "7558876afe72795053797330a3460f7a87d28923a389e5e8d14af48e54ade96d"
+    },
+    {
+      "key": "explain_md",
+      "name": "change_explain_202602.md",
+      "source": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_202602.md",
+      "size": 1310,
+      "sha256": "0364616df967006f3070e4049aa80718e2fac3418dbf8e4d9aaefe0040d63768"
+    }
+  ],
+  "counts": {
+    "files": 7
+  }
+}

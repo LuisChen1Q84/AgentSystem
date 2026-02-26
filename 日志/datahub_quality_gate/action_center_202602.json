@@ -1,0 +1,20 @@
+{
+  "as_of": "2026-02-10",
+  "target_month": "202602",
+  "governance_score": 90,
+  "warns": 5,
+  "total_actions": 1,
+  "board": [
+    {
+      "rank_seed": 1,
+      "score": 120,
+      "lane": "P0",
+      "title": "数据未就绪，先完成表2/表3当月入库",
+      "owner": "数据治理",
+      "level": "critical",
+      "detail": "table2_rows=0, table3_rows=0",
+      "command": "make -C /Volumes/Luis_MacData/AgentSystem table3-ingest xlsx='/Users/luis/Desktop/维护表/表3.xlsx'",
+      "rank": 1
+    }
+  ]
+}

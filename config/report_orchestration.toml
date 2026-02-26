@@ -1,0 +1,28 @@
+[defaults]
+outdir = "/Volumes/Luis_MacData/AgentSystem/产出"
+template5 = "/Users/luis/Desktop/维护表/新表5.xlsx"
+source4 = "/Users/luis/Desktop/维护表/表4.xlsx"
+template6 = "/Users/luis/Desktop/维护表/表6.xlsx"
+reference5 = "/Users/luis/Desktop/维护表/新表5.xlsx"
+reference6 = "/Users/luis/Desktop/维护表/表6.xlsx"
+table3_xlsx = "/Users/luis/Desktop/维护表/表3.xlsx"
+
+[execution]
+default_profile = "monthly_full"
+stop_on_error = true
+
+[profiles.monthly_full]
+description = "标准月度全链路：月报+季报(按月触发)+告警+解释+看板+摘要+归档+发布"
+steps = ["report_auto_run"]
+
+[profiles.monthly_light]
+description = "轻量月度：仅表5/表6与告警解释，不跑发布"
+steps = ["table5_generate", "table6_generate", "anomaly", "explain", "dashboard", "digest"]
+
+[profiles.replay_month]
+description = "按目标月份重放全链路"
+steps = ["report_replay"]
+
+[profiles.rollback_release]
+description = "将 latest 回滚到目标月份发布版本"
+steps = ["report_rollback"]

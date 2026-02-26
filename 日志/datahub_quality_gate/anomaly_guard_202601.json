@@ -1,0 +1,11 @@
+{
+  "target_month": "202601",
+  "target_label": "2026年1月",
+  "prev_label": "2025年12月",
+  "summary": {
+    "total": 0,
+    "errors": 0,
+    "warns": 0
+  },
+  "findings": []
+}

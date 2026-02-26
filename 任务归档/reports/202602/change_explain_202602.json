@@ -1,0 +1,131 @@
+{
+  "target_month": "202602",
+  "target_label": "2026年2月",
+  "prev_label": "2026年1月",
+  "table5": {
+    "national_key_changes": [
+      {
+        "col": "C",
+        "current": 6087197.123366396,
+        "previous": 6087197.123366396,
+        "delta": 0.0,
+        "ratio": 0.0
+      },
+      {
+        "col": "H",
+        "current": 0.0,
+        "previous": 54517466.0,
+        "delta": -54517466.0,
+        "ratio": -1.0
+      },
+      {
+        "col": "N",
+        "current": 0.0,
+        "previous": 2980449.0,
+        "delta": -2980449.0,
+        "ratio": -1.0
+      },
+      {
+        "col": "T",
+        "current": 0.0,
+        "previous": 4020734.0,
+        "delta": -4020734.0,
+        "ratio": -1.0
+      },
+      {
+        "col": "Y",
+        "current": 0.0,
+        "previous": 47516283.0,
+        "delta": -47516283.0,
+        "ratio": -1.0
+      },
+      {
+        "col": "AD",
+        "current": 0.0,
+        "previous": 6996529.0,
+        "delta": -6996529.0,
+        "ratio": -1.0
+      }
+    ],
+    "province_c_top_delta": [
+      {
+        "row": 3,
+        "name": "安徽省",
+        "current": 2367.102607326556,
+        "previous": 2367.102607326556,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      },
+      {
+        "row": 4,
+        "name": "北京市",
+        "current": 116989.421044856,
+        "previous": 116989.421044856,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      },
+      {
+        "row": 5,
+        "name": "福建省",
+        "current": 3181.281660045284,
+        "previous": 3181.281660045284,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      },
+      {
+        "row": 6,
+        "name": "甘肃省",
+        "current": 526.8001371824682,
+        "previous": 526.8001371824682,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      },
+      {
+        "row": 7,
+        "name": "广东省",
+        "current": 15970.9478775803,
+        "previous": 15970.9478775803,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      },
+      {
+        "row": 8,
+        "name": "广西壮族自治区",
+        "current": 1863.152778003254,
+        "previous": 1863.152778003254,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      },
+      {
+        "row": 9,
+        "name": "贵州省",
+        "current": 2734.965037136675,
+        "previous": 2734.965037136675,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      },
+      {
+        "row": 10,
+        "name": "海南省",
+        "current": 3091.827660278223,
+        "previous": 3091.827660278223,
+        "delta": 0.0,
+        "ratio": 0.0,
+        "col": "C"
+      }
+    ],
+    "table2_driver": []
+  },
+  "table6": {
+    "top_e_delta": [],
+    "top_n_delta": [],
+    "table3_driver": []
+  }
+}

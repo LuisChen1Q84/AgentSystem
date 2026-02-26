@@ -1,0 +1,139 @@
+{
+  "as_of": "2026-02-10",
+  "profile": "monthly_light",
+  "target_month": "202602",
+  "dry_run": 1,
+  "ok": 1,
+  "lock_file": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_schedule.lock",
+  "lock_ts": 1772011245,
+  "cmd": [
+    "python3",
+    "/Volumes/Luis_MacData/AgentSystem/scripts/report_orchestrator.py",
+    "--config",
+    "/Volumes/Luis_MacData/AgentSystem/config/report_orchestration.toml",
+    "--profile",
+    "monthly_light",
+    "--as-of",
+    "2026-02-10"
+  ],
+  "retry": {
+    "max_attempts": 3,
+    "backoff_seconds": 20,
+    "backoff_multiplier": 2.0
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "returncode": 0,
+      "dry_run": true
+    }
+  ],
+  "watchdog": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_watchdog.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_watch.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_error": false
+  },
+  "governance": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_governance_score.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_governance.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_error": false
+  },
+  "control_tower": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_control_tower.py",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_error": false
+  },
+  "remediation": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_remediation_plan.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_remediation.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_error": false
+  },
+  "remediation_runner": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_remediation_runner.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_remediation_runner.toml",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_error": false
+  },
+  "learning": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_learning_card.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_learning.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_error": false
+  },
+  "escalation": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_escalation_guard.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_escalation.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_error": false
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "target_month": "202601",
+  "dry_run": 1,
+  "ok": 1,
+  "plan_json": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/remediation_plan_202601.json",
+  "selected_actions": 0,
+  "closed_task_ids": [],
+  "executions": []
+}

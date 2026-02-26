@@ -1,0 +1,229 @@
+{
+  "target_month": "202601",
+  "target_label": "2026年1月",
+  "prev_label": "2025年12月",
+  "table5": {
+    "national_key_changes": [
+      {
+        "col": "C",
+        "current": 6087197.123366396,
+        "previous": 5820137.990541538,
+        "delta": 267059.1328248577,
+        "ratio": 0.04588536101014489
+      },
+      {
+        "col": "H",
+        "current": 54517466.0,
+        "previous": 53537730.0,
+        "delta": 979736.0,
+        "ratio": 0.018299916712942444
+      },
+      {
+        "col": "N",
+        "current": 2980449.0,
+        "previous": 2942991.0,
+        "delta": 37458.0,
+        "ratio": 0.01272786766932009
+      },
+      {
+        "col": "T",
+        "current": 4020734.0,
+        "previous": 3965268.0,
+        "delta": 55466.0,
+        "ratio": 0.01398795743440292
+      },
+      {
+        "col": "Y",
+        "current": 47516283.0,
+        "previous": 46629471.0,
+        "delta": 886812.0,
+        "ratio": 0.019018272800049564
+      },
+      {
+        "col": "AD",
+        "current": 6996529.0,
+        "previous": 6904366.0,
+        "delta": 92163.0,
+        "ratio": 0.01334851020354367
+      }
+    ],
+    "province_c_top_delta": [
+      {
+        "row": 4,
+        "name": "北京市",
+        "current": 116989.421044856,
+        "previous": 113541.7340347608,
+        "delta": 3447.6870100952074,
+        "ratio": 0.030364931797146045,
+        "col": "C"
+      },
+      {
+        "row": 7,
+        "name": "广东省",
+        "current": 15970.9478775803,
+        "previous": 15740.70302640792,
+        "delta": 230.24485117237964,
+        "ratio": 0.014627355003528218,
+        "col": "C"
+      },
+      {
+        "row": 26,
+        "name": "上海市",
+        "current": 10244.75029354755,
+        "previous": 10103.02659837152,
+        "delta": 141.72369517602965,
+        "ratio": 0.014027845398216977,
+        "col": "C"
+      },
+      {
+        "row": 32,
+        "name": "浙江省",
+        "current": 9146.367357932077,
+        "previous": 9037.919260305043,
+        "delta": 108.44809762703335,
+        "ratio": 0.011999232843707996,
+        "col": "C"
+      },
+      {
+        "row": 17,
+        "name": "江苏省",
+        "current": 5222.37562903298,
+        "previous": 5156.066826425629,
+        "delta": 66.30880260735103,
+        "ratio": 0.012860345848798603,
+        "col": "C"
+      },
+      {
+        "row": 23,
+        "name": "山东省",
+        "current": 3919.58263210697,
+        "previous": 3860.438672402298,
+        "delta": 59.14395970467194,
+        "ratio": 0.015320528241384409,
+        "col": "C"
+      },
+      {
+        "row": 27,
+        "name": "四川省",
+        "current": 4801.806911608739,
+        "previous": 4744.091934401206,
+        "delta": 57.714977207532684,
+        "ratio": 0.012165653196772925,
+        "col": "C"
+      },
+      {
+        "row": 12,
+        "name": "河南省",
+        "current": 3391.704500206441,
+        "previous": 3335.558314409642,
+        "delta": 56.14618579679882,
+        "ratio": 0.01683262006070971,
+        "col": "C"
+      }
+    ],
+    "table2_driver": [
+      {
+        "merchant_type": "有交易行为的个人",
+        "benefit_wan": 262063.22602240066
+      },
+      {
+        "merchant_type": "小微企业",
+        "benefit_wan": 4504.812601056605
+      },
+      {
+        "merchant_type": "个体工商户",
+        "benefit_wan": 260.8674560801976
+      },
+      {
+        "merchant_type": "其他",
+        "benefit_wan": 230.22674532633798
+      }
+    ]
+  },
+  "table6": {
+    "top_e_delta": [],
+    "top_n_delta": [],
+    "table3_driver": [
+      {
+        "terminal_name": "小绿盒",
+        "metric": "terminal_bound_count",
+        "value": 5991.0
+      },
+      {
+        "terminal_name": "小绿盒",
+        "metric": "terminal_complete_5elem_count",
+        "value": 5952.0
+      },
+      {
+        "terminal_name": "小绿盒",
+        "metric": "terminal_new_month_count",
+        "value": 131.0
+      },
+      {
+        "terminal_name": "小绿盒",
+        "metric": "terminal_paused_count",
+        "value": 4860.0
+      },
+      {
+        "terminal_name": "青蛙商业版",
+        "metric": "terminal_bound_count",
+        "value": 959.0
+      },
+      {
+        "terminal_name": "青蛙商业版",
+        "metric": "terminal_complete_5elem_count",
+        "value": 959.0
+      },
+      {
+        "terminal_name": "青蛙商业版",
+        "metric": "terminal_new_month_count",
+        "value": 25.0
+      },
+      {
+        "terminal_name": "青蛙商业版",
+        "metric": "terminal_paused_count",
+        "value": 0.0
+      },
+      {
+        "terminal_name": "青蛙标准版",
+        "metric": "terminal_bound_count",
+        "value": 44043.0
+      },
+      {
+        "terminal_name": "青蛙标准版",
+        "metric": "terminal_complete_5elem_count",
+        "value": 44022.0
+      },
+      {
+        "terminal_name": "青蛙标准版",
+        "metric": "terminal_new_month_count",
+        "value": 4801.0
+      },
+      {
+        "terminal_name": "青蛙标准版",
+        "metric": "terminal_paused_count",
+        "value": 0.0
+      },
+      {
+        "terminal_name": "静态码牌",
+        "metric": "terminal_bound_count",
+        "value": 462433.0
+      },
+      {
+        "terminal_name": "静态码牌",
+        "metric": "terminal_complete_5elem_count",
+        "value": 462364.0
+      },
+      {
+        "terminal_name": "静态码牌",
+        "metric": "terminal_new_month_count",
+        "value": 0.0
+      },
+      {
+        "terminal_name": "静态码牌",
+        "metric": "terminal_paused_count",
+        "value": 0.0
+      }
+    ]
+  }
+}

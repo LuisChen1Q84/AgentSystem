@@ -1,0 +1,15 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+out_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+
+[weights]
+critical = 100
+high = 70
+medium = 40
+low = 20
+owner_pipeline = 15
+owner_data = 10
+owner_business = 5
+warn_bonus_threshold = 3
+warn_bonus = 10
+

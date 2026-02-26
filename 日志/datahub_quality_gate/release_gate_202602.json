@@ -1,0 +1,16 @@
+{
+  "as_of": "2026-02-10",
+  "target_month": "202602",
+  "decision": "HOLD",
+  "score": 90,
+  "data_ready": 0,
+  "warns": 5,
+  "errors": 0,
+  "remediation_ok": 1,
+  "remediation_dry_run": 1,
+  "selected_actions": 1,
+  "failed_exec_count": 0,
+  "reasons": [
+    "数据未就绪: table2_rows=0, table3_rows=0"
+  ]
+}

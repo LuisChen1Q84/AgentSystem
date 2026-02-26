@@ -1,0 +1,86 @@
+{
+  "as_of": "2026-02-10",
+  "profile": "monthly_light",
+  "target_month": "202602",
+  "dry_run": 1,
+  "ok": 1,
+  "lock_file": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_schedule.lock",
+  "lock_ts": 1772070136,
+  "cmd": [
+    "python3",
+    "/Volumes/Luis_MacData/AgentSystem/scripts/report_orchestrator.py",
+    "--config",
+    "/Volumes/Luis_MacData/AgentSystem/config/report_orchestration.toml",
+    "--profile",
+    "monthly_light",
+    "--as-of",
+    "2026-02-10"
+  ],
+  "retry": {
+    "max_attempts": 3,
+    "backoff_seconds": 20,
+    "backoff_multiplier": 2.0
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "returncode": 0,
+      "dry_run": true
+    }
+  ],
+  "data_readiness": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_data_readiness.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_data_readiness.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602"
+    ],
+    "fail_on_not_ready": false
+  },
+  "watchdog": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_watchdog.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_watch.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602",
+      "--scheduler-json",
+      "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/_scheduler_context_runtime.json",
+      "--readiness-json",
+      "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/data_readiness_202602.json"
+    ],
+    "fail_on_error": false
+  },
+  "release_gate": {
+    "enabled": true,
+    "ok": true,
+    "returncode": 0,
+    "cmd": [
+      "python3",
+      "/Volumes/Luis_MacData/AgentSystem/scripts/report_release_gate.py",
+      "--config",
+      "/Volumes/Luis_MacData/AgentSystem/config/report_release_gate.toml",
+      "--as-of",
+      "2026-02-10",
+      "--target-month",
+      "202602",
+      "--readiness-json",
+      "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/data_readiness_202602.json"
+    ],
+    "fail_on_hold": false
+  },
+  "skipped_due_to_data_not_ready": 1
+}

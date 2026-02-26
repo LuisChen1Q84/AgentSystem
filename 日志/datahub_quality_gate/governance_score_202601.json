@@ -1,0 +1,25 @@
+{
+  "as_of": "2026-01-25",
+  "target_month": "202601",
+  "score": 100,
+  "grade": "A",
+  "scheduler_ok": 1,
+  "scheduler_same_target": 1,
+  "retries": 0,
+  "anomaly_errors": 0,
+  "anomaly_warns": 0,
+  "watchdog_findings": 0,
+  "penalties": {
+    "scheduler_fail": 0,
+    "retry": 0,
+    "anomaly_error": 0,
+    "anomaly_warn": 0,
+    "watchdog": 0
+  },
+  "total_penalty": 0,
+  "sources": {
+    "scheduler_json": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/_scheduler_context_runtime.json",
+    "anomaly_json": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_202601.json",
+    "watchdog_md": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/watchdog_202601.md"
+  }
+}

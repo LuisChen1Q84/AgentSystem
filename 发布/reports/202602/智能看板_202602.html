@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>报表智能看板 - 2026年2月</title>
+  <style>
+    body { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; margin: 20px; color:#222; }
+    h1,h2 { margin: 8px 0; }
+    .meta { color:#666; margin-bottom:16px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    .card { border:1px solid #ddd; border-radius:10px; padding:12px; background:#fff; }
+    .kpi { display:flex; gap:12px; }
+    .pill { padding:6px 10px; border-radius:999px; font-weight:600; }
+    .ok { background:#e8f5e9; color:#1b5e20; }
+    .warn { background:#fff8e1; color:#8a6d00; }
+    .err { background:#ffebee; color:#b71c1c; }
+    .bar-row { display:grid; grid-template-columns: 150px 1fr 120px; gap:8px; align-items:center; margin:6px 0; }
+    .bar-track { height:10px; background:#f0f0f0; border-radius:999px; overflow:hidden; }
+    .bar { height:100%; }
+    .bar.pos { background:#2e7d32; }
+    .bar.neg { background:#c62828; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { border:1px solid #e5e5e5; padding:6px; text-align:left; }
+    th { background:#fafafa; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .bar-row { grid-template-columns: 120px 1fr 90px; } }
+  </style>
+</head>
+<body>
+  <h1>月度智能看板</h1>
+  <div class="meta">对比区间：2026年1月 → 2026年2月</div>
+  <div class="kpi">
+    <div class="pill ok">异常错误: 0</div>
+    <div class="pill warn">异常预警: 5</div>
+    <div class="pill">检查总数: 5</div>
+  </div>
+  <div class="grid" style="margin-top:12px;">
+    <div class="card">
+      <h2>表5全国关键变化</h2>
+      <table>
+        <thead><tr><th>列</th><th>上月</th><th>本月</th><th>变化</th><th>环比</th></tr></thead>
+        <tbody><tr><td>C</td><td>6,087,197.1234</td><td>6,087,197.1234</td><td>0.0000</td><td>0.00%</td></tr>
+<tr><td>H</td><td>54,517,466.0000</td><td>0.0000</td><td>-54,517,466.0000</td><td>-100.00%</td></tr>
+<tr><td>N</td><td>2,980,449.0000</td><td>0.0000</td><td>-2,980,449.0000</td><td>-100.00%</td></tr>
+<tr><td>T</td><td>4,020,734.0000</td><td>0.0000</td><td>-4,020,734.0000</td><td>-100.00%</td></tr>
+<tr><td>Y</td><td>47,516,283.0000</td><td>0.0000</td><td>-47,516,283.0000</td><td>-100.00%</td></tr>
+<tr><td>AD</td><td>6,996,529.0000</td><td>0.0000</td><td>-6,996,529.0000</td><td>-100.00%</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>表5省份变化Top（C列）</h2>
+      
+            <div class="bar-row">
+              <div class="bar-label">安徽省</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+
+            <div class="bar-row">
+              <div class="bar-label">北京市</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+
+            <div class="bar-row">
+              <div class="bar-label">福建省</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+
+            <div class="bar-row">
+              <div class="bar-label">甘肃省</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+
+            <div class="bar-row">
+              <div class="bar-label">广东省</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+
+            <div class="bar-row">
+              <div class="bar-label">广西壮族自治区</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+
+            <div class="bar-row">
+              <div class="bar-label">贵州省</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+
+            <div class="bar-row">
+              <div class="bar-label">海南省</div>
+              <div class="bar-track"><div class="bar pos" style="width:2%"></div></div>
+              <div class="bar-val">0.0000</div>
+            </div>
+            
+    </div>
+    <div class="card">
+      <h2>表6终端总数变化Top（E列）</h2>
+      <p>无数据</p>
+    </div>
+    <div class="card">
+      <h2>表6辅助终端变化Top（N列）</h2>
+      <p>无数据</p>
+    </div>
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>异常明细（Top 20）</h2>
+      <table>
+        <thead><tr><th>级别</th><th>模块</th><th>描述</th><th>位置</th><th>上月</th><th>本月</th><th>环比</th></tr></thead>
+        <tbody><tr><td>WARN</td><td>table5</td><td>环比波动超阈值: H34</td><td>34</td><td>54,517,466.0000</td><td>0.0000</td><td>-100.00%</td></tr>
+<tr><td>WARN</td><td>table5</td><td>环比波动超阈值: N34</td><td>34</td><td>2,980,449.0000</td><td>0.0000</td><td>-100.00%</td></tr>
+<tr><td>WARN</td><td>table5</td><td>环比波动超阈值: T34</td><td>34</td><td>4,020,734.0000</td><td>0.0000</td><td>-100.00%</td></tr>
+<tr><td>WARN</td><td>table5</td><td>环比波动超阈值: Y34</td><td>34</td><td>47,516,283.0000</td><td>0.0000</td><td>-100.00%</td></tr>
+<tr><td>WARN</td><td>table5</td><td>环比波动超阈值: AD34</td><td>34</td><td>6,996,529.0000</td><td>0.0000</td><td>-100.00%</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

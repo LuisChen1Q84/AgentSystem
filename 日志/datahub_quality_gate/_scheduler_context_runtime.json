@@ -1,0 +1,13 @@
+{
+  "as_of": "2026-02-10",
+  "profile": "monthly_light",
+  "target_month": "202602",
+  "ok": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "returncode": 0,
+      "dry_run": true
+    }
+  ]
+}

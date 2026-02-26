@@ -1,0 +1,11 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+
+[thresholds]
+min_score_allow = 85
+max_warns_allow = 2
+max_errors_allow = 0
+require_remediation_exec_ok = true
+require_no_failed_exec = true
+allow_if_dry_run_only = false
+

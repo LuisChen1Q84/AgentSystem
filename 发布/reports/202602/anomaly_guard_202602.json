@@ -1,0 +1,62 @@
+{
+  "target_month": "202602",
+  "target_label": "2026年2月",
+  "prev_label": "2026年1月",
+  "summary": {
+    "total": 5,
+    "errors": 0,
+    "warns": 5
+  },
+  "findings": [
+    {
+      "severity": "WARN",
+      "section": "table5",
+      "message": "环比波动超阈值: H34",
+      "row": 34,
+      "col": "H",
+      "current": 0.0,
+      "previous": 54517466.0,
+      "delta_ratio": -1.0
+    },
+    {
+      "severity": "WARN",
+      "section": "table5",
+      "message": "环比波动超阈值: N34",
+      "row": 34,
+      "col": "N",
+      "current": 0.0,
+      "previous": 2980449.0,
+      "delta_ratio": -1.0
+    },
+    {
+      "severity": "WARN",
+      "section": "table5",
+      "message": "环比波动超阈值: T34",
+      "row": 34,
+      "col": "T",
+      "current": 0.0,
+      "previous": 4020734.0,
+      "delta_ratio": -1.0
+    },
+    {
+      "severity": "WARN",
+      "section": "table5",
+      "message": "环比波动超阈值: Y34",
+      "row": 34,
+      "col": "Y",
+      "current": 0.0,
+      "previous": 47516283.0,
+      "delta_ratio": -1.0
+    },
+    {
+      "severity": "WARN",
+      "section": "table5",
+      "message": "环比波动超阈值: AD34",
+      "row": 34,
+      "col": "AD",
+      "current": 0.0,
+      "previous": 6996529.0,
+      "delta_ratio": -1.0
+    }
+  ]
+}

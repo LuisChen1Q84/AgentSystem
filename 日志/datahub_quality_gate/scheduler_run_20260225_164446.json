@@ -1,0 +1,34 @@
+{
+  "as_of": "2026-02-10",
+  "profile": "monthly_light",
+  "target_month": "",
+  "dry_run": 0,
+  "ok": 1,
+  "lock_file": "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_schedule.lock",
+  "lock_ts": 1772009081,
+  "cmd": [
+    "python3",
+    "/Volumes/Luis_MacData/AgentSystem/scripts/report_orchestrator.py",
+    "--config",
+    "/Volumes/Luis_MacData/AgentSystem/config/report_orchestration.toml",
+    "--profile",
+    "monthly_light",
+    "--as-of",
+    "2026-02-10",
+    "--run"
+  ],
+  "retry": {
+    "max_attempts": 3,
+    "backoff_seconds": 20,
+    "backoff_multiplier": 2.0
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "returncode": 0,
+      "started_at": "2026-02-25T16:44:41",
+      "ended_at": "2026-02-25T16:44:46",
+      "duration_sec": 4.888
+    }
+  ]
+}
