@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import sys
+import time
 import tomllib
 from pathlib import Path
 from typing import Dict, List
@@ -18,6 +19,7 @@ CFG_DEFAULT = ROOT / "config/report_orchestration.toml"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from core.runner import CommandRunner, RunnerConfig
+from core.telemetry import TelemetryClient
 
 
 def load_cfg(path: Path) -> Dict:
@@ -146,6 +148,7 @@ def main() -> None:
             ),
         )
     )
+    telemetry = TelemetryClient()
 
     plan = {
         "profile": profile,
@@ -172,11 +175,20 @@ def main() -> None:
     print(f"trace_id={trace_id}")
     print(f"run_id={run_id}")
     print(f"plan={plan_path}")
+    telemetry.emit(
+        module="report_orchestrator",
+        action="orchestrator_start",
+        status="ok",
+        trace_id=trace_id,
+        run_id=run_id,
+        meta={"profile": profile, "target_month": target, "dry_run": int(dry_run), "steps": steps},
+    )
 
     step_results: List[Dict[str, object]] = []
     for x in plan["steps"]:
         print("CMD:", " ".join(x["cmd"]))
         step = str(x["step"])
+        t0 = time.time()
         run_result = runner.run(
             x["cmd"],
             dry_run=dry_run,
@@ -194,6 +206,19 @@ def main() -> None:
                 "attempts": run_result.get("attempts", []),
             }
         )
+        latency_ms = int((time.time() - t0) * 1000)
+        ok_step = bool(run_result.get("ok", False))
+        telemetry.emit(
+            module="report_orchestrator",
+            action=f"step:{step}",
+            status="ok" if ok_step else "failed",
+            trace_id=trace_id,
+            run_id=run_id,
+            latency_ms=latency_ms,
+            error_code="" if ok_step else "STEP_FAILED",
+            error_message="" if ok_step else f"step={step} failed",
+            meta={"step": step, "skipped": bool(run_result.get("skipped", False)), "attempts": run_result.get("attempts", [])},
+        )
 
     run_report = {
         "profile": profile,
@@ -208,6 +233,17 @@ def main() -> None:
     run_path = ROOT / "日志/datahub_quality_gate" / f"orchestration_run_{target}_{profile}.json"
     run_path.write_text(json.dumps(run_report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"run_report={run_path}")
+    all_ok = all(bool(x.get("ok", False)) for x in step_results)
+    telemetry.emit(
+        module="report_orchestrator",
+        action="orchestrator_finish",
+        status="ok" if all_ok else "failed",
+        trace_id=trace_id,
+        run_id=run_id,
+        error_code="" if all_ok else "ORCHESTRATION_FAILED",
+        error_message="" if all_ok else "one or more steps failed",
+        meta={"run_report": str(run_path), "target_month": target, "profile": profile},
+    )
 
     print("orchestration=done")
 

@@ -21,9 +21,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from core.errors import LockError
 from core.task_model import create_run_context
+from core.telemetry import TelemetryClient
 
 
 RUN_META: Dict[str, str] = {"trace_id": "", "run_id": ""}
+TELEMETRY: TelemetryClient | None = None
 
 
 def set_run_meta(trace_id: str, run_id: str) -> None:
@@ -38,6 +40,30 @@ def run_cmd(cmd: List[str]) -> subprocess.CompletedProcess[Any]:
     if RUN_META.get("run_id"):
         env["AGENT_RUN_ID"] = RUN_META["run_id"]
     return subprocess.run(cmd, env=env)
+
+
+def emit_telemetry(
+    *,
+    action: str,
+    status: str,
+    latency_ms: int = 0,
+    error_code: str = "",
+    error_message: str = "",
+    meta: Dict[str, Any] | None = None,
+) -> None:
+    if TELEMETRY is None:
+        return
+    TELEMETRY.emit(
+        module="report_scheduler",
+        action=action,
+        status=status,
+        trace_id=RUN_META.get("trace_id", ""),
+        run_id=RUN_META.get("run_id", ""),
+        latency_ms=latency_ms,
+        error_code=error_code,
+        error_message=error_message,
+        meta=meta or {},
+    )
 
 
 def load_cfg(path: Path) -> Dict[str, Any]:
@@ -113,6 +139,14 @@ def run_with_retry(
             "run_id": RUN_META.get("run_id", ""),
         }
         attempts.append(info)
+        emit_telemetry(
+            action="orchestrator_attempt",
+            status="ok" if p.returncode == 0 else "failed",
+            latency_ms=int((end - start) * 1000),
+            error_code="" if p.returncode == 0 else "ORCHESTRATOR_NONZERO",
+            error_message="" if p.returncode == 0 else f"returncode={p.returncode}",
+            meta={"attempt": i, "cmd": cmd},
+        )
         if p.returncode == 0:
             return {"ok": True, "attempts": attempts}
         if i < max_attempts:
@@ -610,6 +644,7 @@ def run_action_center(
 
 
 def main() -> None:
+    global TELEMETRY
     parser = argparse.ArgumentParser(description="Report scheduler with retry and lock")
     parser.add_argument("--config", default=str(CFG_DEFAULT))
     parser.add_argument("--as-of", default="", help="YYYY-MM-DD")
@@ -637,10 +672,23 @@ def main() -> None:
         run_id=args.run_id,
     )
     set_run_meta(run_ctx.trace_id, run_ctx.run_id)
+    TELEMETRY = TelemetryClient()
+    emit_telemetry(
+        action="scheduler_start",
+        status="ok",
+        meta={"as_of": run_ctx.as_of, "profile": run_ctx.profile, "target_month": run_ctx.target_month, "dry_run": int(run_ctx.dry_run)},
+    )
 
     try:
         lock_ts = acquire_lock(lock_file, int(d.get("stale_lock_seconds", 21600)))
     except LockError as e:
+        emit_telemetry(
+            action="acquire_lock",
+            status="failed",
+            error_code=e.code,
+            error_message=e.message,
+            meta=e.details,
+        )
         print(f"as_of={asof.isoformat()}")
         print(f"trace_id={run_ctx.trace_id}")
         print(f"run_id={run_ctx.run_id}")
@@ -741,6 +789,11 @@ def main() -> None:
             print(f"ok={int(ok)}")
             print("status=WAITING_DATA")
             print(f"report={out}")
+            emit_telemetry(
+                action="scheduler_finish",
+                status="ok",
+                meta={"status": "WAITING_DATA", "report": str(out), "target_month": target},
+            )
             return
 
         gov_result = run_governance(
@@ -822,6 +875,13 @@ def main() -> None:
     print(f"dry_run={int(not args.run)}")
     print(f"ok={int(ok)}")
     print(f"report={out}")
+    emit_telemetry(
+        action="scheduler_finish",
+        status="ok" if ok else "failed",
+        error_code="" if ok else "SCHEDULER_FAILED",
+        error_message="" if ok else "scheduler final status not ok",
+        meta={"report": str(out), "target_month": target, "profile": profile},
+    )
     if not ok:
         raise SystemExit(1)
 
