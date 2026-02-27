@@ -1,0 +1,26 @@
+[environment]
+name = "staging"
+mode = "canary"
+description = "预发布验证环境，执行切流前全量门禁与双轨对账。"
+
+[runtime]
+dry_run_default = true
+max_attempts = 2
+timeout_seconds = 90
+enable_idempotency = true
+
+[rollout]
+canary_percent_default = 20
+auto_rollback_on_guard_fail = true
+
+[policy]
+strict_mode = true
+require_approval_for_publish = true
+enable_shadow_compare = true
+
+[observability]
+log_level = "info"
+emit_trace = true
+emit_metrics = true
+write_baseline_report = true
+

@@ -1,0 +1,26 @@
+[environment]
+name = "prod"
+mode = "stable"
+description = "生产环境，默认稳定优先，所有高风险动作要求审批与审计。"
+
+[runtime]
+dry_run_default = false
+max_attempts = 3
+timeout_seconds = 120
+enable_idempotency = true
+
+[rollout]
+canary_percent_default = 10
+auto_rollback_on_guard_fail = true
+
+[policy]
+strict_mode = true
+require_approval_for_publish = true
+enable_shadow_compare = true
+
+[observability]
+log_level = "info"
+emit_trace = true
+emit_metrics = true
+write_baseline_report = true
+

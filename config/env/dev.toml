@@ -1,0 +1,21 @@
+[environment]
+name = "dev"
+mode = "shadow"
+description = "本地开发环境，优先快速验证与可观测。"
+
+[runtime]
+dry_run_default = true
+max_attempts = 1
+timeout_seconds = 60
+enable_idempotency = true
+
+[policy]
+strict_mode = false
+require_approval_for_publish = false
+enable_shadow_compare = true
+
+[observability]
+log_level = "debug"
+emit_trace = true
+emit_metrics = true
+
