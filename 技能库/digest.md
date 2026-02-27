@@ -10,12 +10,6 @@ triggers:
   - 定时任务
   - 新闻
   - 资讯
-  - 加密货币
-  - crypto
-  - 币圈
-  - twitter
-  - 推特
-  - X
 
 parameters:
   - name: action
@@ -40,8 +34,6 @@ parameters:
       - hackernews: HackerNews
       - reddit: Reddit
       - github: GitHub
-      - twitter: Twitter/X 用户推文
-      - opennews: 加密货币新闻
 
   - name: query
     type: string
@@ -132,8 +124,6 @@ subaction: status
 | hackernews | 技术新闻 | Top, New, Best |
 | reddit | 社区讨论 | r/MachineLearning |
 | github | 开源动态 | Trending 仓库 |
-| twitter | Twitter/X 采集 | 用户推文、关键词搜索 |
-| opennews | 加密货币新闻 | AI 评分、信号筛选 |
 
 ## CLI 命令
 
@@ -147,20 +137,11 @@ python3 scripts/digest/main.py collect rss --url "https://example.com/feed.xml"
 # 搜索
 python3 scripts/digest/main.py collect web_search --query "AI news"
 
-# Twitter 用户推文采集
-python3 scripts/digest/main.py collect twitter --user elonmusk --limit 10
+# 采集 Reddit
+python3 scripts/digest/main.py collect reddit --subreddit Technology
 
-# Twitter 关键词搜索
-python3 scripts/digest/main.py collect twitter --search "AI" --limit 10
-
-# 加密货币新闻 - BTC
-python3 scripts/digest/main.py collect opennews --coins BTC --limit 10
-
-# 加密货币新闻 - 高评分
-python3 scripts/digest/main.py collect opennews --min-score 80 --limit 10
-
-# 加密货币新闻 - 按信号
-python3 scripts/digest/main.py collect opennews --signal long --limit 10
+# 采集 GitHub Trending
+python3 scripts/digest/main.py collect github --language python
 
 # 生成日度摘要
 python3 scripts/digest/main.py digest generate --type daily
@@ -170,16 +151,4 @@ python3 scripts/digest/main.py digest show --type daily
 
 # 定时任务状态
 python3 scripts/digest/main.py scheduler status
-```
-
-## API 配置
-
-使用 Twitter 和 OpenNews 功能需要配置环境变量：
-
-```bash
-# Twitter MCP
-export OPENTWITTER_TOKEN="your-token-from-6551.io"
-
-# OpenNews MCP
-export OPENNEWS_TOKEN="your-token-from-6551.io"
 ```

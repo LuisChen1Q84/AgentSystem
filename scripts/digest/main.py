@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from digest import db
-from digest.collectors import web_search, rss, hackernews, reddit, github, twitter, opennews
+from digest.collectors import web_search, rss, hackernews, reddit, github
 from digest import generator
 from digest import scheduler
 
@@ -59,33 +59,6 @@ def cmd_collect(args):
         items = github.fetch_trending(language=args.language, since="daily")
         print(f"获取到 {len(items)} 条内容")
 
-    elif source_type == "twitter":
-        # Twitter 采集
-        if args.user:
-            print(f"获取 Twitter 用户 @{args.user} 的推文")
-            items = twitter.fetch_user_tweets(args.user, args.limit)
-        elif args.search:
-            print(f"搜索 Twitter: {args.search}")
-            items = twitter.search_tweets(args.search, args.limit)
-        else:
-            print("请指定 --user 或 --search 参数")
-            items = []
-        print(f"获取到 {len(items)} 条内容")
-
-    elif source_type == "opennews":
-        # OpenNews 采集
-        coins = args.coins.split(",") if args.coins else None
-        print(f"获取加密货币新闻: coins={coins}, keyword={args.keyword}")
-        items = opennews.fetch_crypto_news(
-            coins=coins,
-            keyword=args.keyword,
-            min_score=args.min_score or 70,
-            signal=args.signal,
-            news_type=args.news_type,
-            limit=args.limit
-        )
-        print(f"获取到 {len(items)} 条内容")
-
     else:
         print(f"未知来源: {source_type}")
         return
@@ -98,7 +71,6 @@ def cmd_collect(args):
             source_id = db.add_source(f"temp_{source_type}", source_type, {"query": args.query})
 
         for item in items:
-            metadata = item.get("metadata", {})
             db.add_raw_item(
                 source_id,
                 item.get("title", ""),
@@ -106,10 +78,7 @@ def cmd_collect(args):
                 item.get("content", ""),
                 item.get("author", ""),
                 item.get("published"),
-                metadata,
-                score=metadata.get("ai_score"),
-                signal=metadata.get("signal"),
-                coin_symbol=",".join(metadata.get("coins", [])) if metadata.get("coins") else None
+                item.get("metadata")
             )
 
         print(f"已保存 {len(items)} 条到数据库")
@@ -208,7 +177,7 @@ def main():
 
     # collect 命令
     p_collect = subparsers.add_parser("collect", help="采集信息")
-    p_collect.add_argument("source", help="来源类型 (web_search, rss, hackernews, reddit, github, twitter, opennews)")
+    p_collect.add_argument("source", help="来源类型 (web_search, rss, hackernews, reddit, github)")
     p_collect.add_argument("--query", "-q", help="搜索关键词")
     p_collect.add_argument("--url", "-u", help="RSS URL")
     p_collect.add_argument("--subreddit", help="Reddit 子版块")
@@ -216,16 +185,6 @@ def main():
     p_collect.add_argument("--sort", help="排序方式")
     p_collect.add_argument("--limit", "-n", type=int, default=10, help="数量限制")
     p_collect.add_argument("--save", action="store_true", help="保存到数据库")
-
-    # Twitter 参数
-    p_collect.add_argument("--user", "-u", help="Twitter 用户名")
-    p_collect.add_argument("--search", "-s", help="Twitter 搜索关键词")
-
-    # OpenNews 参数
-    p_collect.add_argument("--coins", "-c", help="加密货币币种 (逗号分隔, 如 BTC,ETH)")
-    p_collect.add_argument("--min-score", type=int, help="最低 AI 评分 (0-100)")
-    p_collect.add_argument("--signal", help="交易信号 (long, short, neutral)")
-    p_collect.add_argument("--news-type", help="新闻来源 (Bloomberg, CoinDesk, etc.)")
 
     # source 命令
     p_source = subparsers.add_parser("source", help="信息源管理")
