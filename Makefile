@@ -553,6 +553,23 @@ skills-optimize:
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/skills_optimizer.py $$EXTRA"
 
+config-governance:
+	@CFG="$(or $(config),$(ROOT)/config/config_governance.toml)"; \
+	EXTRA=" --config '$$CFG'"; \
+	if [ "$(auto)" = "1" ]; then EXTRA="$$EXTRA --auto-task"; fi; \
+	if [ "$(close)" = "1" ]; then EXTRA="$$EXTRA --auto-close-tasks"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/config_governance.py $$EXTRA"
+
+system-health-dashboard:
+	@CFG="$(or $(config),$(ROOT)/config/system_health_dashboard.toml)"; \
+	EXTRA=" --config '$$CFG'"; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	if [ -n "$(out_html)" ]; then EXTRA="$$EXTRA --out-html '$(out_html)'"; fi; \
+	eval "python3 $(ROOT)/scripts/system_health_dashboard.py $$EXTRA"
+
 report-learning:
 	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi
 	@CFG="$(or $(config),$(ROOT)/config/report_learning.toml)"; \

@@ -1,0 +1,5 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+skills_dir = "/Volumes/Luis_MacData/AgentSystem/日志/skills"
+security_dir = "/Volumes/Luis_MacData/AgentSystem/日志/安全审计"
+out_dir = "/Volumes/Luis_MacData/AgentSystem/日志/system_health"

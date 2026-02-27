@@ -113,6 +113,19 @@ auto_task_on_run = true
 auto_close_on_run = true
 fail_on_error = false
 
+[config_governance]
+enabled = true
+governance_config = "/Volumes/Luis_MacData/AgentSystem/config/config_governance.toml"
+weekdays = [1]
+auto_task_on_run = true
+auto_close_on_run = true
+fail_on_error = false
+
+[system_health_dashboard]
+enabled = true
+dashboard_config = "/Volumes/Luis_MacData/AgentSystem/config/system_health_dashboard.toml"
+fail_on_error = false
+
 [data_readiness]
 enabled = true
 readiness_config = "/Volumes/Luis_MacData/AgentSystem/config/report_data_readiness.toml"

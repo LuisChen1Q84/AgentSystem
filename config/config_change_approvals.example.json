@@ -1,0 +1,11 @@
+{
+  "approvals": [
+    {
+      "file": "config/report_schedule.toml",
+      "sha256": "<sha256>",
+      "status": "approved",
+      "approved_by": "owner",
+      "expires_at": "2099-01-01T00:00:00"
+    }
+  ]
+}

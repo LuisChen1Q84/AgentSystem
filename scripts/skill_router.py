@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 try:
+    from core.skill_guard import SkillQualityGuard
     from scripts.mcp_connector import Registry, Runtime, parse_params
     from scripts.image_creator_hub import load_cfg as load_image_hub_cfg
     from scripts.image_creator_hub import run_request as run_image_hub_request
@@ -22,6 +23,7 @@ try:
     from scripts.skill_parser import parse_all_skills, match_triggers, extract_parameters
     from scripts.skill_tracer import SkillTracer
 except ModuleNotFoundError:  # direct script execution
+    from core.skill_guard import SkillQualityGuard
     from mcp_connector import Registry, Runtime, parse_params
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
     from image_creator_hub import run_request as run_image_hub_request  # type: ignore
@@ -39,6 +41,7 @@ IMAGE_HUB_CFG = ROOT / "config" / "image_creator_hub.toml"
 
 # 技能追踪器
 TRACER = SkillTracer()
+GUARD = SkillQualityGuard()
 
 STRONG_EXEC_KEYWORDS = {"xlsx", "excel", "表1", "表2", "填报日期", "更新这张表", "直接修改原文件"}
 PLAN_WORDS = {"计划", "打算", "准备"}
@@ -265,11 +268,31 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
     # 使用增强版路由（结合技能元数据触发匹配）
     route = route_text_enhanced(text, rules)
     skill = route["skill"]
+    guard = GUARD.decide(skill)
+    route["quality_guard"] = guard.to_dict()
 
     # 记录路由追踪
     duration_ms = int((time.time() - start_time) * 1000)
     trace_id = TRACER.record_route(text, route, duration_ms)
     route["trace_id"] = trace_id
+
+    # 在线质量守门：低分/低置信度技能自动降级为 advisor
+    if not guard.allow_execute:
+        return {
+            "route": route,
+            "execute": {
+                "type": "advisor",
+                "message": f"技能 {skill} 已被质量守门降级为建议模式",
+                "reason": guard.reason,
+            },
+            "meta": {
+                "mode": "advisor",
+                "next_actions": [
+                    "make skills-scorecard",
+                    "make skills-optimize auto=1 close=1",
+                ],
+            },
+        }
 
     if skill.startswith("stock-market-hub"):
         user_params = parse_params(params_json)

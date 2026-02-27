@@ -770,6 +770,61 @@ def run_skills_intelligence(cfg: Dict[str, Any], asof: dt.date, run_mode: bool) 
     }
 
 
+def run_config_governance(cfg: Dict[str, Any], asof: dt.date, run_mode: bool) -> Dict[str, Any]:
+    c = cfg.get("config_governance", {})
+    enabled = bool(c.get("enabled", False))
+    if not enabled:
+        return {"enabled": False, "ok": True, "returncode": 0}
+    weekdays = list(c.get("weekdays", [1]))
+    scheduled = should_run_weekly(asof, weekdays)
+    if not scheduled:
+        return {"enabled": True, "scheduled": 0, "ok": True, "returncode": 0}
+    cmd = [
+        "python3",
+        str(ROOT / "scripts/config_governance.py"),
+        "--config",
+        str(c.get("governance_config", ROOT / "config/config_governance.toml")),
+    ]
+    if run_mode and bool(c.get("auto_task_on_run", True)):
+        cmd.append("--auto-task")
+    if run_mode and bool(c.get("auto_close_on_run", True)):
+        cmd.append("--auto-close-tasks")
+    p = run_cmd(cmd)
+    fail_on_error = bool(c.get("fail_on_error", False))
+    ok = p.returncode == 0 or not fail_on_error
+    return {
+        "enabled": True,
+        "scheduled": 1,
+        "ok": ok,
+        "returncode": int(p.returncode),
+        "cmd": cmd,
+        "fail_on_error": fail_on_error,
+    }
+
+
+def run_system_health_dashboard(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    s = cfg.get("system_health_dashboard", {})
+    enabled = bool(s.get("enabled", False))
+    if not enabled:
+        return {"enabled": False, "ok": True, "returncode": 0}
+    cmd = [
+        "python3",
+        str(ROOT / "scripts/system_health_dashboard.py"),
+        "--config",
+        str(s.get("dashboard_config", ROOT / "config/system_health_dashboard.toml")),
+    ]
+    p = run_cmd(cmd)
+    fail_on_error = bool(s.get("fail_on_error", False))
+    ok = p.returncode == 0 or not fail_on_error
+    return {
+        "enabled": True,
+        "ok": ok,
+        "returncode": int(p.returncode),
+        "cmd": cmd,
+        "fail_on_error": fail_on_error,
+    }
+
+
 def main() -> None:
     global TELEMETRY
     parser = argparse.ArgumentParser(description="Report scheduler with retry and lock")
@@ -930,11 +985,15 @@ def main() -> None:
                 "registry_trends": run_registry_trends(cfg=cfg, run_mode=bool(args.run)),
                 "state_health": run_state_health(cfg=cfg, asof=asof, run_mode=bool(args.run)),
                 "skills_intelligence": run_skills_intelligence(cfg=cfg, asof=asof, run_mode=bool(args.run)),
+                "config_governance": run_config_governance(cfg=cfg, asof=asof, run_mode=bool(args.run)),
+                "system_health_dashboard": run_system_health_dashboard(cfg=cfg),
                 "skipped_due_to_data_not_ready": 1,
             }
             ok = ok and bool(report["registry_trends"].get("ok", True))
             ok = ok and bool(report["state_health"].get("ok", True))
             ok = ok and bool(report["skills_intelligence"].get("ok", True))
+            ok = ok and bool(report["config_governance"].get("ok", True))
+            ok = ok and bool(report["system_health_dashboard"].get("ok", True))
             stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
             out = logs_dir / f"scheduler_run_{stamp}.json"
             out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -997,6 +1056,10 @@ def main() -> None:
         ok = ok and bool(state_health_result.get("ok", True))
         skills_result = run_skills_intelligence(cfg=cfg, asof=asof, run_mode=bool(args.run))
         ok = ok and bool(skills_result.get("ok", True))
+        config_gov_result = run_config_governance(cfg=cfg, asof=asof, run_mode=bool(args.run))
+        ok = ok and bool(config_gov_result.get("ok", True))
+        health_dash_result = run_system_health_dashboard(cfg=cfg)
+        ok = ok and bool(health_dash_result.get("ok", True))
         report = {
             "as_of": asof.isoformat(),
             "trace_id": run_ctx.trace_id,
@@ -1031,6 +1094,8 @@ def main() -> None:
             "registry_trends": trends_result,
             "state_health": state_health_result,
             "skills_intelligence": skills_result,
+            "config_governance": config_gov_result,
+            "system_health_dashboard": health_dash_result,
         }
     finally:
         release_lock(lock_file)

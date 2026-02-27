@@ -1,0 +1,6 @@
+[defaults]
+scorecard_json = "/Volumes/Luis_MacData/AgentSystem/日志/skills/skills_scorecard.json"
+min_score_operator = 65
+min_confidence_operator = 0.5
+max_stale_days = 14
+block_on_missing = false
