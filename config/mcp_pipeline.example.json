@@ -1,0 +1,24 @@
+{
+  "name": "mcp_demo_pipeline",
+  "defaults": {
+    "top_k": 3,
+    "max_attempts": 2,
+    "cooldown_sec": 300,
+    "failure_threshold": 3,
+    "metrics_days": 14
+  },
+  "steps": [
+    {
+      "id": "collect_web",
+      "text": "请帮我获取网页内容",
+      "params": {
+        "url": "https://www.gov.cn"
+      }
+    },
+    {
+      "id": "reasoning",
+      "text": "基于以上结果拆解执行步骤",
+      "params": {}
+    }
+  ]
+}

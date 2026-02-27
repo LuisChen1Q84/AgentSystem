@@ -13,6 +13,7 @@ ROOT ?= $(CURDIR)
 	cycle-daily cycle-weekly cycle-monthly cycle-intel cycle-evolve cycle-autonomous cycle-ultimate \
 	preflight release check ci test-all \
 	mcp-test mcp-list mcp-status mcp-enable mcp-disable mcp-add mcp-tools mcp-route mcp-call mcp-ask mcp-observe mcp-diagnose \
+	mcp-doctor mcp-route-smart mcp-run mcp-replay mcp-pipeline \
 	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
 	stock-env-check stock-health-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
 	skill-route skill-execute image-hub image-hub-observe
@@ -22,7 +23,7 @@ help:
 	@echo "  make morning|done|iterate|archive|health|index|lifecycle"
 	@echo "  make summary|weekly-summary|guard|recommend|metrics|pipeline|preflight|release"
 	@echo "  make gov-brief topic='广西2025交易分析' facts='产出/facts.json' forbidden='词A,词B' replace='词A->表达A'"
-	@echo "  make mcp-test|mcp-list|mcp-status|mcp-enable|mcp-disable|mcp-add|mcp-tools|mcp-route|mcp-call|mcp-ask|mcp-observe|mcp-diagnose|mcp-repair-templates|mcp-schedule|mcp-schedule-run|mcp-freefirst-sync|mcp-freefirst-report"
+	@echo "  make mcp-test|mcp-list|mcp-status|mcp-enable|mcp-disable|mcp-add|mcp-tools|mcp-route|mcp-call|mcp-ask|mcp-observe|mcp-diagnose|mcp-doctor|mcp-route-smart|mcp-run|mcp-replay|mcp-pipeline|mcp-repair-templates|mcp-schedule|mcp-schedule-run|mcp-freefirst-sync|mcp-freefirst-report"
 	@echo "  make stock-env-check [root='$(ROOT)']"
 	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
@@ -770,6 +771,25 @@ mcp-observe:
 
 mcp-diagnose:
 	@python3 $(ROOT)/scripts/mcp_connector.py diagnose $(if $(server),--server "$(server)",) $(if $(probe),--probe-call,)
+
+mcp-doctor:
+	@python3 $(ROOT)/scripts/mcp_cli.py doctor $(if $(probe),--probe-tools,)
+
+mcp-route-smart:
+	@if [ -z "$(text)" ]; then echo "Usage: make mcp-route-smart text='<query>' [topk=3] [cooldown=300] [days=14]"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_cli.py route-smart --text "$(text)" --top-k $(or $(topk),3) --cooldown-sec $(or $(cooldown),300) --metrics-days $(or $(days),14)
+
+mcp-run:
+	@if [ -z "$(text)" ]; then echo "Usage: make mcp-run text='<query>' [params='{\"k\":\"v\"}'] [topk=3] [attempts=2] [cooldown=300] [threshold=3] [days=14] [dry=1]"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_cli.py run --text "$(text)" --params-json '$(or $(params),{})' --top-k $(or $(topk),3) --max-attempts $(or $(attempts),2) --cooldown-sec $(or $(cooldown),300) --failure-threshold $(or $(threshold),3) --metrics-days $(or $(days),14) $(if $(dry),--dry-run,)
+
+mcp-replay:
+	@if [ -z "$(run_id)" ]; then echo "Usage: make mcp-replay run_id='<mcp_...>' [dry=1] [include_fail=1]"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_cli.py replay --run-id "$(run_id)" $(if $(dry),--dry-run,) $(if $(include_fail),--include-failures,)
+
+mcp-pipeline:
+	@if [ -z "$(file)" ]; then echo "Usage: make mcp-pipeline file='<path.json|toml|yaml>' [topk=3] [attempts=2] [cooldown=300] [threshold=3] [days=14] [dry=1] [continue=1]"; exit 2; fi
+	@python3 $(ROOT)/scripts/mcp_cli.py pipeline --file "$(file)" --top-k $(or $(topk),3) --max-attempts $(or $(attempts),2) --cooldown-sec $(or $(cooldown),300) --failure-threshold $(or $(threshold),3) --metrics-days $(or $(days),14) $(if $(dry),--dry-run,) $(if $(continue),--continue-on-error,)
 
 mcp-repair-templates:
 	@python3 $(ROOT)/scripts/mcp_repair_templates.py $(if $(server),--server "$(server)",) $(if $(probe),--probe,)
