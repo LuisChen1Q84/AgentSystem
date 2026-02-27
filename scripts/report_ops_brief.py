@@ -77,6 +77,7 @@ def main() -> None:
     gate = load_json(logs / f"release_gate_{target}.json")
     gov = load_json(logs / f"governance_score_{target}.json")
     anom = load_json(logs / f"anomaly_guard_{target}.json")
+    trends = load_json(logs / "report_registry_trends.json")
     summary = anom.get("summary", {}) if isinstance(anom.get("summary", {}), dict) else {}
     warns = int(summary.get("warns", anom.get("warns", 0)) or 0)
     errors = int(summary.get("errors", anom.get("errors", 0)) or 0)
@@ -91,6 +92,7 @@ def main() -> None:
     state = StateStore(state_db)
     run_stats = state.runs_summary(days=int(d.get("state_window_days", 30)))
     hotspots = state.step_hotspots(days=int(d.get("state_window_days", 30)), limit=3)
+    trend_metrics = trends.get("metrics", {}) if isinstance(trends.get("metrics", {}), dict) else {}
     out = out_dir / f"ops_brief_{target}.md"
 
     lines = [
@@ -102,6 +104,8 @@ def main() -> None:
         f"- anomaly: warns={warns}, errors={errors}",
         f"- pending_watch_tasks: {pending}",
         f"- state_runs_30d: total={run_stats.get('total_runs',0)}, failed={run_stats.get('failed_runs',0)}",
+        f"- trend_release_go_rate: {trend_metrics.get('release_go_rate', 0)}",
+        f"- trend_publish_ok_rate: {trend_metrics.get('publish_ok_rate', 0)}",
         "",
         "## Artifacts",
         "",

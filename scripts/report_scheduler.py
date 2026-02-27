@@ -84,6 +84,10 @@ def resolve_profile(asof: dt.date, cfg: Dict[str, Any]) -> str:
     return str(cal["default_profile"])
 
 
+def should_run_weekly(asof: dt.date, weekdays: List[int]) -> bool:
+    return int(asof.weekday()) in set(int(x) for x in weekdays)
+
+
 def acquire_lock(lock_file: Path, stale_lock_seconds: int) -> int:
     now = int(time.time())
     lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -644,6 +648,63 @@ def run_action_center(
     }
 
 
+def run_registry_trends(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    t = cfg.get("registry_trends", {})
+    enabled = bool(t.get("enabled", False))
+    if not enabled:
+        return {"enabled": False, "ok": True, "returncode": 0}
+    cmd = [
+        "python3",
+        str(ROOT / "scripts/report_registry_trends.py"),
+        "--config",
+        str(t.get("trend_config", ROOT / "config/report_registry.toml")),
+        "--window",
+        str(int(t.get("window", 12))),
+    ]
+    p = run_cmd(cmd)
+    fail_on_error = bool(t.get("fail_on_error", False))
+    ok = p.returncode == 0 or not fail_on_error
+    return {
+        "enabled": True,
+        "ok": ok,
+        "returncode": int(p.returncode),
+        "cmd": cmd,
+        "fail_on_error": fail_on_error,
+    }
+
+
+def run_state_health(cfg: Dict[str, Any], asof: dt.date) -> Dict[str, Any]:
+    s = cfg.get("state_health", {})
+    enabled = bool(s.get("enabled", False))
+    if not enabled:
+        return {"enabled": False, "ok": True, "returncode": 0}
+    weekdays = list(s.get("weekdays", [0]))
+    scheduled = should_run_weekly(asof, weekdays)
+    if not scheduled:
+        return {"enabled": True, "scheduled": 0, "ok": True, "returncode": 0}
+    cmd = [
+        "python3",
+        str(ROOT / "scripts/report_state_health.py"),
+        "--db",
+        str(s.get("state_db", ROOT / "日志/state/system_state.db")),
+        "--days",
+        str(int(s.get("days", 30))),
+        "--topn",
+        str(int(s.get("topn", 10))),
+    ]
+    p = run_cmd(cmd)
+    fail_on_error = bool(s.get("fail_on_error", False))
+    ok = p.returncode == 0 or not fail_on_error
+    return {
+        "enabled": True,
+        "scheduled": 1,
+        "ok": ok,
+        "returncode": int(p.returncode),
+        "cmd": cmd,
+        "fail_on_error": fail_on_error,
+    }
+
+
 def main() -> None:
     global TELEMETRY
     parser = argparse.ArgumentParser(description="Report scheduler with retry and lock")
@@ -801,8 +862,12 @@ def main() -> None:
                 "data_readiness": readiness_result,
                 "watchdog": watch_result,
                 "release_gate": gate_result,
+                "registry_trends": run_registry_trends(cfg=cfg),
+                "state_health": run_state_health(cfg=cfg, asof=asof),
                 "skipped_due_to_data_not_ready": 1,
             }
+            ok = ok and bool(report["registry_trends"].get("ok", True))
+            ok = ok and bool(report["state_health"].get("ok", True))
             stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
             out = logs_dir / f"scheduler_run_{stamp}.json"
             out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -859,6 +924,10 @@ def main() -> None:
         ok = ok and bool(sla_result.get("ok", True))
         action_result = run_action_center(cfg=cfg, asof=asof, target=target)
         ok = ok and bool(action_result.get("ok", True))
+        trends_result = run_registry_trends(cfg=cfg)
+        ok = ok and bool(trends_result.get("ok", True))
+        state_health_result = run_state_health(cfg=cfg, asof=asof)
+        ok = ok and bool(state_health_result.get("ok", True))
         report = {
             "as_of": asof.isoformat(),
             "trace_id": run_ctx.trace_id,
@@ -890,6 +959,8 @@ def main() -> None:
             "ops_brief": ops_result,
             "sla": sla_result,
             "action_center": action_result,
+            "registry_trends": trends_result,
+            "state_health": state_health_result,
         }
     finally:
         release_lock(lock_file)

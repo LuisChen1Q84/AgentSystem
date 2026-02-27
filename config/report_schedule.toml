@@ -84,6 +84,20 @@ enabled = true
 action_config = "/Volumes/Luis_MacData/AgentSystem/config/report_action_center.toml"
 fail_on_action_error = false
 
+[registry_trends]
+enabled = true
+trend_config = "/Volumes/Luis_MacData/AgentSystem/config/report_registry.toml"
+window = 12
+fail_on_error = false
+
+[state_health]
+enabled = true
+state_db = "/Volumes/Luis_MacData/AgentSystem/日志/state/system_state.db"
+weekdays = [0]
+days = 30
+topn = 10
+fail_on_error = false
+
 [data_readiness]
 enabled = true
 readiness_config = "/Volumes/Luis_MacData/AgentSystem/config/report_data_readiness.toml"
