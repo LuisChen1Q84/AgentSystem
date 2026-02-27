@@ -16,6 +16,7 @@ class AutonomyGeneralistTest(unittest.TestCase):
                 {
                     "dry_run": True,
                     "memory_file": str(memory_file),
+                    "log_dir": str(root / "autonomy_logs"),
                 },
             )
             self.assertIn("mode", out)

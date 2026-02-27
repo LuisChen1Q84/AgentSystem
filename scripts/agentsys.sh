@@ -1041,6 +1041,18 @@ run_autonomous() {
   automation_log "INFO" "autonomous" "done"
 }
 
+run_autonomy_observe() {
+  automation_log "INFO" "autonomy-observe" "start"
+  python3 "${ROOT_DIR}/scripts/autonomy_observability.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "autonomy-observe" "done"
+}
+
+run_autonomy_eval() {
+  automation_log "INFO" "autonomy-eval" "start"
+  python3 "${ROOT_DIR}/scripts/autonomy_strategy_eval.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "autonomy-eval" "done"
+}
+
 run_cycle_preroute() {
   local cycle_name="${1:-cycle}"
   local text="${2:-}"
@@ -1176,6 +1188,8 @@ Usage:
   scripts/agentsys.sh stock-hub [--query <text> --symbols <csv> --universe <name> --no-sync]
   scripts/agentsys.sh skill-route [route|execute|dump] [args...]
   scripts/agentsys.sh autonomous "<task>" ['{"autonomous":true,"dry_run":false}']
+  scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
+  scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
 EOF
 }
 
@@ -1270,5 +1284,7 @@ case "${cmd}" in
   stock-hub) shift; run_stock_hub "$@" ;;
   skill-route) shift; run_skill_route "${1:-route}" "${@:2}" ;;
   autonomous) shift; run_autonomous "${1:-}" "${2:-}" ;;
+  autonomy-observe) shift; run_autonomy_observe "$@" ;;
+  autonomy-eval) shift; run_autonomy_eval "$@" ;;
   *) usage; send_alert "WARN" "agentsys参数错误" "invalid command: ${cmd:-<empty>}"; exit "${E_USAGE}" ;;
 esac

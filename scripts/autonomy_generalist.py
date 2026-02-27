@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import tomllib
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -34,6 +35,8 @@ from scripts.stock_market_hub import run_report as run_stock_hub_report
 
 CFG_DEFAULT = ROOT / "config" / "autonomy_generalist.toml"
 MEMORY_DEFAULT = ROOT / "日志" / "autonomy" / "memory.json"
+RUNS_JSONL = "autonomy_runs.jsonl"
+ATTEMPTS_JSONL = "autonomy_attempts.jsonl"
 
 SUPPORTED_SKILLS = {
     "image-creator-hub": "image",
@@ -65,6 +68,12 @@ def _load_cfg(path: Path = CFG_DEFAULT) -> Dict[str, Any]:
                 "max_strategy_candidates": 4,
                 "min_skill_score": 0.12,
                 "memory_prior": 2.0,
+                "base_weight": 0.75,
+                "memory_weight": 0.25,
+                "execution_mode": "auto",
+                "learning_enabled": True,
+                "max_fallback_steps": 4,
+                "ambiguity_gap_threshold": 0.05,
                 "mcp_top_k": 3,
                 "mcp_max_attempts": 2,
                 "mcp_cooldown_sec": 300,
@@ -89,6 +98,27 @@ def _load_memory(path: Path) -> Dict[str, Any]:
 def _save_memory(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _run_id() -> str:
+    return f"aut_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+
+
+def _strategy_priority(strategy: str) -> int:
+    order = {
+        "mcp-generalist": 10,
+        "digest": 20,
+        "mckinsey-ppt": 30,
+        "image-creator-hub": 40,
+        "stock-market-hub": 50,
+    }
+    return int(order.get(strategy, 999))
 
 
 def _memory_rate(memory: Dict[str, Any], key: str, prior: float) -> float:
@@ -124,11 +154,17 @@ def _skill_score(text: str, skill: SkillMeta) -> Tuple[float, Dict[str, Any]]:
     return score, {"trigger_hits": hits, "token_overlap": overlap}
 
 
-def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any], execution_mode: str) -> List[Dict[str, Any]]:
     defaults = cfg.get("defaults", {})
     min_skill_score = float(defaults.get("min_skill_score", 0.12))
     prior = float(defaults.get("memory_prior", 2.0))
     top_n = int(defaults.get("max_strategy_candidates", 4))
+    base_weight = float(defaults.get("base_weight", 0.75))
+    memory_weight = float(defaults.get("memory_weight", 0.25))
+    if execution_mode == "strict":
+        # strict 模式降低在线学习权重，减少行为漂移
+        memory_weight = min(memory_weight, 0.05)
+        base_weight = max(base_weight, 0.95)
 
     skills = parse_all_skills(silent=True)
     rows: List[Dict[str, Any]] = []
@@ -137,7 +173,7 @@ def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any]) -> 
             continue
         base, details = _skill_score(text, s)
         mem = _memory_rate(memory, s.name, prior=prior)
-        final = round(base * 0.75 + mem * 0.25, 4)
+        final = round(base * base_weight + mem * memory_weight, 4)
         if final < min_skill_score:
             continue
         rows.append(
@@ -145,6 +181,7 @@ def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any]) -> 
                 "strategy": s.name,
                 "executor": SUPPORTED_SKILLS[s.name],
                 "score": final,
+                "priority": _strategy_priority(s.name),
                 "score_detail": {
                     "skill_score": base,
                     "memory_rate": round(mem, 4),
@@ -159,12 +196,17 @@ def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any]) -> 
             "strategy": "mcp-generalist",
             "executor": "mcp",
             "score": round(0.45 + 0.25 * mcp_mem, 4),
+            "priority": _strategy_priority("mcp-generalist"),
             "score_detail": {"skill_score": 0.45, "memory_rate": round(mcp_mem, 4)},
         }
     )
 
-    rows.sort(key=lambda x: x["score"], reverse=True)
-    return rows[: max(1, top_n)]
+    # 稳定排序：score 降序 + priority 升序 + strategy 字典序
+    rows.sort(key=lambda x: (-float(x["score"]), int(x.get("priority", 999)), str(x["strategy"])))
+    ranked = rows[: max(1, top_n)]
+    for idx, r in enumerate(ranked, start=1):
+        r["rank"] = idx
+    return ranked
 
 
 def _exec_digest(text: str) -> Dict[str, Any]:
@@ -219,17 +261,44 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     cfg = _load_cfg(Path(values.get("cfg", CFG_DEFAULT)))
     defaults = cfg.get("defaults", {})
     memory_file = Path(str(values.get("memory_file", MEMORY_DEFAULT)))
-    log_dir = Path(str(defaults.get("log_dir", ROOT / "日志" / "autonomy")))
+    log_dir = Path(str(values.get("log_dir", defaults.get("log_dir", ROOT / "日志" / "autonomy"))))
     log_dir.mkdir(parents=True, exist_ok=True)
     memory = _load_memory(memory_file)
+    run_id = _run_id()
+    trace_id = run_id
+    execution_mode = str(values.get("execution_mode", defaults.get("execution_mode", "auto"))).strip().lower()
+    if execution_mode not in {"auto", "strict"}:
+        execution_mode = "auto"
+    deterministic = bool(values.get("deterministic", execution_mode == "strict"))
+    max_fallback_steps = max(1, int(values.get("max_fallback_steps", defaults.get("max_fallback_steps", 4))))
+    ambiguity_gap_threshold = float(values.get("ambiguity_gap_threshold", defaults.get("ambiguity_gap_threshold", 0.05)))
+    learning_enabled = bool(values.get("learning_enabled", defaults.get("learning_enabled", True)))
+    if deterministic:
+        learning_enabled = False
 
     lang = _lang(text)
-    candidates = _plan_candidates(text, cfg, memory)
+    candidates = _plan_candidates(text, cfg, memory, execution_mode=execution_mode)
+    top_gap = round(float(candidates[0]["score"]) - float(candidates[1]["score"]), 4) if len(candidates) > 1 else 1.0
+    ambiguity_flag = bool(top_gap < ambiguity_gap_threshold and len(candidates) > 1)
+    ambiguity_resolution = "none"
+    if ambiguity_flag and deterministic:
+        # 确定性场景下，歧义时优先 mcp-generalist 作为稳定保守策略
+        candidates.sort(key=lambda x: (x["strategy"] != "mcp-generalist", -float(x["score"]), int(x.get("priority", 999)), str(x["strategy"])))
+        for idx, r in enumerate(candidates, start=1):
+            r["rank"] = idx
+        ambiguity_resolution = "prefer_mcp_generalist"
 
     prompt_packet = compose_prompt_v2(
         objective="Choose and execute the best strategy for the user's task with autonomous fallback",
         language=lang,
-        context={"text": text, "candidate_count": len(candidates), "params": values},
+        context={
+            "text": text,
+            "candidate_count": len(candidates),
+            "params": values,
+            "execution_mode": execution_mode,
+            "deterministic": deterministic,
+            "top_gap": top_gap,
+        },
         references=[c["strategy"] for c in candidates],
         constraints=[
             "Prefer highest-confidence strategy first",
@@ -248,46 +317,64 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     selected: Dict[str, Any] | None = None
     final: Dict[str, Any] | None = None
 
-    for cand in candidates:
+    for cand in candidates[:max_fallback_steps]:
         strategy = cand["strategy"]
         t0 = dt.datetime.now()
         try:
             out = _exec_strategy(cand["executor"], text, values, cfg)
             ok = bool(out.get("ok", False))
-            memory = _update_memory(memory, strategy, ok)
-            attempts.append(
-                {
-                    "strategy": strategy,
-                    "executor": cand["executor"],
-                    "score": cand["score"],
-                    "ok": ok,
-                    "duration_ms": int((dt.datetime.now() - t0).total_seconds() * 1000),
-                    "result_mode": out.get("mode", ""),
-                }
-            )
+            if learning_enabled:
+                memory = _update_memory(memory, strategy, ok)
+            attempt_payload = {
+                "run_id": run_id,
+                "trace_id": trace_id,
+                "ts": _now(),
+                "strategy": strategy,
+                "executor": cand["executor"],
+                "rank": cand.get("rank", 0),
+                "score": cand["score"],
+                "ok": ok,
+                "duration_ms": int((dt.datetime.now() - t0).total_seconds() * 1000),
+                "result_mode": out.get("mode", ""),
+            }
+            attempts.append(attempt_payload)
+            _append_jsonl(log_dir / ATTEMPTS_JSONL, attempt_payload)
             if ok:
                 selected = cand
                 final = out
                 break
         except Exception as e:
-            memory = _update_memory(memory, strategy, False)
-            attempts.append(
-                {
-                    "strategy": strategy,
-                    "executor": cand["executor"],
-                    "score": cand["score"],
-                    "ok": False,
-                    "duration_ms": int((dt.datetime.now() - t0).total_seconds() * 1000),
-                    "error": f"{type(e).__name__}: {e}",
-                }
-            )
+            if learning_enabled:
+                memory = _update_memory(memory, strategy, False)
+            attempt_payload = {
+                "run_id": run_id,
+                "trace_id": trace_id,
+                "ts": _now(),
+                "strategy": strategy,
+                "executor": cand["executor"],
+                "rank": cand.get("rank", 0),
+                "score": cand["score"],
+                "ok": False,
+                "duration_ms": int((dt.datetime.now() - t0).total_seconds() * 1000),
+                "error": f"{type(e).__name__}: {e}",
+            }
+            attempts.append(attempt_payload)
+            _append_jsonl(log_dir / ATTEMPTS_JSONL, attempt_payload)
 
     _save_memory(memory_file, memory)
 
     payload = {
+        "run_id": run_id,
+        "trace_id": trace_id,
         "ok": final is not None,
         "mode": "autonomous-generalist",
         "ts": _now(),
+        "execution_mode": execution_mode,
+        "deterministic": deterministic,
+        "learning_enabled": learning_enabled,
+        "top_gap": top_gap,
+        "ambiguity_flag": ambiguity_flag,
+        "ambiguity_resolution": ambiguity_resolution,
         "request": {"text": text, "params": values},
         "candidates": candidates,
         "attempts": attempts,
@@ -298,7 +385,12 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
             skill="autonomy-generalist",
             status="completed" if final is not None else "advisor",
             reason="" if final is not None else "all_strategies_failed",
-            evidence={"attempts": len(attempts), "selected": selected.get("strategy") if selected else ""},
+            evidence={
+                "attempts": len(attempts),
+                "selected": selected.get("strategy") if selected else "",
+                "top_gap": top_gap,
+                "mode": execution_mode,
+            },
             next_actions=[
                 "If result quality is low, refine task constraints and rerun autonomous",
                 "Promote successful strategy into reusable skill triggers",
@@ -308,7 +400,28 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
 
     out_file = log_dir / f"autonomy_run_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    payload["deliver_assets"] = {"items": [{"path": str(out_file)}]}
+    run_summary = {
+        "run_id": run_id,
+        "trace_id": trace_id,
+        "ts": payload["ts"],
+        "ok": payload["ok"],
+        "execution_mode": execution_mode,
+        "deterministic": deterministic,
+        "learning_enabled": learning_enabled,
+        "top_gap": top_gap,
+        "ambiguity_flag": ambiguity_flag,
+        "selected_strategy": selected.get("strategy") if selected else "",
+        "attempt_count": len(attempts),
+        "duration_ms": sum(int(a.get("duration_ms", 0) or 0) for a in attempts),
+    }
+    _append_jsonl(log_dir / RUNS_JSONL, run_summary)
+    payload["deliver_assets"] = {
+        "items": [
+            {"path": str(out_file)},
+            {"path": str(log_dir / RUNS_JSONL)},
+            {"path": str(log_dir / ATTEMPTS_JSONL)},
+        ]
+    }
     return payload
 
 

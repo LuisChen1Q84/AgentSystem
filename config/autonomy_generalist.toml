@@ -2,6 +2,12 @@
 max_strategy_candidates = 4
 min_skill_score = 0.12
 memory_prior = 2.0
+base_weight = 0.75
+memory_weight = 0.25
+execution_mode = "auto" # auto | strict
+learning_enabled = true
+max_fallback_steps = 4
+ambiguity_gap_threshold = 0.05
 
 # MCP fallback strategy
 mcp_top_k = 3

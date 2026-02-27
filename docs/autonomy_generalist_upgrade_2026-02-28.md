@@ -14,11 +14,14 @@
   - 失败自动降级与回退
   - 结果反思闭环（loop_closure）与执行证据沉淀
   - 记忆学习：按策略维护 success/fail 统计，影响下次排序
+  - 稳定性增强：`auto/strict` 模式、稳定排序、歧义检测与确定性解法
 
 ### 2) 新增自主配置
 - 文件：`config/autonomy_generalist.toml`
 - 包含：
   - 候选数、最小技能得分、记忆先验
+  - 打分权重与执行模式（`base_weight/memory_weight/execution_mode`）
+  - 歧义阈值与最大回退步数
   - MCP fallback 的 top_k/重试/熔断参数
   - 自主日志输出目录
 
@@ -32,12 +35,25 @@
 ### 4) 命令入口
 - `scripts/agentsys.sh` 新增：
   - `autonomous "<task>" ['{"autonomous":true}']`
+  - `autonomy-observe [--days N]`
+  - `autonomy-eval`
 - `Makefile` 新增：
   - `make autonomous text='...' [params='{"dry_run":true}']`
+  - `make autonomy-observe [days=14]`
+  - `make autonomy-eval`
+
+### 5) 观测与策略评估
+- 新增观测脚本：`scripts/autonomy_observability.py`
+  - 输入：`日志/autonomy/autonomy_runs.jsonl`、`日志/autonomy/autonomy_attempts.jsonl`
+  - 输出：成功率、耗时P95、fallback率、歧义率、策略指标看板
+- 新增策略评估脚本：`scripts/autonomy_strategy_eval.py`
+  - 输出每个策略 `health_score` 与调优建议（promote/demote/collect-more-data）
 
 ## 验证
 - 新增测试：
   - `tests/test_autonomy_generalist.py`
+  - `tests/test_autonomy_observability.py`
+  - `tests/test_autonomy_strategy_eval.py`
   - `tests/test_skill_router.py`（clarify -> autonomous fallback）
 
 ## 预期收益
