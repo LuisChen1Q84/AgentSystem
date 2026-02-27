@@ -195,7 +195,7 @@ def route_text_enhanced(text: str, rules: List[Dict[str, Any]]) -> Dict[str, Any
     """
     # 1. 优先使用技能解析器的触发短语匹配
     try:
-        skills = parse_all_skills()
+        skills = parse_all_skills(silent=True)
         trigger_matches = match_triggers(text, skills)
 
         if trigger_matches:
@@ -218,7 +218,7 @@ def route_text_enhanced(text: str, rules: List[Dict[str, Any]]) -> Dict[str, Any
                 "params": params,  # 提取的参数
                 "calls": skill_obj.calls if skill_obj else [],  # 技能链
             }
-    except Exception as e:
+    except Exception:
         # 如果解析失败，回退到传统路由
         pass
 
@@ -305,22 +305,28 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
     if skill.startswith("image-creator-hub"):
         user_params = parse_params(params_json)
         image_cfg = load_image_hub_cfg(IMAGE_HUB_CFG)
-        result = run_image_hub_request(image_cfg, text, user_params)
-        return {
-            "route": route,
-            "execute": {
-                "type": "image-creator-hub",
-                "config": str(IMAGE_HUB_CFG),
-            },
-            "result": result,
-            "meta": {
-                "mode": "image-generation",
-                "next_actions": [
-                    "make image-hub text='试试看低多边形风格'",
-                    "make skill-execute text='给我做一个Q版品牌店铺图' params='{\"brand\":\"Nike\"}'",
-                ],
-            },
-        }
+        exec_start = time.time()
+        try:
+            result = run_image_hub_request(image_cfg, text, user_params)
+            TRACER.record_execution(trace_id, skill, True, duration_ms=int((time.time() - exec_start) * 1000))
+            return {
+                "route": route,
+                "execute": {
+                    "type": "image-creator-hub",
+                    "config": str(IMAGE_HUB_CFG),
+                },
+                "result": result,
+                "meta": {
+                    "mode": "image-generation",
+                    "next_actions": [
+                        "make image-hub text='试试看低多边形风格'",
+                        "make skill-execute text='给我做一个Q版品牌店铺图' params='{\"brand\":\"Nike\"}'",
+                    ],
+                },
+            }
+        except Exception as e:
+            TRACER.record_execution(trace_id, skill, False, str(e))
+            raise
 
     # Digest 模块处理
     if skill == "digest":
@@ -330,12 +336,8 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
         # 解析用户意图，决定执行什么命令
         text_lower = text.lower()
 
-        # 判断操作类型
-        if "摘要" in text or "generate" in text_lower:
-            cmd = ["python3", "scripts/digest/main.py", "digest", "generate", "--type", "daily"]
-        elif "新闻" in text or "资讯" in text or "有什么" in text:
-            cmd = ["python3", "scripts/digest/main.py", "digest", "show", "--type", "daily"]
-        elif "采集" in text or "收集" in text:
+        # 判断操作类型（优先处理“采集/收集”，避免“采集新闻”被误判为show）
+        if "采集" in text or "收集" in text:
             # 根据关键词选择预设源
             if "商业" in text or "business" in text_lower:
                 preset = "business"
@@ -348,10 +350,15 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             else:
                 preset = "business"  # 默认商业新闻
             cmd = ["python3", "scripts/digest/main.py", "collect", "rss", "--preset", preset, "--limit", "20"]
+        elif "摘要" in text or "generate" in text_lower:
+            cmd = ["python3", "scripts/digest/main.py", "digest", "generate", "--type", "daily"]
+        elif "新闻" in text or "资讯" in text or "有什么" in text:
+            cmd = ["python3", "scripts/digest/main.py", "digest", "show", "--type", "daily"]
         else:
             # 默认显示今日摘要
             cmd = ["python3", "scripts/digest/main.py", "digest", "show", "--type", "daily"]
 
+        exec_start = time.time()
         try:
             result = subprocess.run(
                 cmd,
@@ -361,10 +368,15 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                 timeout=120
             )
             output = result.stdout if result.returncode == 0 else result.stderr
+            if result.returncode == 0 and not output.strip():
+                output = "暂无可展示的摘要或数据，请先执行采集或生成操作。"
+            TRACER.record_execution(trace_id, skill, result.returncode == 0, None if result.returncode == 0 else output.strip(), duration_ms=int((time.time() - exec_start) * 1000))
         except subprocess.TimeoutExpired:
             output = "执行超时，请稍后再试"
+            TRACER.record_execution(trace_id, skill, False, "timeout", duration_ms=int((time.time() - exec_start) * 1000))
         except Exception as e:
             output = f"执行错误: {str(e)}"
+            TRACER.record_execution(trace_id, skill, False, str(e), duration_ms=int((time.time() - exec_start) * 1000))
 
         return {
             "route": route,
@@ -391,7 +403,13 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                 base_params.pop("max_entries", None)
 
         runtime = Runtime(Registry())
-        result = runtime.call(server, tool, base_params, route_meta={"source": "skill-router", **route})
+        exec_start = time.time()
+        try:
+            result = runtime.call(server, tool, base_params, route_meta={"source": "skill-router", **route})
+            TRACER.record_execution(trace_id, skill, True, duration_ms=int((time.time() - exec_start) * 1000))
+        except Exception as e:
+            TRACER.record_execution(trace_id, skill, False, str(e), duration_ms=int((time.time() - exec_start) * 1000))
+            raise
         low = text.lower()
         market_mode = any(w in low for w in MARKET_WORDS)
         freefirst = {

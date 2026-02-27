@@ -145,14 +145,17 @@ def update_source(source_id: int, **kwargs) -> bool:
     if not kwargs:
         return False
 
-    set_clause = ", ".join([f"{k} = ?" for k in kwargs.keys()])
-    kwargs['config'] = json.dumps(kwargs.get('config'))
-    kwargs['source_id'] = source_id
+    if "config" in kwargs:
+        kwargs["config"] = json.dumps(kwargs["config"], ensure_ascii=False)
+
+    keys = list(kwargs.keys())
+    set_clause = ", ".join([f"{k} = ?" for k in keys])
+    values = [kwargs[k] for k in keys] + [source_id]
 
     conn = get_db()
     conn.execute(
-        f"UPDATE digest_sources SET {set_clause} WHERE id = :source_id",
-        kwargs
+        f"UPDATE digest_sources SET {set_clause} WHERE id = ?",
+        values
     )
     conn.commit()
     conn.close()

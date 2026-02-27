@@ -143,6 +143,8 @@ def cmd_digest(args):
             print(f"=== {d['type']} 摘要 ===")
             print(f"生成时间: {d['created_at']}\n")
             print(d['content'])
+        else:
+            print(f"暂无 {args.type} 摘要，请先执行 digest generate 或 collect。")
 
 
 def cmd_mark(args):

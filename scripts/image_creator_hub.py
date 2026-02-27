@@ -608,7 +608,7 @@ class OpenAICompatibleBackend:
         self.quality = str(defaults.get("openai_quality", "high"))
         self.timeout = int(defaults.get("request_timeout_sec", 90))
         self.ssl_verify = bool(defaults.get("ssl_verify", True))
-        self.ssl_insecure_fallback = bool(defaults.get("ssl_insecure_fallback", True))
+        self.ssl_insecure_fallback = bool(defaults.get("ssl_insecure_fallback", False))
         self.api_key_env = str(defaults.get("openai_api_key_env", "OPENAI_API_KEY"))
         self.out_dir = out_dir
 
@@ -710,7 +710,7 @@ class MiniMaxBackend:
         self.aspect_ratio = str(defaults.get("minimax_aspect_ratio", "1:1"))
         self.timeout = int(defaults.get("request_timeout_sec", 90))
         self.ssl_verify = bool(defaults.get("ssl_verify", True))
-        self.ssl_insecure_fallback = bool(defaults.get("ssl_insecure_fallback", True))
+        self.ssl_insecure_fallback = bool(defaults.get("ssl_insecure_fallback", False))
         self.api_key_env = str(defaults.get("minimax_api_key_env", "MINIMAX_API_KEY"))
         self.out_dir = out_dir
         # 新增配置

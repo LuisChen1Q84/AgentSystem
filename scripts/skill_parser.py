@@ -60,7 +60,7 @@ class SkillMeta:
         return f"SkillMeta({self.name}, v{self.version}, triggers={len(self.triggers)})"
 
 
-def parse_yaml_front_matter(content: str) -> Optional[Dict[str, Any]]:
+def parse_yaml_front_matter(content: str, silent: bool = False) -> Optional[Dict[str, Any]]:
     """解析 YAML front-matter"""
     # 匹配 --- 包裹的 YAML 内容
     pattern = r"^---\s*\n(.*?)\n---"
@@ -70,24 +70,26 @@ def parse_yaml_front_matter(content: str) -> Optional[Dict[str, Any]]:
         try:
             return yaml.safe_load(yaml_content)
         except yaml.YAMLError as e:
-            print(f"Warning: Failed to parse YAML: {e}")
+            if not silent:
+                print(f"Warning: Failed to parse YAML: {e}", file=sys.stderr)
             return None
     return None
 
 
-def parse_skill_file(file_path: Path) -> Optional[SkillMeta]:
+def parse_skill_file(file_path: Path, silent: bool = False) -> Optional[SkillMeta]:
     """解析单个技能文件"""
     try:
         content = file_path.read_text(encoding="utf-8")
-        data = parse_yaml_front_matter(content)
+        data = parse_yaml_front_matter(content, silent=silent)
         if data:
             return SkillMeta(data, file_path)
     except Exception as e:
-        print(f"Error parsing {file_path}: {e}")
+        if not silent:
+            print(f"Error parsing {file_path}: {e}", file=sys.stderr)
     return None
 
 
-def parse_all_skills(skill_dir: Path = None) -> List[SkillMeta]:
+def parse_all_skills(skill_dir: Path = None, silent: bool = False) -> List[SkillMeta]:
     """解析所有技能文件"""
     if skill_dir is None:
         skill_dir = SKILL_DIR
@@ -97,7 +99,7 @@ def parse_all_skills(skill_dir: Path = None) -> List[SkillMeta]:
         # 跳过 references 目录
         if "references" in md_file.parts:
             continue
-        skill = parse_skill_file(md_file)
+        skill = parse_skill_file(md_file, silent=silent)
         if skill:
             skills.append(skill)
     return skills
