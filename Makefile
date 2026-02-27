@@ -402,9 +402,11 @@ report-auto-run:
 	python3 $(ROOT)/scripts/report_remediation_plan.py --config "$(ROOT)/config/report_remediation.toml" --as-of "$$ASOF" --target-month "$$TARGET" --readiness-json "$(ROOT)/日志/datahub_quality_gate/data_readiness_$${TARGET}.json"; \
 	python3 $(ROOT)/scripts/report_remediation_runner.py --config "$(ROOT)/config/report_remediation_runner.toml" --target-month "$$TARGET"; \
 	python3 $(ROOT)/scripts/report_release_gate.py --config "$(ROOT)/config/report_release_gate.toml" --as-of "$$ASOF" --target-month "$$TARGET" --readiness-json "$(ROOT)/日志/datahub_quality_gate/data_readiness_$${TARGET}.json"; \
+	python3 $(ROOT)/scripts/report_runbook.py --target-month "$$TARGET" --as-of "$$ASOF"; \
 	python3 $(ROOT)/scripts/report_visual_dashboard.py --explain-json "$(ROOT)/日志/datahub_quality_gate/change_explain_$${TARGET}.json" --anomaly-json "$(ROOT)/日志/datahub_quality_gate/anomaly_guard_$${TARGET}.json" --out-html "$(outdir)/智能看板_$${TARGET}.html"; \
 	python3 $(ROOT)/scripts/report_daily_digest.py --explain-json "$(ROOT)/日志/datahub_quality_gate/change_explain_$${TARGET}.json" --anomaly-json "$(ROOT)/日志/datahub_quality_gate/anomaly_guard_$${TARGET}.json" --out-md "$(outdir)/日报摘要_$${TARGET}.md"; \
 	python3 $(ROOT)/scripts/report_snapshot_archive.py --target-month "$$TARGET" --as-of "$$ASOF" --outdir "$(outdir)" --logs-dir "$(ROOT)/日志/datahub_quality_gate" --archive-root "$(ROOT)/任务归档"; \
+	python3 $(ROOT)/scripts/report_lineage_mvp.py --target-month "$$TARGET" --as-of "$$ASOF" --outdir "$(outdir)" --logs-dir "$(ROOT)/日志/datahub_quality_gate" --archive-root "$(ROOT)/任务归档/reports"; \
 	python3 $(ROOT)/scripts/report_publish_release.py --target-month "$$TARGET" --as-of "$$ASOF" --outdir "$(outdir)"
 
 report-orchestrate:
