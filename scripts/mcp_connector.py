@@ -22,6 +22,9 @@ from typing import Any, Dict, List, Optional, Tuple
 ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
 CONFIG_FILE = ROOT / "config" / "mcp_servers.json"
 ROUTES_FILE = ROOT / "config" / "mcp_routes.json"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.policy import CommandPolicy, PathSqlPolicy, PolicyViolation
 
 
 class MCPError(RuntimeError):
@@ -107,24 +110,14 @@ class PolicyEngine:
         sec = registry.settings().get("security", {})
         self.allowed_paths = [Path(p).resolve() for p in sec.get("allowedPaths", [str(ROOT)])]
         self.blocked_commands = [c.lower() for c in sec.get("blockedCommands", [])]
-
-    def _is_under_allowed(self, path: Path) -> bool:
-        try:
-            rp = path.resolve()
-        except FileNotFoundError:
-            rp = path.parent.resolve() / path.name
-        for base in self.allowed_paths:
-            if rp == base or base in rp.parents:
-                return True
-        return False
+        self.path_sql = PathSqlPolicy(root=ROOT, allowed_paths=self.allowed_paths)
+        self.command_policy = CommandPolicy(blocked_tokens=self.blocked_commands)
 
     def validate_file_path(self, path: str) -> Path:
-        p = Path(path)
-        if not p.is_absolute():
-            p = (ROOT / p).resolve()
-        if not self._is_under_allowed(p):
-            raise MCPError("PATH_FORBIDDEN", f"Path not allowed by policy: {p}")
-        return p
+        try:
+            return self.path_sql.validate_file_path(path)
+        except PolicyViolation as e:
+            raise MCPError(e.code, e.message) from e
 
     def validate_fetch_url(self, server_cfg: ServerConfig, url: str) -> str:
         parsed = urllib.parse.urlparse(url)
@@ -144,21 +137,16 @@ class PolicyEngine:
         raise MCPError("DOMAIN_FORBIDDEN", f"Domain not in whitelist: {hostname}")
 
     def validate_sql(self, sql: str) -> None:
-        sql_norm = " ".join(sql.strip().split()).lower()
-        if not sql_norm:
-            raise MCPError("INVALID_SQL", "SQL is empty")
-        safe_prefixes = ("select", "with", "pragma")
-        if not sql_norm.startswith(safe_prefixes):
-            raise MCPError("SQL_FORBIDDEN", "Only read-only SQL is allowed")
-        forbidden = ("insert ", "update ", "delete ", "drop ", "alter ", "attach ", "vacuum")
-        if any(tok in sql_norm for tok in forbidden):
-            raise MCPError("SQL_FORBIDDEN", "Read-only SQL policy violation")
+        try:
+            self.path_sql.validate_sql_readonly(sql)
+        except PolicyViolation as e:
+            raise MCPError(e.code, e.message) from e
 
     def validate_command_text(self, command: str) -> None:
-        cl = command.lower()
-        for token in self.blocked_commands:
-            if token and token in cl:
-                raise MCPError("COMMAND_FORBIDDEN", f"Blocked command pattern: {token}")
+        try:
+            self.command_policy.validate_blocked_tokens(command)
+        except PolicyViolation as e:
+            raise MCPError(e.code, e.message) from e
 
 
 class AuditLogger:

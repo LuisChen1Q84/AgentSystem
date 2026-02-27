@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import shlex
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any, Dict, List
@@ -15,6 +16,9 @@ from typing import Any, Dict, List
 
 ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
 CFG_DEFAULT = ROOT / "config/report_remediation_runner.toml"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.policy import is_command_allowed
 
 
 def load_cfg(path: Path) -> Dict[str, Any]:
@@ -34,10 +38,6 @@ def load_json(path: Path) -> Dict[str, Any]:
 def level_rank(level: str) -> int:
     m = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     return m.get(level, 9)
-
-
-def allowed(cmd: str, allow_prefixes: List[str]) -> bool:
-    return any(cmd.startswith(x) for x in allow_prefixes)
 
 
 def load_pending_task_ids(events_path: Path, title_prefix: str) -> List[str]:
@@ -122,7 +122,7 @@ def main() -> None:
     for a in selected:
         cmd = str(a.get("suggested_command", ""))
         row = {"title": a.get("title", ""), "level": a.get("level", ""), "command": cmd}
-        if not cmd or not allowed(cmd, allow_prefixes):
+        if not cmd or not is_command_allowed(cmd, allow_prefixes):
             row["status"] = "SKIP_NOT_ALLOWED"
             rows.append(row)
             continue
