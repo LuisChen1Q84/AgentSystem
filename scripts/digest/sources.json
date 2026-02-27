@@ -1,29 +1,24 @@
 {
-  "crypto": [
+  "business": [
     {
-      "name": "CoinDesk",
-      "url": "https://www.coindesk.com/feed/",
-      "description": "领先的加密货币新闻网站"
+      "name": "TechCrunch",
+      "url": "https://techcrunch.com/feed/",
+      "description": "科技和创业新闻"
     },
     {
-      "name": "CoinTelegraph",
-      "url": "https://cointelegraph.com/rss",
-      "description": "最大的加密货币媒体之一"
+      "name": "Business Insider",
+      "url": "https://www.businessinsider.com/rss",
+      "description": "商业和金融新闻"
     },
     {
-      "name": "Decrypt",
-      "url": "https://decrypt.co/feed",
-      "description": "专注于 Web3 的新闻媒体"
+      "name": "CNBC",
+      "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+      "description": "美国全国广播公司财经频道"
     },
     {
-      "name": "The Block",
-      "url": "https://www.theblock.co/rss",
-      "description": "深度加密货币报道"
-    },
-    {
-      "name": "CryptoSlate",
-      "url": "https://cryptoslate.com/feed/",
-      "description": "加密货币新闻和数据"
+      "name": "Wall Street Journal",
+      "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "description": "华尔街日报市场新闻"
     }
   ],
   "finance": [
