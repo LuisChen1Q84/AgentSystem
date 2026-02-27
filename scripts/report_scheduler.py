@@ -663,6 +663,8 @@ def run_registry_trends(cfg: Dict[str, Any], run_mode: bool) -> Dict[str, Any]:
     ]
     if run_mode and bool(t.get("auto_task_on_run", True)):
         cmd.append("--auto-task")
+    if run_mode and bool(t.get("auto_close_on_run", True)):
+        cmd.append("--auto-close-tasks")
     p = run_cmd(cmd)
     fail_on_error = bool(t.get("fail_on_error", False))
     ok = p.returncode == 0 or not fail_on_error
@@ -698,6 +700,8 @@ def run_state_health(cfg: Dict[str, Any], asof: dt.date, run_mode: bool) -> Dict
         cmd.extend(["--topn", str(int(s.get("topn", 10)))])
     if run_mode and bool(s.get("auto_task_on_run", True)):
         cmd.append("--auto-task")
+    if run_mode and bool(s.get("auto_close_on_run", True)):
+        cmd.append("--auto-close-tasks")
     p = run_cmd(cmd)
     fail_on_error = bool(s.get("fail_on_error", False))
     ok = p.returncode == 0 or not fail_on_error

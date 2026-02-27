@@ -520,6 +520,7 @@ report-state-health:
 	if [ -n "$(days)" ]; then EXTRA="$$EXTRA --days '$(days)'"; fi; \
 	if [ -n "$(topn)" ]; then EXTRA="$$EXTRA --topn '$(topn)'"; fi; \
 	if [ "$(auto)" = "1" ]; then EXTRA="$$EXTRA --auto-task"; fi; \
+	if [ "$(close)" = "1" ]; then EXTRA="$$EXTRA --auto-close-tasks"; fi; \
 	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/report_state_health.py $$EXTRA"
@@ -529,6 +530,7 @@ report-registry-trends:
 	EXTRA=" --config '$$CFG'"; \
 	if [ -n "$(window)" ]; then EXTRA="$$EXTRA --window '$(window)'"; fi; \
 	if [ "$(auto)" = "1" ]; then EXTRA="$$EXTRA --auto-task"; fi; \
+	if [ "$(close)" = "1" ]; then EXTRA="$$EXTRA --auto-close-tasks"; fi; \
 	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/report_registry_trends.py $$EXTRA"

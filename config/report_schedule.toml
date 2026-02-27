@@ -89,6 +89,7 @@ enabled = true
 trend_config = "/Volumes/Luis_MacData/AgentSystem/config/report_registry_trends.toml"
 window = 12
 auto_task_on_run = true
+auto_close_on_run = true
 fail_on_error = false
 
 [state_health]
@@ -99,6 +100,7 @@ weekdays = [0]
 days = 30
 topn = 10
 auto_task_on_run = true
+auto_close_on_run = true
 fail_on_error = false
 
 [data_readiness]

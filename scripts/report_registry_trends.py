@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import statistics
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any, Dict, List
@@ -15,6 +16,8 @@ from typing import Any, Dict, List
 
 ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
 CFG_DEFAULT = ROOT / "config/report_registry_trends.toml"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def load_cfg(path: Path) -> Dict[str, Any]:
@@ -102,6 +105,60 @@ def create_task_if_needed(
     subprocess.run(cmd, check=True)
     pending_titles.add(title)
     return True
+
+
+def load_pending_task_ids(events_path: Path, title_prefix: str) -> List[str]:
+    if not events_path.exists():
+        return []
+    tasks: Dict[str, Dict[str, str]] = {}
+    for line in events_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            e = json.loads(line)
+        except Exception:
+            continue
+        t = e.get("type")
+        tid = e.get("task_id")
+        if t == "task_created" and tid:
+            tasks[tid] = {"title": str(e.get("title", "")), "status": "待办"}
+        elif t == "task_completed" and tid in tasks:
+            tasks[tid]["status"] = "已完成"
+        elif t == "task_reopened" and tid in tasks:
+            tasks[tid]["status"] = "待办"
+    ids: List[str] = []
+    for tid, task in tasks.items():
+        if task.get("status") != "已完成" and task.get("title", "").startswith(title_prefix):
+            ids.append(tid)
+    return ids
+
+
+def close_tasks_if_recovered(
+    *,
+    findings: List[Dict[str, Any]],
+    events_path: Path,
+    md_path: Path,
+    title_prefix: str,
+) -> int:
+    if findings:
+        return 0
+    closed = 0
+    for tid in load_pending_task_ids(events_path, title_prefix):
+        cmd = [
+            "python3",
+            str(ROOT / "scripts/task_store.py"),
+            "--events",
+            str(events_path),
+            "--md-out",
+            str(md_path),
+            "complete",
+            "--id",
+            tid,
+        ]
+        if subprocess.run(cmd).returncode == 0:
+            closed += 1
+    return closed
 
 
 def _safe_int(v: Any) -> int:
@@ -245,6 +302,7 @@ def main() -> None:
     parser.add_argument("--out-json", default="")
     parser.add_argument("--out-md", default="")
     parser.add_argument("--auto-task", action="store_true")
+    parser.add_argument("--auto-close-tasks", action="store_true")
     args = parser.parse_args()
 
     cfg = load_cfg(Path(args.config))
@@ -268,14 +326,23 @@ def main() -> None:
     task_md = Path(str(d.get("task_md", ROOT / "任务系统/任务清单.md")))
     pending_titles = load_pending_titles(events_path)
     created = 0
+    closed = 0
     if args.auto_task:
         as_of = dt.date.fromisoformat(str(payload.get("as_of", dt.date.today().isoformat())))
         for f in findings:
             if create_task_if_needed(f, as_of, events_path, task_md, pending_titles):
                 created += 1
+    if args.auto_close_tasks:
+        closed = close_tasks_if_recovered(
+            findings=findings,
+            events_path=events_path,
+            md_path=task_md,
+            title_prefix="[台账趋势]",
+        )
 
     payload["alerts"] = findings
     payload["tasks_created"] = created
+    payload["tasks_closed"] = closed
 
     out_json = Path(args.out_json) if args.out_json else logs / "report_registry_trends.json"
     out_md = Path(args.out_md) if args.out_md else logs / "report_registry_trends.md"
@@ -286,6 +353,7 @@ def main() -> None:
     print(f"rows={len(payload.get('rows', []))}")
     print(f"alerts={len(findings)}")
     print(f"tasks_created={created}")
+    print(f"tasks_closed={closed}")
     print(f"out_json={out_json}")
     print(f"out_md={out_md}")
 
