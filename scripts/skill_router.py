@@ -20,6 +20,7 @@ try:
     from scripts.stock_market_hub import load_cfg as load_stock_hub_cfg
     from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
     from scripts.skill_parser import parse_all_skills, match_triggers, extract_parameters
+    from scripts.skill_tracer import SkillTracer
 except ModuleNotFoundError:  # direct script execution
     from mcp_connector import Registry, Runtime, parse_params
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
@@ -28,12 +29,16 @@ except ModuleNotFoundError:  # direct script execution
     from stock_market_hub import load_cfg as load_stock_hub_cfg  # type: ignore
     from stock_market_hub import pick_symbols as pick_stock_symbols  # type: ignore
     from skill_parser import parse_all_skills, match_triggers, extract_parameters  # type: ignore
+    from skill_tracer import SkillTracer  # type: ignore
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 ROUTE_DOC = ROOT / "工作流" / "技能路由.md"
 STOCK_HUB_CFG = ROOT / "config" / "stock_market_hub.toml"
 IMAGE_HUB_CFG = ROOT / "config" / "image_creator_hub.toml"
+
+# 技能追踪器
+TRACER = SkillTracer()
 
 STRONG_EXEC_KEYWORDS = {"xlsx", "excel", "表1", "表2", "填报日期", "更新这张表", "直接修改原文件"}
 PLAN_WORDS = {"计划", "打算", "准备"}
@@ -253,10 +258,18 @@ def _default_call(server: str, text: str) -> Tuple[str, Dict[str, Any]]:
 
 
 def execute_route(text: str, params_json: str) -> Dict[str, Any]:
+    import time
+    start_time = time.time()
+
     rules = parse_route_doc()
     # 使用增强版路由（结合技能元数据触发匹配）
     route = route_text_enhanced(text, rules)
     skill = route["skill"]
+
+    # 记录路由追踪
+    duration_ms = int((time.time() - start_time) * 1000)
+    trace_id = TRACER.record_route(text, route, duration_ms)
+    route["trace_id"] = trace_id
 
     if skill.startswith("stock-market-hub"):
         user_params = parse_params(params_json)
@@ -266,21 +279,28 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             hub_cfg.get("defaults", {}).get("default_universe", "global_core")
         )
         no_sync = bool(user_params.get("no_sync", False))
-        hub = run_stock_hub_report(hub_cfg, text, universe, symbols, no_sync)
-        return {
-            "route": route,
-            "execute": {"type": "stock-market-hub", "symbols": symbols, "universe": universe, "no_sync": no_sync},
-            "result": hub,
-            "meta": {
-                "mode": "free-first-global-stock",
-                "risk_tags": ["non_realtime", "public_web_sources_only", "not_investment_advice"],
-                "next_actions": [
-                    "make stock-hub q='你的问题'",
-                    "make stock-run universe='global_core' limit=30",
-                    "make mcp-observe days=7",
-                ],
-            },
-        }
+        exec_start = time.time()
+        try:
+            hub = run_stock_hub_report(hub_cfg, text, universe, symbols, no_sync)
+            TRACER.record_execution(trace_id, skill, True, duration_ms=int((time.time() - exec_start) * 1000))
+            result = {
+                "route": route,
+                "execute": {"type": "stock-market-hub", "symbols": symbols, "universe": universe, "no_sync": no_sync},
+                "result": hub,
+                "meta": {
+                    "mode": "free-first-global-stock",
+                    "risk_tags": ["non_realtime", "public_web_sources_only", "not_investment_advice"],
+                    "next_actions": [
+                        "make stock-hub q='你的问题'",
+                        "make stock-run universe='global_core' limit=30",
+                        "make mcp-observe days=7",
+                    ],
+                },
+            }
+            return result
+        except Exception as e:
+            TRACER.record_execution(trace_id, skill, False, str(e))
+            raise
 
     if skill.startswith("image-creator-hub"):
         user_params = parse_params(params_json)
