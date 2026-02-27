@@ -8,6 +8,7 @@ import base64
 import datetime as dt
 import hashlib
 import json
+import mimetypes
 import os
 import re
 import ssl
@@ -363,8 +364,12 @@ def _capabilities(language: str, styles: Dict[str, StyleSpec]) -> Dict[str, Any]
 
 
 def _missing_required(spec: StyleSpec, values: Dict[str, Any]) -> List[str]:
+    has_ref = bool(str(values.get("reference_image", "")).strip()) or bool(values.get("reference_files"))
     missing = []
     for key in spec.required:
+        # 对图生图场景放宽：有参考图时，可不强制要求部分文本字段
+        if has_ref and key in {"character", "subject", "product", "logo_or_brand", "meme_description"}:
+            continue
         val = values.get(key)
         if val is None or str(val).strip() == "":
             missing.append(key)
@@ -409,6 +414,8 @@ def _infer_style_by_inputs(group: str, values: Dict[str, Any]) -> str | None:
         if has("city"):
             return "city_diorama"
     if group == "character-generator":
+        if has_ref:
+            return "stylized_character"
         if has("action") or has("expression"):
             return "chibi"
         return "action_figure"
@@ -423,6 +430,8 @@ def _infer_style_by_inputs(group: str, values: Dict[str, Any]) -> str | None:
             return "stylized_character"
         if has("subject"):
             return "low_poly"
+        if has_ref:
+            return "stylized_character"
     return None
 
 
@@ -495,6 +504,87 @@ def _default_example_values(style_id: str) -> Dict[str, Any]:
         "stylized_character": {"character": "young woman portrait"},
     }
     return examples.get(style_id, {})
+
+
+def _is_url(s: str) -> bool:
+    t = (s or "").strip().lower()
+    return t.startswith("http://") or t.startswith("https://")
+
+
+def _is_data_url(s: str) -> bool:
+    return (s or "").strip().lower().startswith("data:image/")
+
+
+def _local_file_to_data_url(path: str) -> str:
+    p = Path(path).expanduser()
+    if not p.is_absolute():
+        p = (ROOT / p).resolve()
+    if not p.exists() or not p.is_file():
+        return ""
+    mime, _ = mimetypes.guess_type(str(p))
+    if not mime or not mime.startswith("image/"):
+        mime = "image/png"
+    b64 = base64.b64encode(p.read_bytes()).decode("ascii")
+    return f"data:{mime};base64,{b64}"
+
+
+def _normalize_reference_files(values: Dict[str, Any], cfg: Dict[str, Any]) -> List[str]:
+    defaults = cfg.get("defaults", {})
+    max_refs = max(1, int(defaults.get("reference_max_count", 4)))
+    embed_local = bool(defaults.get("embed_local_reference_as_data_url", True))
+    raw: List[str] = [str(x).strip() for x in values.get("reference_files", []) if str(x).strip()]
+    if values.get("reference_image"):
+        raw.append(str(values.get("reference_image")).strip())
+
+    out: List[str] = []
+    for x in raw:
+        if _is_url(x) or _is_data_url(x):
+            out.append(x)
+            continue
+        if embed_local:
+            as_data = _local_file_to_data_url(x)
+            if as_data:
+                out.append(as_data)
+                continue
+        # 本地文件无法编码时，跳过，避免下游 API 报错
+    return out[:max_refs]
+
+
+def _generation_mode(reference_files: List[str]) -> str:
+    return "img2img" if reference_files else "text2img"
+
+
+def _quality_suffix(language: str, cfg: Dict[str, Any], mode: str) -> str:
+    d = cfg.get("defaults", {})
+    if not bool(d.get("prompt_enhance", True)):
+        return ""
+    if language == "zh":
+        base = str(
+            d.get(
+                "prompt_quality_suffix_zh",
+                "画面需主体明确、构图干净、细节真实、材质可信、光影自然、无水印无文字。",
+            )
+        )
+        if mode == "img2img":
+            base += " 保持参考图核心特征与轮廓，不改变主体身份。"
+        return base
+    base = str(
+        d.get(
+            "prompt_quality_suffix_en",
+            "Clean composition, clear subject, realistic materials, natural lighting, high detail, no watermark, no text.",
+        )
+    )
+    if mode == "img2img":
+        base += " Preserve key identity and silhouette from reference image."
+    return base
+
+
+def _enhance_prompt(prompt: str, language: str, cfg: Dict[str, Any], mode: str) -> str:
+    suffix = _quality_suffix(language, cfg, mode).strip()
+    if not suffix:
+        return prompt
+    sep = " " if language == "en" else "。"
+    return f"{prompt}{sep}{suffix}"
 
 
 def _classify_error(msg: str) -> str:
@@ -1027,9 +1117,9 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
         }
 
     prompt = _replace_tokens(spec.template, merged)
-    ref_files = [str(x) for x in values.get("reference_files", []) if str(x).strip()]
-    if values.get("reference_image"):
-        ref_files.append(str(values.get("reference_image")))
+    ref_files = _normalize_reference_files(values, cfg)
+    gen_mode = _generation_mode(ref_files)
+    prompt = _enhance_prompt(prompt, language, cfg, gen_mode)
 
     n = 2 if try_mode else 1
 
@@ -1069,7 +1159,7 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
         "ok": True,
         "mode": "generated",
         "language": language,
-        "route": {"subagent": spec.group, "style_id": spec.style_id},
+        "route": {"subagent": spec.group, "style_id": spec.style_id, "generation_mode": gen_mode},
         "prompt": prompt,
         "backend": gen_meta.get("backend", "unknown"),
         "deliver_assets": {"items": [{"path": p} for p in paths]},

@@ -24,9 +24,14 @@ minimax_enable_live_style = false
 minimax_default_style_type = "漫画"
 minimax_default_style_weight = 0.8
 minimax_add_aigc_watermark = false
+reference_max_count = 4
+embed_local_reference_as_data_url = true
+prompt_enhance = true
+prompt_quality_suffix_zh = "画面需主体明确、构图干净、细节真实、材质可信、光影自然、无水印无文字。"
+prompt_quality_suffix_en = "Clean composition, clear subject, realistic materials, natural lighting, high detail, no watermark, no text."
 
 [routes]
-"character-generator" = ["人物", "角色", "手办", "玩偶", "肖像", "人像", "chibi", "portrait", "character"]
+"character-generator" = ["人物", "角色", "手办", "玩偶", "肖像", "人像", "chibi", "portrait", "character", "图生图", "img2img", "reference"]
 "scene-generator" = ["城市", "地标", "建筑", "房间", "场景", "电影", "weather", "city", "scene", "landmark"]
 "product-generator" = ["logo", "品牌", "店铺", "产品", "广告", "brand", "product"]
 "style-transformer" = ["风格", "低多边形", "转换", "knolling", "表情包", "meme", "style", "low-poly"]
@@ -51,3 +56,5 @@ minimax_add_aigc_watermark = false
 "裸眼3d" = "glassesfree_3d"
 "knolling" = "knolling"
 "风格化3d角色" = "stylized_character"
+"图生图" = "stylized_character"
+"img2img" = "stylized_character"

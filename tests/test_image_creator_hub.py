@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.image_creator_hub import CFG_DEFAULT, _provider_order, load_cfg, run_request
+from scripts.image_creator_hub import CFG_DEFAULT, _normalize_reference_files, _provider_order, load_cfg, run_request
 
 
 class ImageCreatorHubTest(unittest.TestCase):
@@ -43,6 +44,27 @@ class ImageCreatorHubTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out["mode"], "generated")
         self.assertEqual(out.get("backend"), "mock")
+
+    def test_local_reference_file_is_embedded_and_img2img_mode(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            img = Path(td) / "ref.png"
+            img.write_bytes(b"\x89PNG\r\n\x1a\n")
+            refs = _normalize_reference_files({"reference_image": str(img)}, self.cfg)
+            self.assertTrue(refs)
+            self.assertTrue(refs[0].startswith("data:image/"))
+            out = run_request(
+                self.cfg,
+                "图生图，参考这张图做风格化3D角色",
+                {"reference_image": str(img), "character": "urban portrait"},
+            )
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["mode"], "generated")
+            self.assertEqual(out["route"]["generation_mode"], "img2img")
+
+    def test_prompt_enhanced_suffix(self):
+        out = run_request(self.cfg, "帮我做一个产品3D渲染", {"product": "wireless earbuds"})
+        self.assertTrue(out["ok"])
+        self.assertIn("无水印无文字", out["prompt"])
 
 
 if __name__ == "__main__":
