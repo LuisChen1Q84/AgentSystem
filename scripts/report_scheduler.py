@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import subprocess
+import sys
 import time
 import tomllib
 from pathlib import Path
@@ -16,6 +17,27 @@ from typing import Any, Dict, List
 
 ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
 CFG_DEFAULT = ROOT / "config/report_schedule.toml"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.errors import LockError
+from core.task_model import create_run_context
+
+
+RUN_META: Dict[str, str] = {"trace_id": "", "run_id": ""}
+
+
+def set_run_meta(trace_id: str, run_id: str) -> None:
+    RUN_META["trace_id"] = trace_id
+    RUN_META["run_id"] = run_id
+
+
+def run_cmd(cmd: List[str]) -> subprocess.CompletedProcess[Any]:
+    env = os.environ.copy()
+    if RUN_META.get("trace_id"):
+        env["AGENT_TRACE_ID"] = RUN_META["trace_id"]
+    if RUN_META.get("run_id"):
+        env["AGENT_RUN_ID"] = RUN_META["run_id"]
+    return subprocess.run(cmd, env=env)
 
 
 def load_cfg(path: Path) -> Dict[str, Any]:
@@ -49,7 +71,7 @@ def acquire_lock(lock_file: Path, stale_lock_seconds: int) -> int:
         if age > stale_lock_seconds:
             lock_file.unlink(missing_ok=True)
         else:
-            raise RuntimeError(f"lock存在且未过期: {lock_file}")
+            raise LockError("lock存在且未过期", lock_file=str(lock_file), age=age)
 
     payload = {"pid": os.getpid(), "ts": now}
     fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
@@ -79,7 +101,7 @@ def run_with_retry(
     delay = float(backoff_seconds)
     for i in range(1, max_attempts + 1):
         start = time.time()
-        p = subprocess.run(cmd)
+        p = run_cmd(cmd)
         end = time.time()
         info = {
             "attempt": i,
@@ -87,6 +109,8 @@ def run_with_retry(
             "started_at": dt.datetime.fromtimestamp(start).isoformat(timespec="seconds"),
             "ended_at": dt.datetime.fromtimestamp(end).isoformat(timespec="seconds"),
             "duration_sec": round(end - start, 3),
+            "trace_id": RUN_META.get("trace_id", ""),
+            "run_id": RUN_META.get("run_id", ""),
         }
         attempts.append(info)
         if p.returncode == 0:
@@ -125,7 +149,7 @@ def run_watchdog(
         cmd.extend(["--readiness-json", str(readiness_json)])
     if run_mode and bool(w.get("auto_task_on_run", True)):
         cmd.append("--auto-task")
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(w.get("fail_on_watchdog_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -162,7 +186,7 @@ def run_governance(
         cmd.extend(["--scheduler-json", str(scheduler_json)])
     if readiness_json is not None:
         cmd.extend(["--readiness-json", str(readiness_json)])
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(g.get("fail_on_governance_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -191,7 +215,7 @@ def run_control_tower(
         "--target-month",
         target,
     ]
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(c.get("fail_on_control_tower_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -222,7 +246,7 @@ def run_remediation(
         "--target-month",
         target,
     ]
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(r.get("fail_on_remediation_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -255,7 +279,7 @@ def run_remediation_runner(
         cmd.append("--run")
         if bool(rr.get("auto_close_on_run", True)):
             cmd.append("--auto-close-watch-tasks")
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(rr.get("fail_on_runner_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -286,7 +310,7 @@ def run_learning(
         "--target-month",
         target,
     ]
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(l.get("fail_on_learning_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -320,7 +344,7 @@ def run_escalation(
     ]
     if run_mode and bool(e.get("auto_task_on_run", True)):
         cmd.append("--auto-task")
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(e.get("fail_on_escalation_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -354,7 +378,7 @@ def run_release_gate(
     readiness_json = ROOT / "日志/datahub_quality_gate" / f"data_readiness_{target}.json"
     if readiness_json.exists():
         cmd.extend(["--readiness-json", str(readiness_json)])
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     rc_ok = p.returncode == 0
     ok = rc_ok
     if bool(g.get("fail_on_hold", False)) and rc_ok:
@@ -395,7 +419,7 @@ def run_registry(
         "--target-month",
         target,
     ]
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(r.get("fail_on_registry_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -426,7 +450,7 @@ def run_data_readiness(
         "--target-month",
         target,
     ]
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     ok = p.returncode == 0
     if bool(r.get("fail_on_not_ready", False)):
         js = ROOT / "日志/datahub_quality_gate" / f"data_readiness_{target}.json"
@@ -477,7 +501,7 @@ def run_task_reconcile(
     ]
     if run_mode and bool(r.get("run_on_schedule", False)):
         cmd.append("--run")
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(r.get("fail_on_reconcile_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -508,7 +532,7 @@ def run_ops_brief(
         "--target-month",
         target,
     ]
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(o.get("fail_on_ops_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -542,7 +566,7 @@ def run_sla(
     ]
     if run_mode and bool(s.get("auto_task_on_run", True)):
         cmd.append("--auto-task")
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(s.get("fail_on_sla_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -573,7 +597,7 @@ def run_action_center(
         "--target-month",
         target,
     ]
-    p = subprocess.run(cmd)
+    p = run_cmd(cmd)
     fail_on_error = bool(a.get("fail_on_action_error", False))
     ok = p.returncode == 0 or not fail_on_error
     return {
@@ -592,6 +616,8 @@ def main() -> None:
     parser.add_argument("--profile", default="", help="optional override")
     parser.add_argument("--target-month", default="", help="optional YYYYMM")
     parser.add_argument("--run", action="store_true", help="execute orchestration, default dry-run")
+    parser.add_argument("--trace-id", default="", help="optional trace id")
+    parser.add_argument("--run-id", default="", help="optional run id")
     args = parser.parse_args()
 
     cfg = load_cfg(Path(args.config))
@@ -602,11 +628,22 @@ def main() -> None:
     logs_dir = Path(d["logs_dir"])
     logs_dir.mkdir(parents=True, exist_ok=True)
     target = args.target_month or f"{asof.year}{asof.month:02d}"
+    run_ctx = create_run_context(
+        as_of=asof,
+        profile=profile,
+        target_month=target,
+        dry_run=not args.run,
+        trace_id=args.trace_id,
+        run_id=args.run_id,
+    )
+    set_run_meta(run_ctx.trace_id, run_ctx.run_id)
 
     try:
         lock_ts = acquire_lock(lock_file, int(d.get("stale_lock_seconds", 21600)))
-    except RuntimeError as e:
+    except LockError as e:
         print(f"as_of={asof.isoformat()}")
+        print(f"trace_id={run_ctx.trace_id}")
+        print(f"run_id={run_ctx.run_id}")
         print("ok=0")
         print(f"reason={e}")
         raise SystemExit(3)
@@ -638,6 +675,8 @@ def main() -> None:
         ok = bool(result["ok"])
         scheduler_context_path = logs_dir / "_scheduler_context_runtime.json"
         scheduler_context = {
+            "trace_id": run_ctx.trace_id,
+            "run_id": run_ctx.run_id,
             "as_of": asof.isoformat(),
             "profile": profile,
             "target_month": target,
@@ -668,6 +707,8 @@ def main() -> None:
             ok = ok and bool(gate_result.get("ok", True))
             report = {
                 "as_of": asof.isoformat(),
+                "trace_id": run_ctx.trace_id,
+                "run_id": run_ctx.run_id,
                 "profile": profile,
                 "target_month": target,
                 "dry_run": int(not args.run),
@@ -693,6 +734,8 @@ def main() -> None:
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
             )
             print(f"as_of={asof.isoformat()}")
+            print(f"trace_id={run_ctx.trace_id}")
+            print(f"run_id={run_ctx.run_id}")
             print(f"profile={profile}")
             print(f"dry_run={int(not args.run)}")
             print(f"ok={int(ok)}")
@@ -732,6 +775,8 @@ def main() -> None:
         ok = ok and bool(action_result.get("ok", True))
         report = {
             "as_of": asof.isoformat(),
+            "trace_id": run_ctx.trace_id,
+            "run_id": run_ctx.run_id,
             "profile": profile,
             "target_month": target,
             "dry_run": int(not args.run),
@@ -771,6 +816,8 @@ def main() -> None:
     )
 
     print(f"as_of={asof.isoformat()}")
+    print(f"trace_id={run_ctx.trace_id}")
+    print(f"run_id={run_ctx.run_id}")
     print(f"profile={profile}")
     print(f"dry_run={int(not args.run)}")
     print(f"ok={int(ok)}")
