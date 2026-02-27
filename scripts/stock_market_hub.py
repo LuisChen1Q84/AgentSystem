@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import re
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any, Dict, List
@@ -20,6 +21,9 @@ except ModuleNotFoundError:
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 CFG_DEFAULT = ROOT / "config" / "stock_market_hub.toml"
 
 SYMBOL_PATTERN = re.compile(r"(?<![A-Za-z0-9.])([A-Za-z]{1,6}(?:\.[A-Za-z]{1,4})?|\d{6})(?![A-Za-z0-9.])")
@@ -280,9 +284,33 @@ def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str
         "portfolio_backtest": portfolio_backtest,
         "freefirst": freefirst,
         "quality_gate": quality_gate,
+        "prompt_packet": compose_prompt_v2(
+            objective="Build global market strategy brief",
+            language="zh",
+            context={"query": query, "universe": universe, "symbols": symbols},
+            references=["stock_quant analyze/backtest", "mcp_freefirst coverage"],
+            constraints=[
+                "Do not provide investment advice",
+                "Mark low-coverage output as limited mode",
+                "Expose support/resistance and risk notes",
+            ],
+            output_contract=["Include quality gate status", "Include backtest summary", "Include portfolio constraints"],
+            negative_constraints=["Do not hide data quality issues", "Do not claim real-time accuracy when coverage is low"],
+        ),
         "report_md": str(out_md),
         "report_json": str(out_json),
     }
+    payload["loop_closure"] = build_loop_closure(
+        skill="stock-market-hub",
+        status="completed" if quality_gate.get("passed", False) else "ok",
+        reason="" if quality_gate.get("passed", False) else "coverage_limited_mode",
+        evidence={
+            "coverage_rate": freefirst.get("coverage_rate", 0),
+            "analyze_count": analyze.get("count", 0),
+            "portfolio_ok": int(bool(portfolio.get("ok", False))),
+        },
+        next_actions=["覆盖率不足时先扩充 symbols 再回测", "高波动阶段建议降低 leverage"],
+    )
     out_md.write_text(render_md(payload), encoding="utf-8")
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 

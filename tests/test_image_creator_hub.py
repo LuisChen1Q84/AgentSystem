@@ -28,6 +28,8 @@ class ImageCreatorHubTest(unittest.TestCase):
         out = run_request(self.cfg, "试试看低多边形", {})
         self.assertTrue(out["ok"])
         self.assertEqual(out["mode"], "generated")
+        self.assertIn("prompt_packet", out)
+        self.assertIn("loop_closure", out)
         items = out["deliver_assets"]["items"]
         self.assertEqual(len(items), 2)
         for it in items:

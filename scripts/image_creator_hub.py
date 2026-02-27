@@ -12,6 +12,7 @@ import mimetypes
 import os
 import re
 import ssl
+import sys
 import time
 import tomllib
 import urllib.error
@@ -22,6 +23,9 @@ from typing import Any, Dict, List, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 CFG_DEFAULT = ROOT / "config" / "image_creator_hub.toml"
 
 PNG_1X1 = base64.b64decode(
@@ -587,6 +591,22 @@ def _enhance_prompt(prompt: str, language: str, cfg: Dict[str, Any], mode: str) 
     return f"{prompt}{sep}{suffix}"
 
 
+def _negative_constraints(language: str) -> List[str]:
+    if language == "zh":
+        return [
+            "不要生成水印、二维码、版权签名",
+            "不要生成多余文字覆盖主体",
+            "不要出现畸形手部、错位五官、重复肢体",
+            "不要让主体出画或严重遮挡",
+        ]
+    return [
+        "No watermark, QR code, or signature",
+        "No unnecessary text overlay",
+        "No deformed hands/faces or duplicated limbs",
+        "No severe cropping of the main subject",
+    ]
+
+
 def _classify_error(msg: str) -> str:
     low = (msg or "").lower()
     if "401" in low or "unauthorized" in low:
@@ -1120,6 +1140,20 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
     ref_files = _normalize_reference_files(values, cfg)
     gen_mode = _generation_mode(ref_files)
     prompt = _enhance_prompt(prompt, language, cfg, gen_mode)
+    prompt_packet = compose_prompt_v2(
+        objective=f"Generate {spec.style_id}",
+        language=language,
+        context={"subagent": spec.group, "style_id": spec.style_id, "generation_mode": gen_mode},
+        references=ref_files,
+        constraints=[
+            "Prefer realistic material and lighting consistency",
+            "Keep composition clean and centered",
+            "Respect selected style identity",
+        ],
+        output_contract=["Return image assets only", "At least 1 valid image path"],
+        negative_constraints=_negative_constraints(language),
+    )
+    prompt = f"{prompt}\n\n{prompt_packet['user_prompt']}"
 
     n = 2 if try_mode else 1
 
@@ -1160,12 +1194,19 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
         "mode": "generated",
         "language": language,
         "route": {"subagent": spec.group, "style_id": spec.style_id, "generation_mode": gen_mode},
+        "prompt_packet": prompt_packet,
         "prompt": prompt,
         "backend": gen_meta.get("backend", "unknown"),
         "deliver_assets": {"items": [{"path": p} for p in paths]},
         "response_text": "<deliver_assets>\n"
         + "\n".join([f"<item><path>{p}</path></item>" for p in paths])
         + "\n</deliver_assets>",
+        "loop_closure": build_loop_closure(
+            skill="image-creator-hub",
+            status="generated",
+            evidence={"backend": gen_meta.get("backend", ""), "assets": len(paths), "generation_mode": gen_mode},
+            next_actions=["提升一致性可增加参考图", "对风格偏差可切换 style_id 重试"],
+        ),
     }
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 try:
+    from core.skill_intelligence import build_loop_closure
     from core.skill_guard import SkillQualityGuard
     from scripts.mcp_connector import Registry, Runtime, parse_params
     from scripts.image_creator_hub import load_cfg as load_image_hub_cfg
@@ -23,6 +24,7 @@ try:
     from scripts.skill_parser import parse_all_skills, match_triggers, extract_parameters
     from scripts.skill_tracer import SkillTracer
 except ModuleNotFoundError:  # direct script execution
+    from core.skill_intelligence import build_loop_closure
     from core.skill_guard import SkillQualityGuard
     from mcp_connector import Registry, Runtime, parse_params
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
@@ -292,6 +294,13 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                     "make skills-optimize auto=1 close=1",
                 ],
             },
+            "loop_closure": build_loop_closure(
+                skill=skill,
+                status="advisor",
+                reason=guard.reason,
+                evidence={"quality_guard": guard.to_dict()},
+                next_actions=["提升技能评分后再执行 operator 模式"],
+            ),
         }
 
     if skill.startswith("stock-market-hub"):
@@ -319,6 +328,12 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                         "make mcp-observe days=7",
                     ],
                 },
+                "loop_closure": build_loop_closure(
+                    skill=skill,
+                    status="completed",
+                    evidence={"symbols": symbols, "universe": universe, "coverage_rate": hub.get("freefirst", {}).get("coverage_rate", 0)},
+                    next_actions=["按质量闸门检查 limited/deep 模式"],
+                ),
             }
             return result
         except Exception as e:
@@ -346,6 +361,12 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                         "make skill-execute text='给我做一个Q版品牌店铺图' params='{\"brand\":\"Nike\"}'",
                     ],
                 },
+                "loop_closure": build_loop_closure(
+                    skill=skill,
+                    status="generated" if result.get("ok") else "failed",
+                    evidence={"backend": result.get("backend", ""), "mode": result.get("mode", ""), "guard": guard.to_dict()},
+                    next_actions=["若效果不佳，补充 reference_image 或更换 style_id"],
+                ),
             }
         except Exception as e:
             TRACER.record_execution(trace_id, skill, False, str(e))
@@ -412,6 +433,12 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                     "make skill-execute text='采集科技新闻'",
                 ],
             },
+            "loop_closure": build_loop_closure(
+                skill=skill,
+                status="completed" if isinstance(output, str) and "执行错误" not in output else "failed",
+                evidence={"cmd": cmd},
+                next_actions=["若摘要为空，先执行 collect 再 generate"],
+            ),
         }
 
     if "mcp-connector" in skill:
@@ -448,12 +475,25 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             "execute": {"type": "mcp", "server": server, "tool": tool, "params": base_params},
             "result": result,
             "meta": freefirst,
+            "loop_closure": build_loop_closure(
+                skill=skill,
+                status="completed",
+                evidence={"server": server, "tool": tool, "quality_guard": guard.to_dict()},
+                next_actions=["结果不足时切换更具体 skill 或补充 params-json"],
+            ),
         }
 
     if skill == "clarify":
         return {
             "route": route,
             "execute": {"type": "clarify", "message": "无法明确匹配技能，请补充目标和输入数据"},
+            "loop_closure": build_loop_closure(
+                skill=skill,
+                status="advisor",
+                reason="clarify_required",
+                evidence={"quality_guard": guard.to_dict()},
+                next_actions=["补充目标、输入和期望输出格式"],
+            ),
         }
 
     return {
@@ -462,6 +502,12 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             "type": "skill-hint",
             "message": f"命中技能 {skill}，建议进入对应工作流执行",
         },
+        "loop_closure": build_loop_closure(
+            skill=skill,
+            status="ok",
+            evidence={"quality_guard": guard.to_dict()},
+            next_actions=["进入对应工作流并携带 params-json"],
+        ),
     }
 
 
