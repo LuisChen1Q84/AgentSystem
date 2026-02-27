@@ -14,3 +14,18 @@ minimax-xlsx = "delivery-dataops"
 serp-api = "tooling-external"
 finance-industry = "domain-pack-finance"
 ai-industry = "domain-pack-research"
+
+[builtins.mcp-generalist]
+layer = "tooling-external"
+description = "MCP universal fallback executor"
+maturity = "production-ready"
+
+[builtins.image-creator-hub]
+layer = "domain-pack-creative"
+description = "Image generation multi-agent capability"
+maturity = "hardened"
+
+[builtins.stock-market-hub]
+layer = "domain-pack-finance"
+description = "Stock market analysis and reporting"
+maturity = "hardened"

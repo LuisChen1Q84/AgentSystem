@@ -1,0 +1,28 @@
+[risk_order]
+low = 1
+medium = 2
+high = 3
+
+[profiles.strict]
+allowed_layers = [
+  "core-generalist",
+  "core-governance",
+  "delivery-content",
+  "delivery-dataops",
+  "tooling-external",
+  "domain-pack-finance",
+]
+blocked_maturity = ["needs-contract"]
+max_risk_level = "medium"
+
+[profiles.adaptive]
+allowed_layers = ["*"]
+blocked_maturity = []
+max_risk_level = "high"
+
+[strategy_risk]
+mcp-generalist = "medium"
+digest = "low"
+mckinsey-ppt = "low"
+image-creator-hub = "medium"
+stock-market-hub = "high"

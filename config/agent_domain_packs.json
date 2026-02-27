@@ -1,0 +1,36 @@
+{
+  "packs": {
+    "general": {
+      "enabled": true,
+      "layers": [
+        "core-generalist",
+        "core-governance",
+        "delivery-content",
+        "delivery-dataops",
+        "tooling-external"
+      ],
+      "description": "Core general capabilities"
+    },
+    "finance": {
+      "enabled": true,
+      "layers": [
+        "domain-pack-finance"
+      ],
+      "description": "Financial analysis capabilities"
+    },
+    "research": {
+      "enabled": false,
+      "layers": [
+        "domain-pack-research"
+      ],
+      "description": "Research and trend analysis capabilities"
+    },
+    "creative": {
+      "enabled": true,
+      "layers": [
+        "domain-pack-creative"
+      ],
+      "description": "Creative generation capabilities"
+    }
+  }
+}

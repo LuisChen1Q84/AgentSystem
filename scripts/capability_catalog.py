@@ -82,6 +82,7 @@ def _contract_checks(skill: SkillMeta) -> Dict[str, Any]:
 def scan(skills: List[SkillMeta] | None = None, cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
     payload = cfg or load_cfg(CFG_DEFAULT)
     layer_mapping = payload.get("layer_mapping", {}) if isinstance(payload, dict) else {}
+    builtins = payload.get("builtins", {}) if isinstance(payload, dict) else {}
     rows: List[Dict[str, Any]] = []
     gaps: List[Dict[str, Any]] = []
 
@@ -104,6 +105,25 @@ def scan(skills: List[SkillMeta] | None = None, cfg: Dict[str, Any] | None = Non
         rows.append(row)
         if contract["issues"]:
             gaps.append({"skill": skill.name, "issues": contract["issues"]})
+
+    for name, meta in (builtins.items() if isinstance(builtins, dict) else []):
+        if any(str(r.get("skill", "")) == str(name) for r in rows):
+            continue
+        layer = str((meta or {}).get("layer", "core-generalist"))
+        maturity = str((meta or {}).get("maturity", "hardened"))
+        row = {
+            "skill": str(name),
+            "layer": layer,
+            "version": "builtin",
+            "description": str((meta or {}).get("description", "")),
+            "trigger_count": 0,
+            "parameter_count": 0,
+            "call_count": 1,
+            "contract_score": 4 if maturity == "production-ready" else 3,
+            "maturity": maturity,
+            "issues": [],
+        }
+        rows.append(row)
 
     rows.sort(key=lambda x: (x["layer"], x["skill"]))
     layer_counts = Counter(str(r["layer"]) for r in rows)

@@ -2,6 +2,9 @@
 profile = "strict"
 log_dir = "日志/agent_os"
 capability_catalog_cfg = "config/capability_catalog.toml"
+governance_cfg = "config/agent_governance.toml"
+packs_cfg = "config/agent_domain_packs.json"
+profile_overrides_file = "config/agent_profile_overrides.json"
 
 [profiles.strict]
 execution_mode = "strict"

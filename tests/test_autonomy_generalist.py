@@ -28,6 +28,27 @@ class AutonomyGeneralistTest(unittest.TestCase):
                 self.assertTrue(Path(item["path"]).exists())
             self.assertTrue(memory_file.exists())
 
+    def test_allowed_strategies_filter(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            root = Path(td)
+            out = run_request(
+                "请做一份投资分析并给出策略",
+                {
+                    "dry_run": True,
+                    "allowed_strategies": ["mcp-generalist"],
+                    "memory_file": str(root / "memory.json"),
+                    "log_dir": str(root / "autonomy_logs"),
+                },
+            )
+            self.assertTrue(out["ok"])
+            candidates = out.get("candidates", [])
+            self.assertEqual(len(candidates), 1)
+            self.assertEqual(candidates[0]["strategy"], "mcp-generalist")
+            self.assertEqual(
+                out.get("candidate_filter", {}).get("allowed_strategies", []),
+                ["mcp-generalist"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

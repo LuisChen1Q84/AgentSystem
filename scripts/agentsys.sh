@@ -1057,6 +1057,25 @@ run_agent_os() {
   automation_log "INFO" "agent" "done"
 }
 
+run_agent_observe() {
+  automation_log "INFO" "agent-observe" "start"
+  python3 "${ROOT_DIR}/scripts/agent_os_observability.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "agent-observe" "done"
+}
+
+run_agent_recommend() {
+  automation_log "INFO" "agent-recommend" "start"
+  python3 "${ROOT_DIR}/scripts/agent_profile_recommender.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "agent-recommend" "done"
+}
+
+run_agent_pack() {
+  local subcmd="${1:-list}"
+  shift || true
+  automation_log "INFO" "agent-pack" "subcmd=${subcmd}"
+  python3 "${ROOT_DIR}/scripts/agent_pack_manager.py" "${subcmd}" "$@" || return "${E_SKILL}"
+}
+
 run_autonomy_observe() {
   automation_log "INFO" "autonomy-observe" "start"
   python3 "${ROOT_DIR}/scripts/autonomy_observability.py" "$@" || return "${E_SKILL}"
@@ -1211,6 +1230,9 @@ Usage:
   scripts/agentsys.sh skill-route [route|execute|dump] [args...]
   scripts/agentsys.sh autonomous "<task>" ['{"autonomous":true,"dry_run":false}']
   scripts/agentsys.sh agent "<task>" ['{"profile":"strict","dry_run":true}']
+  scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
+  scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
+  scripts/agentsys.sh agent-pack [list|enable|disable] [--name <pack>] [--cfg <path>]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
@@ -1309,6 +1331,9 @@ case "${cmd}" in
   skill-route) shift; run_skill_route "${1:-route}" "${@:2}" ;;
   autonomous) shift; run_autonomous "${1:-}" "${2:-}" ;;
   agent) shift; run_agent_os "${1:-}" "${2:-}" ;;
+  agent-observe) shift; run_agent_observe "$@" ;;
+  agent-recommend) shift; run_agent_recommend "$@" ;;
+  agent-pack) shift; run_agent_pack "${1:-list}" "${@:2}" ;;
   autonomy-observe) shift; run_autonomy_observe "$@" ;;
   autonomy-eval) shift; run_autonomy_eval "$@" ;;
   capability-catalog) shift; run_capability_catalog "$@" ;;

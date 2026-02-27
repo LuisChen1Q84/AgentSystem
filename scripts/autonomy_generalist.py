@@ -46,6 +46,15 @@ SUPPORTED_SKILLS = {
 }
 
 
+def _as_name_set(value: Any) -> set[str]:
+    if isinstance(value, str):
+        items = [x.strip() for x in value.split(",") if x.strip()]
+        return {x for x in items}
+    if isinstance(value, list):
+        return {str(x).strip() for x in value if str(x).strip()}
+    return set()
+
+
 def _now() -> str:
     return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -154,7 +163,14 @@ def _skill_score(text: str, skill: SkillMeta) -> Tuple[float, Dict[str, Any]]:
     return score, {"trigger_hits": hits, "token_overlap": overlap}
 
 
-def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any], execution_mode: str) -> List[Dict[str, Any]]:
+def _plan_candidates(
+    text: str,
+    cfg: Dict[str, Any],
+    memory: Dict[str, Any],
+    execution_mode: str,
+    allowed_strategies: set[str],
+    blocked_strategies: set[str],
+) -> List[Dict[str, Any]]:
     defaults = cfg.get("defaults", {})
     min_skill_score = float(defaults.get("min_skill_score", 0.12))
     prior = float(defaults.get("memory_prior", 2.0))
@@ -200,6 +216,13 @@ def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any], exe
             "score_detail": {"skill_score": 0.45, "memory_rate": round(mcp_mem, 4)},
         }
     )
+
+    if allowed_strategies:
+        rows = [r for r in rows if str(r.get("strategy", "")) in allowed_strategies]
+    if blocked_strategies:
+        rows = [r for r in rows if str(r.get("strategy", "")) not in blocked_strategies]
+    if not rows:
+        return []
 
     # 稳定排序：score 降序 + priority 升序 + strategy 字典序
     rows.sort(key=lambda x: (-float(x["score"]), int(x.get("priority", 999)), str(x["strategy"])))
@@ -273,11 +296,20 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     max_fallback_steps = max(1, int(values.get("max_fallback_steps", defaults.get("max_fallback_steps", 4))))
     ambiguity_gap_threshold = float(values.get("ambiguity_gap_threshold", defaults.get("ambiguity_gap_threshold", 0.05)))
     learning_enabled = bool(values.get("learning_enabled", defaults.get("learning_enabled", True)))
+    allowed_strategies = _as_name_set(values.get("allowed_strategies", []))
+    blocked_strategies = _as_name_set(values.get("blocked_strategies", []))
     if deterministic:
         learning_enabled = False
 
     lang = _lang(text)
-    candidates = _plan_candidates(text, cfg, memory, execution_mode=execution_mode)
+    candidates = _plan_candidates(
+        text,
+        cfg,
+        memory,
+        execution_mode=execution_mode,
+        allowed_strategies=allowed_strategies,
+        blocked_strategies=blocked_strategies,
+    )
     top_gap = round(float(candidates[0]["score"]) - float(candidates[1]["score"]), 4) if len(candidates) > 1 else 1.0
     ambiguity_flag = bool(top_gap < ambiguity_gap_threshold and len(candidates) > 1)
     ambiguity_resolution = "none"
@@ -372,6 +404,10 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         "execution_mode": execution_mode,
         "deterministic": deterministic,
         "learning_enabled": learning_enabled,
+        "candidate_filter": {
+            "allowed_strategies": sorted(list(allowed_strategies)),
+            "blocked_strategies": sorted(list(blocked_strategies)),
+        },
         "top_gap": top_gap,
         "ambiguity_flag": ambiguity_flag,
         "ambiguity_resolution": ambiguity_resolution,
@@ -384,7 +420,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         "loop_closure": build_loop_closure(
             skill="autonomy-generalist",
             status="completed" if final is not None else "advisor",
-            reason="" if final is not None else "all_strategies_failed",
+            reason="" if final is not None else ("no_candidates_after_filter" if not candidates else "all_strategies_failed"),
             evidence={
                 "attempts": len(attempts),
                 "selected": selected.get("strategy") if selected else "",
