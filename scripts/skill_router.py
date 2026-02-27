@@ -322,6 +322,63 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             },
         }
 
+    # Digest 模块处理
+    if skill == "digest":
+        import subprocess
+        user_params = parse_params(params_json)
+
+        # 解析用户意图，决定执行什么命令
+        text_lower = text.lower()
+
+        # 判断操作类型
+        if "摘要" in text or "generate" in text_lower:
+            cmd = ["python3", "scripts/digest/main.py", "digest", "generate", "--type", "daily"]
+        elif "新闻" in text or "资讯" in text or "有什么" in text:
+            cmd = ["python3", "scripts/digest/main.py", "digest", "show", "--type", "daily"]
+        elif "采集" in text or "收集" in text:
+            # 根据关键词选择预设源
+            if "商业" in text or "business" in text_lower:
+                preset = "business"
+            elif "金融" in text or "finance" in text_lower:
+                preset = "finance"
+            elif "科技" in text or "tech" in text_lower:
+                preset = "tech"
+            elif "ai" in text_lower or "人工智能" in text:
+                preset = "ai"
+            else:
+                preset = "business"  # 默认商业新闻
+            cmd = ["python3", "scripts/digest/main.py", "collect", "rss", "--preset", preset, "--limit", "20"]
+        else:
+            # 默认显示今日摘要
+            cmd = ["python3", "scripts/digest/main.py", "digest", "show", "--type", "daily"]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            output = result.stdout if result.returncode == 0 else result.stderr
+        except subprocess.TimeoutExpired:
+            output = "执行超时，请稍后再试"
+        except Exception as e:
+            output = f"执行错误: {str(e)}"
+
+        return {
+            "route": route,
+            "execute": {"type": "digest", "cmd": " ".join(cmd)},
+            "result": output,
+            "meta": {
+                "mode": "digest",
+                "next_actions": [
+                    "make skill-execute text='生成本周摘要'",
+                    "make skill-execute text='采集科技新闻'",
+                ],
+            },
+        }
+
     if "mcp-connector" in skill:
         server = _server_from_skill(skill)
         tool, base_params = _default_call(server, text)
