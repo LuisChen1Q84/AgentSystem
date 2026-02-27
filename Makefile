@@ -471,6 +471,26 @@ report-remediation-run:
 	if [ "$(close)" = "1" ]; then EXTRA="$$EXTRA --auto-close-watch-tasks"; fi; \
 	eval "python3 $(ROOT)/scripts/report_remediation_runner.py --config '$$CFG' $$EXTRA"
 
+report-runbook:
+	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi
+	@EXTRA=" --target-month '$(target)'"; \
+	if [ -n "$(asof)" ]; then EXTRA="$$EXTRA --as-of '$(asof)'"; fi; \
+	if [ -n "$(plan_json)" ]; then EXTRA="$$EXTRA --plan-json '$(plan_json)'"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/report_runbook.py $$EXTRA"
+
+report-lineage:
+	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi
+	@EXTRA=" --target-month '$(target)'"; \
+	if [ -n "$(asof)" ]; then EXTRA="$$EXTRA --as-of '$(asof)'"; fi; \
+	if [ -n "$(outdir)" ]; then EXTRA="$$EXTRA --outdir '$(outdir)'"; fi; \
+	if [ -n "$(logs_dir)" ]; then EXTRA="$$EXTRA --logs-dir '$(logs_dir)'"; fi; \
+	if [ -n "$(archive_root)" ]; then EXTRA="$$EXTRA --archive-root '$(archive_root)'"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/report_lineage_mvp.py $$EXTRA"
+
 report-learning:
 	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi
 	@CFG="$(or $(config),$(ROOT)/config/report_learning.toml)"; \
