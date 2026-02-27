@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from core.state_store import StateStore
-from scripts.report_state_health import build_payload
+from scripts.report_state_health import build_payload, evaluate_alerts
 
 
 class ReportStateHealthTest(unittest.TestCase):
@@ -21,6 +21,15 @@ class ReportStateHealthTest(unittest.TestCase):
             self.assertEqual(payload["summary"]["failed_runs"], 1)
             self.assertTrue(any(x.get("module") == "m1" for x in payload["module_stats"]))
             self.assertTrue(any(x.get("step") == "s1" for x in payload["failure_hotspots"]))
+            findings = evaluate_alerts(
+                payload,
+                {
+                    "failed_runs_threshold": 1,
+                    "fail_rate_threshold": 0.1,
+                    "hotspot_fail_count_threshold": 1,
+                },
+            )
+            self.assertGreaterEqual(len(findings), 2)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 
-from scripts.report_registry_trends import build_trends
+from scripts.report_registry_trends import build_trends, evaluate_alerts
 
 
 class ReportRegistryTrendsTest(unittest.TestCase):
@@ -33,6 +33,17 @@ class ReportRegistryTrendsTest(unittest.TestCase):
         self.assertEqual(m["error_months"], 1)
         self.assertEqual(m["release_go_rate"], 0.5)
         self.assertEqual(m["publish_ok_rate"], 0.5)
+        payload = {"as_of": "2026-02-27", **out}
+        findings = evaluate_alerts(
+            payload,
+            {
+                "release_go_rate_threshold": 0.8,
+                "publish_ok_rate_threshold": 0.8,
+                "governance_avg_threshold": 90,
+                "error_months_threshold": 0,
+            },
+        )
+        self.assertGreaterEqual(len(findings), 3)
 
 
 if __name__ == "__main__":

@@ -648,7 +648,7 @@ def run_action_center(
     }
 
 
-def run_registry_trends(cfg: Dict[str, Any]) -> Dict[str, Any]:
+def run_registry_trends(cfg: Dict[str, Any], run_mode: bool) -> Dict[str, Any]:
     t = cfg.get("registry_trends", {})
     enabled = bool(t.get("enabled", False))
     if not enabled:
@@ -657,10 +657,12 @@ def run_registry_trends(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "python3",
         str(ROOT / "scripts/report_registry_trends.py"),
         "--config",
-        str(t.get("trend_config", ROOT / "config/report_registry.toml")),
+        str(t.get("trend_config", ROOT / "config/report_registry_trends.toml")),
         "--window",
         str(int(t.get("window", 12))),
     ]
+    if run_mode and bool(t.get("auto_task_on_run", True)):
+        cmd.append("--auto-task")
     p = run_cmd(cmd)
     fail_on_error = bool(t.get("fail_on_error", False))
     ok = p.returncode == 0 or not fail_on_error
@@ -673,7 +675,7 @@ def run_registry_trends(cfg: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def run_state_health(cfg: Dict[str, Any], asof: dt.date) -> Dict[str, Any]:
+def run_state_health(cfg: Dict[str, Any], asof: dt.date, run_mode: bool) -> Dict[str, Any]:
     s = cfg.get("state_health", {})
     enabled = bool(s.get("enabled", False))
     if not enabled:
@@ -685,13 +687,17 @@ def run_state_health(cfg: Dict[str, Any], asof: dt.date) -> Dict[str, Any]:
     cmd = [
         "python3",
         str(ROOT / "scripts/report_state_health.py"),
-        "--db",
-        str(s.get("state_db", ROOT / "日志/state/system_state.db")),
-        "--days",
-        str(int(s.get("days", 30))),
-        "--topn",
-        str(int(s.get("topn", 10))),
+        "--config",
+        str(s.get("health_config", ROOT / "config/report_state_health.toml")),
     ]
+    if str(s.get("state_db", "")).strip():
+        cmd.extend(["--db", str(s.get("state_db", ""))])
+    if int(s.get("days", 0) or 0) > 0:
+        cmd.extend(["--days", str(int(s.get("days", 30)))])
+    if int(s.get("topn", 0) or 0) > 0:
+        cmd.extend(["--topn", str(int(s.get("topn", 10)))])
+    if run_mode and bool(s.get("auto_task_on_run", True)):
+        cmd.append("--auto-task")
     p = run_cmd(cmd)
     fail_on_error = bool(s.get("fail_on_error", False))
     ok = p.returncode == 0 or not fail_on_error
@@ -862,8 +868,8 @@ def main() -> None:
                 "data_readiness": readiness_result,
                 "watchdog": watch_result,
                 "release_gate": gate_result,
-                "registry_trends": run_registry_trends(cfg=cfg),
-                "state_health": run_state_health(cfg=cfg, asof=asof),
+                "registry_trends": run_registry_trends(cfg=cfg, run_mode=bool(args.run)),
+                "state_health": run_state_health(cfg=cfg, asof=asof, run_mode=bool(args.run)),
                 "skipped_due_to_data_not_ready": 1,
             }
             ok = ok and bool(report["registry_trends"].get("ok", True))
@@ -924,9 +930,9 @@ def main() -> None:
         ok = ok and bool(sla_result.get("ok", True))
         action_result = run_action_center(cfg=cfg, asof=asof, target=target)
         ok = ok and bool(action_result.get("ok", True))
-        trends_result = run_registry_trends(cfg=cfg)
+        trends_result = run_registry_trends(cfg=cfg, run_mode=bool(args.run))
         ok = ok and bool(trends_result.get("ok", True))
-        state_health_result = run_state_health(cfg=cfg, asof=asof)
+        state_health_result = run_state_health(cfg=cfg, asof=asof, run_mode=bool(args.run))
         ok = ok and bool(state_health_result.get("ok", True))
         report = {
             "as_of": asof.isoformat(),

@@ -1,0 +1,14 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+registry_jsonl = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_registry.jsonl"
+window = 12
+task_events = "/Volumes/Luis_MacData/AgentSystem/任务系统/tasks.jsonl"
+task_md = "/Volumes/Luis_MacData/AgentSystem/任务系统/任务清单.md"
+
+[rules]
+release_go_rate_threshold = 0.8
+publish_ok_rate_threshold = 0.8
+governance_avg_threshold = 80
+error_months_threshold = 1
+critical_due_days = 1
+warn_due_days = 3

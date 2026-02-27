@@ -1,0 +1,14 @@
+[defaults]
+logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
+state_db = "/Volumes/Luis_MacData/AgentSystem/日志/state/system_state.db"
+days = 30
+topn = 10
+task_events = "/Volumes/Luis_MacData/AgentSystem/任务系统/tasks.jsonl"
+task_md = "/Volumes/Luis_MacData/AgentSystem/任务系统/任务清单.md"
+
+[rules]
+failed_runs_threshold = 3
+fail_rate_threshold = 0.2
+hotspot_fail_count_threshold = 3
+critical_due_days = 1
+warn_due_days = 3

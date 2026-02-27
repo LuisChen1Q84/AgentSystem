@@ -514,18 +514,21 @@ report-failure-insights:
 	eval "python3 $(ROOT)/scripts/report_failure_insights.py $$EXTRA"
 
 report-state-health:
-	@EXTRA=""; \
+	@CFG="$(or $(config),$(ROOT)/config/report_state_health.toml)"; \
+	EXTRA=" --config '$$CFG'"; \
 	if [ -n "$(db)" ]; then EXTRA="$$EXTRA --db '$(db)'"; fi; \
 	if [ -n "$(days)" ]; then EXTRA="$$EXTRA --days '$(days)'"; fi; \
 	if [ -n "$(topn)" ]; then EXTRA="$$EXTRA --topn '$(topn)'"; fi; \
+	if [ "$(auto)" = "1" ]; then EXTRA="$$EXTRA --auto-task"; fi; \
 	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/report_state_health.py $$EXTRA"
 
 report-registry-trends:
-	@CFG="$(or $(config),$(ROOT)/config/report_registry.toml)"; \
+	@CFG="$(or $(config),$(ROOT)/config/report_registry_trends.toml)"; \
 	EXTRA=" --config '$$CFG'"; \
 	if [ -n "$(window)" ]; then EXTRA="$$EXTRA --window '$(window)'"; fi; \
+	if [ "$(auto)" = "1" ]; then EXTRA="$$EXTRA --auto-task"; fi; \
 	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/report_registry_trends.py $$EXTRA"
