@@ -1,0 +1,80 @@
+{
+  "crypto": [
+    {
+      "name": "CoinDesk",
+      "url": "https://www.coindesk.com/feed/",
+      "description": "领先的加密货币新闻网站"
+    },
+    {
+      "name": "CoinTelegraph",
+      "url": "https://cointelegraph.com/rss",
+      "description": "最大的加密货币媒体之一"
+    },
+    {
+      "name": "Decrypt",
+      "url": "https://decrypt.co/feed",
+      "description": "专注于 Web3 的新闻媒体"
+    },
+    {
+      "name": "The Block",
+      "url": "https://www.theblock.co/rss",
+      "description": "深度加密货币报道"
+    },
+    {
+      "name": "CryptoSlate",
+      "url": "https://cryptoslate.com/feed/",
+      "description": "加密货币新闻和数据"
+    }
+  ],
+  "finance": [
+    {
+      "name": "Bloomberg Markets",
+      "url": "https://feeds.bloomberg.com/markets/news.rss",
+      "description": "彭博市场新闻"
+    },
+    {
+      "name": "Reuters Finance",
+      "url": "https://www.reutersagency.com/feed/?best-topics=financ",
+      "description": "路透金融新闻"
+    },
+    {
+      "name": "Financial Times",
+      "url": "https://www.ft.com/rss/news",
+      "description": "金融时报"
+    }
+  ],
+  "tech": [
+    {
+      "name": "Hacker News",
+      "url": "https://news.ycombinator.com/rss",
+      "description": "技术新闻"
+    },
+    {
+      "name": "TechCrunch",
+      "url": "https://techcrunch.com/feed/",
+      "description": "科技媒体"
+    },
+    {
+      "name": "The Verge",
+      "url": "https://www.theverge.com/rss/index.xml",
+      "description": "科技评测和新闻"
+    }
+  ],
+  "ai": [
+    {
+      "name": "MIT Technology Review",
+      "url": "https://www.technologyreview.com/feed/",
+      "description": "MIT 技术评论"
+    },
+    {
+      "name": "OpenAI Blog",
+      "url": "https://openai.com/blog/rss.xml",
+      "description": "OpenAI 官方博客"
+    },
+    {
+      "name": "Anthropic AI",
+      "url": "https://www.anthropic.com/rss",
+      "description": "Anthropic AI 新闻"
+    }
+  ]
+}

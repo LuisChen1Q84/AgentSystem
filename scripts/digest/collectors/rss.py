@@ -4,11 +4,72 @@ RSS Collector
 RSS/Atom 订阅采集
 """
 
+import json
+import os
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import List, Dict, Optional
 import urllib.request
 import ssl
+from pathlib import Path
+
+# 配置
+AGENTSYS_ROOT = Path(__file__).parent.parent.parent
+SOURCES_FILE = Path(__file__).parent.parent / "sources.json"
+
+
+def load_presets() -> Dict:
+    """加载预置 RSS 源"""
+    if SOURCES_FILE.exists():
+        try:
+            return json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
+        except:
+            pass
+    return {}
+
+
+def get_preset_sources(preset: str) -> List[Dict]:
+    """
+    获取预置源的 URL 列表
+
+    Args:
+        preset: 预置名称 (crypto, finance, tech, ai)
+
+    Returns:
+        源列表
+    """
+    presets = load_presets()
+    return presets.get(preset, [])
+
+
+def fetch_preset(preset: str, limit_per_source: int = 10) -> List[Dict]:
+    """
+    采集预置 RSS 源
+
+    Args:
+        preset: 预置名称
+        limit_per_source: 每个源的条目数
+
+    Returns:
+        合并后的条目列表
+    """
+    sources = get_preset_sources(preset)
+    if not sources:
+        print(f"未找到预置: {preset}")
+        return []
+
+    all_items = []
+    for source in sources:
+        url = source.get("url")
+        name = source.get("name", "")
+        print(f"  采集: {name}")
+        items = fetch_rss(url, limit_per_source)
+        # 添加来源信息
+        for item in items:
+            item["source_name"] = name
+        all_items.extend(items)
+
+    return all_items
 
 
 def fetch_rss(url: str, limit: int = 20) -> List[Dict]:

@@ -29,10 +29,19 @@ def cmd_collect(args):
         print(f"获取到 {len(items)} 条结果")
 
     elif source_type == "rss":
-        url = args.url
-        print(f"获取 RSS: {url}")
-        items = rss.fetch_rss(url, limit=args.limit)
-        print(f"获取到 {len(items)} 条内容")
+        if args.preset:
+            # 采集预置源
+            print(f"采集预置源: {args.preset}")
+            items = rss.fetch_preset(args.preset, limit_per_source=args.limit)
+            print(f"获取到 {len(items)} 条内容")
+        else:
+            url = args.url
+            if not url:
+                print("请指定 --url 或 --preset")
+                return
+            print(f"获取 RSS: {url}")
+            items = rss.fetch_rss(url, limit=args.limit)
+            print(f"获取到 {len(items)} 条内容")
 
     elif source_type == "hackernews":
         story_type = args.sort or "top"
@@ -180,6 +189,7 @@ def main():
     p_collect.add_argument("source", help="来源类型 (web_search, rss, hackernews, reddit, github)")
     p_collect.add_argument("--query", "-q", help="搜索关键词")
     p_collect.add_argument("--url", "-u", help="RSS URL")
+    p_collect.add_argument("--preset", "-p", help="RSS 预置源 (crypto, finance, tech, ai)")
     p_collect.add_argument("--subreddit", help="Reddit 子版块")
     p_collect.add_argument("--language", "-l", help="编程语言")
     p_collect.add_argument("--sort", help="排序方式")
