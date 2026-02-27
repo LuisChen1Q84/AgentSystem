@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Tuple
 try:
     from core.skill_intelligence import build_loop_closure
     from core.skill_guard import SkillQualityGuard
+    from scripts import mckinsey_ppt_engine
     from scripts.mcp_connector import Registry, Runtime, parse_params
     from scripts.image_creator_hub import load_cfg as load_image_hub_cfg
     from scripts.image_creator_hub import run_request as run_image_hub_request
@@ -26,6 +27,7 @@ try:
 except ModuleNotFoundError:  # direct script execution
     from core.skill_intelligence import build_loop_closure
     from core.skill_guard import SkillQualityGuard
+    import mckinsey_ppt_engine  # type: ignore
     from mcp_connector import Registry, Runtime, parse_params
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
     from image_creator_hub import run_request as run_image_hub_request  # type: ignore
@@ -338,6 +340,34 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             return result
         except Exception as e:
             TRACER.record_execution(trace_id, skill, False, str(e))
+            raise
+
+    if skill == "mckinsey-ppt":
+        user_params = parse_params(params_json)
+        exec_start = time.time()
+        try:
+            result = mckinsey_ppt_engine.run_request(text, user_params)
+            TRACER.record_execution(trace_id, skill, True, duration_ms=int((time.time() - exec_start) * 1000))
+            return {
+                "route": route,
+                "execute": {"type": "mckinsey-ppt", "engine": "mckinsey_ppt_engine"},
+                "result": result,
+                "meta": {
+                    "mode": "deck-spec",
+                    "next_actions": [
+                        "review deck_spec_*.json and fill evidence",
+                        "convert spec to pptx in next step",
+                    ],
+                },
+                "loop_closure": build_loop_closure(
+                    skill=skill,
+                    status="completed",
+                    evidence={"assets": len(result.get("deliver_assets", {}).get("items", []))},
+                    next_actions=["补齐关键数据证据后再进入视觉精修"],
+                ),
+            }
+        except Exception as e:
+            TRACER.record_execution(trace_id, skill, False, str(e), duration_ms=int((time.time() - exec_start) * 1000))
             raise
 
     if skill.startswith("image-creator-hub"):
