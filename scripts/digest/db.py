@@ -50,11 +50,30 @@ def init_db():
             author TEXT,
             fetched_at TEXT DEFAULT (datetime('now')),
             published_at TEXT,
+            score INTEGER,
+            signal TEXT,
+            coin_symbol TEXT,
             metadata TEXT DEFAULT '{}',
             FOREIGN KEY (source_id) REFERENCES digest_sources(id) ON DELETE CASCADE,
             UNIQUE(source_id, url)
         )
     """)
+
+    # 尝试添加新字段（如果不存在）
+    try:
+        conn.execute("ALTER TABLE digest_raw_items ADD COLUMN score INTEGER")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("ALTER TABLE digest_raw_items ADD COLUMN signal TEXT")
+    except sqlite3.OperationalError:
+        pass
+
+    try:
+        conn.execute("ALTER TABLE digest_raw_items ADD COLUMN coin_symbol TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     # 摘要表
     conn.execute("""
@@ -152,16 +171,17 @@ def delete_source(source_id: int) -> bool:
 # ===== Raw Items 操作 =====
 
 def add_raw_item(source_id: int, title: str, url: str, content: str = "",
-                 author: str = "", published_at: str = None, metadata: dict = None) -> int:
+                 author: str = "", published_at: str = None, metadata: dict = None,
+                 score: int = None, signal: str = None, coin_symbol: str = None) -> int:
     """添加原始内容"""
     conn = get_db()
     try:
         cursor = conn.execute(
             """INSERT OR IGNORE INTO digest_raw_items
-               (source_id, title, url, content, author, published_at, metadata)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               (source_id, title, url, content, author, published_at, metadata, score, signal, coin_symbol)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (source_id, title, url, content, author, published_at,
-             json.dumps(metadata) if metadata else '{}')
+             json.dumps(metadata) if metadata else '{}', score, signal, coin_symbol)
         )
         conn.commit()
         item_id = cursor.lastrowid if cursor.rowcount else None
