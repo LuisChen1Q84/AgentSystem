@@ -10,6 +10,12 @@ table3_xlsx = "/Users/luis/Desktop/维护表/表3.xlsx"
 [execution]
 default_profile = "monthly_full"
 stop_on_error = true
+max_attempts = 1
+backoff_seconds = 3
+backoff_multiplier = 2.0
+timeout_seconds = 0
+enable_idempotency = true
+idempotency_state_file = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/orchestrator_idempotency.json"
 
 [profiles.monthly_full]
 description = "标准月度全链路：月报+季报(按月触发)+告警+解释+看板+摘要+归档+发布"

@@ -6,7 +6,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import subprocess
+import os
+import sys
 import tomllib
 from pathlib import Path
 from typing import Dict, List
@@ -14,6 +15,9 @@ from typing import Dict, List
 
 ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
 CFG_DEFAULT = ROOT / "config/report_orchestration.toml"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.runner import CommandRunner, RunnerConfig
 
 
 def load_cfg(path: Path) -> Dict:
@@ -101,16 +105,6 @@ def build_step_cmd(step: str, asof: dt.date, target: str, cfg: Dict) -> List[str
     raise ValueError(f"unknown step: {step}")
 
 
-def run_cmd(cmd: List[str], dry_run: bool, stop_on_error: bool) -> int:
-    print("CMD:", " ".join(cmd))
-    if dry_run:
-        return 0
-    p = subprocess.run(cmd)
-    if p.returncode != 0 and stop_on_error:
-        raise SystemExit(p.returncode)
-    return p.returncode
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Report strategy orchestrator")
     parser.add_argument("--config", default=str(CFG_DEFAULT))
@@ -118,6 +112,8 @@ def main() -> None:
     parser.add_argument("--as-of", default="", help="YYYY-MM-DD")
     parser.add_argument("--target-month", default="", help="YYYYMM, optional override")
     parser.add_argument("--run", action="store_true", help="execute commands (default dry-run)")
+    parser.add_argument("--trace-id", default="", help="optional trace id")
+    parser.add_argument("--run-id", default="", help="optional run id")
     args = parser.parse_args()
 
     cfg = load_cfg(Path(args.config))
@@ -128,8 +124,28 @@ def main() -> None:
     asof = dt.date.today() if not args.as_of else dt.datetime.strptime(args.as_of, "%Y-%m-%d").date()
     target = args.target_month or yyyymm_from_asof(asof)
     steps = list(cfg["profiles"][profile].get("steps", []))
-    stop_on_error = bool(cfg.get("execution", {}).get("stop_on_error", True))
+    execution_cfg = cfg.get("execution", {})
+    stop_on_error = bool(execution_cfg.get("stop_on_error", True))
     dry_run = not args.run
+    trace_id = args.trace_id.strip() or os.getenv("AGENT_TRACE_ID", "").strip()
+    run_id = args.run_id.strip() or os.getenv("AGENT_RUN_ID", "").strip()
+    runner = CommandRunner(
+        RunnerConfig(
+            max_attempts=int(execution_cfg.get("max_attempts", 1)),
+            backoff_seconds=float(execution_cfg.get("backoff_seconds", 3.0)),
+            backoff_multiplier=float(execution_cfg.get("backoff_multiplier", 2.0)),
+            timeout_seconds=int(execution_cfg.get("timeout_seconds", 0)),
+            enable_idempotency=bool(execution_cfg.get("enable_idempotency", True)),
+            idempotency_state_file=Path(
+                str(
+                    execution_cfg.get(
+                        "idempotency_state_file",
+                        ROOT / "日志/datahub_quality_gate/orchestrator_idempotency.json",
+                    )
+                )
+            ),
+        )
+    )
 
     plan = {
         "profile": profile,
@@ -137,6 +153,8 @@ def main() -> None:
         "as_of": asof.isoformat(),
         "target_month": target,
         "dry_run": dry_run,
+        "trace_id": trace_id,
+        "run_id": run_id,
         "steps": [],
     }
 
@@ -151,10 +169,45 @@ def main() -> None:
     print(f"profile={profile}")
     print(f"target_month={target}")
     print(f"dry_run={int(dry_run)}")
+    print(f"trace_id={trace_id}")
+    print(f"run_id={run_id}")
     print(f"plan={plan_path}")
 
+    step_results: List[Dict[str, object]] = []
     for x in plan["steps"]:
-        run_cmd(x["cmd"], dry_run=dry_run, stop_on_error=stop_on_error)
+        print("CMD:", " ".join(x["cmd"]))
+        step = str(x["step"])
+        run_result = runner.run(
+            x["cmd"],
+            dry_run=dry_run,
+            stop_on_error=stop_on_error,
+            cwd=ROOT,
+            trace_id=trace_id,
+            run_id=run_id,
+            idempotency_key=f"{profile}:{target}:{step}",
+        )
+        step_results.append(
+            {
+                "step": step,
+                "ok": bool(run_result.get("ok", False)),
+                "skipped": bool(run_result.get("skipped", False)),
+                "attempts": run_result.get("attempts", []),
+            }
+        )
+
+    run_report = {
+        "profile": profile,
+        "as_of": asof.isoformat(),
+        "target_month": target,
+        "dry_run": int(dry_run),
+        "trace_id": trace_id,
+        "run_id": run_id,
+        "stop_on_error": int(stop_on_error),
+        "steps": step_results,
+    }
+    run_path = ROOT / "日志/datahub_quality_gate" / f"orchestration_run_{target}_{profile}.json"
+    run_path.write_text(json.dumps(run_report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"run_report={run_path}")
 
     print("orchestration=done")
 
