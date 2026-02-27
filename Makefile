@@ -407,6 +407,7 @@ report-auto-run:
 	python3 $(ROOT)/scripts/report_daily_digest.py --explain-json "$(ROOT)/日志/datahub_quality_gate/change_explain_$${TARGET}.json" --anomaly-json "$(ROOT)/日志/datahub_quality_gate/anomaly_guard_$${TARGET}.json" --out-md "$(outdir)/日报摘要_$${TARGET}.md"; \
 	python3 $(ROOT)/scripts/report_snapshot_archive.py --target-month "$$TARGET" --as-of "$$ASOF" --outdir "$(outdir)" --logs-dir "$(ROOT)/日志/datahub_quality_gate" --archive-root "$(ROOT)/任务归档"; \
 	python3 $(ROOT)/scripts/report_lineage_mvp.py --target-month "$$TARGET" --as-of "$$ASOF" --outdir "$(outdir)" --logs-dir "$(ROOT)/日志/datahub_quality_gate" --archive-root "$(ROOT)/任务归档/reports"; \
+	python3 $(ROOT)/scripts/report_lineage_v2.py --target-month "$$TARGET" --as-of "$$ASOF" --explain-json "$(ROOT)/日志/datahub_quality_gate/change_explain_$${TARGET}.json" --anomaly-json "$(ROOT)/日志/datahub_quality_gate/anomaly_guard_$${TARGET}.json"; \
 	python3 $(ROOT)/scripts/report_publish_release.py --target-month "$$TARGET" --as-of "$$ASOF" --outdir "$(outdir)"
 
 report-orchestrate:
@@ -492,6 +493,25 @@ report-lineage:
 	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/report_lineage_mvp.py $$EXTRA"
+
+report-lineage-v2:
+	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi
+	@EXTRA=" --target-month '$(target)'"; \
+	if [ -n "$(asof)" ]; then EXTRA="$$EXTRA --as-of '$(asof)'"; fi; \
+	if [ -n "$(explain_json)" ]; then EXTRA="$$EXTRA --explain-json '$(explain_json)'"; fi; \
+	if [ -n "$(anomaly_json)" ]; then EXTRA="$$EXTRA --anomaly-json '$(anomaly_json)'"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/report_lineage_v2.py $$EXTRA"
+
+report-failure-insights:
+	@EXTRA=""; \
+	if [ -n "$(db)" ]; then EXTRA="$$EXTRA --db '$(db)'"; fi; \
+	if [ -n "$(days)" ]; then EXTRA="$$EXTRA --days '$(days)'"; fi; \
+	if [ -n "$(topn)" ]; then EXTRA="$$EXTRA --topn '$(topn)'"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/report_failure_insights.py $$EXTRA"
 
 report-learning:
 	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi

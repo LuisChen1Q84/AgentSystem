@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import time
+import uuid
 import tomllib
 from pathlib import Path
 from typing import Dict, List
@@ -19,6 +20,7 @@ CFG_DEFAULT = ROOT / "config/report_orchestration.toml"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from core.runner import CommandRunner, RunnerConfig
+from core.state_store import StateStore
 from core.telemetry import TelemetryClient
 
 
@@ -131,6 +133,8 @@ def main() -> None:
     dry_run = not args.run
     trace_id = args.trace_id.strip() or os.getenv("AGENT_TRACE_ID", "").strip()
     run_id = args.run_id.strip() or os.getenv("AGENT_RUN_ID", "").strip()
+    if not run_id:
+        run_id = f"orchestrator_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
     runner = CommandRunner(
         RunnerConfig(
             max_attempts=int(execution_cfg.get("max_attempts", 1)),
@@ -149,6 +153,17 @@ def main() -> None:
         )
     )
     telemetry = TelemetryClient()
+    state = StateStore()
+    state.start_run(
+        run_id=run_id,
+        module="report_orchestrator",
+        trace_id=trace_id,
+        target_month=target,
+        profile=profile,
+        as_of=asof.isoformat(),
+        dry_run=dry_run,
+        meta={"config": str(args.config), "steps": steps},
+    )
 
     plan = {
         "profile": profile,
@@ -185,6 +200,7 @@ def main() -> None:
     )
 
     step_results: List[Dict[str, object]] = []
+    hard_fail = False
     for x in plan["steps"]:
         print("CMD:", " ".join(x["cmd"]))
         step = str(x["step"])
@@ -192,7 +208,7 @@ def main() -> None:
         run_result = runner.run(
             x["cmd"],
             dry_run=dry_run,
-            stop_on_error=stop_on_error,
+            stop_on_error=False,
             cwd=ROOT,
             trace_id=trace_id,
             run_id=run_id,
@@ -208,6 +224,17 @@ def main() -> None:
         )
         latency_ms = int((time.time() - t0) * 1000)
         ok_step = bool(run_result.get("ok", False))
+        for a in run_result.get("attempts", []):
+            state.append_step(
+                run_id=run_id,
+                module="report_orchestrator",
+                step=step,
+                attempt=int(a.get("attempt", 0) or 0),
+                status=str(a.get("status", "unknown")),
+                returncode=int(a.get("returncode", 0) or 0),
+                latency_ms=int(float(a.get("duration_sec", 0) or 0) * 1000),
+                meta={"cmd": x["cmd"], "skipped": bool(run_result.get("skipped", False))},
+            )
         telemetry.emit(
             module="report_orchestrator",
             action=f"step:{step}",
@@ -219,6 +246,9 @@ def main() -> None:
             error_message="" if ok_step else f"step={step} failed",
             meta={"step": step, "skipped": bool(run_result.get("skipped", False)), "attempts": run_result.get("attempts", [])},
         )
+        if stop_on_error and (not ok_step):
+            hard_fail = True
+            break
 
     run_report = {
         "profile": profile,
@@ -233,7 +263,12 @@ def main() -> None:
     run_path = ROOT / "日志/datahub_quality_gate" / f"orchestration_run_{target}_{profile}.json"
     run_path.write_text(json.dumps(run_report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"run_report={run_path}")
-    all_ok = all(bool(x.get("ok", False)) for x in step_results)
+    all_ok = all(bool(x.get("ok", False)) for x in step_results) and (not hard_fail)
+    state.finish_run(
+        run_id=run_id,
+        status="ok" if all_ok else "failed",
+        meta={"run_report": str(run_path), "steps": len(step_results), "profile": profile},
+    )
     telemetry.emit(
         module="report_orchestrator",
         action="orchestrator_finish",
@@ -246,6 +281,8 @@ def main() -> None:
     )
 
     print("orchestration=done")
+    if not all_ok:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

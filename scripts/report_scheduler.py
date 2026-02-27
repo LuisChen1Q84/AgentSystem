@@ -20,6 +20,7 @@ CFG_DEFAULT = ROOT / "config/report_schedule.toml"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from core.errors import LockError
+from core.state_store import StateStore
 from core.task_model import create_run_context
 from core.telemetry import TelemetryClient
 
@@ -673,6 +674,17 @@ def main() -> None:
     )
     set_run_meta(run_ctx.trace_id, run_ctx.run_id)
     TELEMETRY = TelemetryClient()
+    state = StateStore()
+    state.start_run(
+        run_id=run_ctx.run_id,
+        module="report_scheduler",
+        trace_id=run_ctx.trace_id,
+        target_month=target,
+        profile=profile,
+        as_of=asof.isoformat(),
+        dry_run=bool(not args.run),
+        meta={"config": str(args.config)},
+    )
     emit_telemetry(
         action="scheduler_start",
         status="ok",
@@ -682,6 +694,11 @@ def main() -> None:
     try:
         lock_ts = acquire_lock(lock_file, int(d.get("stale_lock_seconds", 21600)))
     except LockError as e:
+        state.finish_run(
+            run_id=run_ctx.run_id,
+            status="failed",
+            meta={"reason": "lock_not_acquired", "details": e.details},
+        )
         emit_telemetry(
             action="acquire_lock",
             status="failed",
@@ -721,6 +738,17 @@ def main() -> None:
             dry_run=not args.run,
         )
         ok = bool(result["ok"])
+        for a in result.get("attempts", []):
+            state.append_step(
+                run_id=run_ctx.run_id,
+                module="report_scheduler",
+                step="orchestrator_retry",
+                attempt=int(a.get("attempt", 0) or 0),
+                status="ok" if int(a.get("returncode", 1) or 1) == 0 else "failed",
+                returncode=int(a.get("returncode", 0) or 0),
+                latency_ms=int(float(a.get("duration_sec", 0) or 0) * 1000),
+                meta={"cmd": cmd},
+            )
         scheduler_context_path = logs_dir / "_scheduler_context_runtime.json"
         scheduler_context = {
             "trace_id": run_ctx.trace_id,
@@ -792,6 +820,11 @@ def main() -> None:
             emit_telemetry(
                 action="scheduler_finish",
                 status="ok",
+                meta={"status": "WAITING_DATA", "report": str(out), "target_month": target},
+            )
+            state.finish_run(
+                run_id=run_ctx.run_id,
+                status="ok" if ok else "failed",
                 meta={"status": "WAITING_DATA", "report": str(out), "target_month": target},
             )
             return
@@ -880,6 +913,11 @@ def main() -> None:
         status="ok" if ok else "failed",
         error_code="" if ok else "SCHEDULER_FAILED",
         error_message="" if ok else "scheduler final status not ok",
+        meta={"report": str(out), "target_month": target, "profile": profile},
+    )
+    state.finish_run(
+        run_id=run_ctx.run_id,
+        status="ok" if ok else "failed",
         meta={"report": str(out), "target_month": target, "profile": profile},
     )
     if not ok:
