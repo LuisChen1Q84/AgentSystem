@@ -1,0 +1,16 @@
+[defaults]
+log_dir = "日志/agent_os"
+out_json = "日志/agent_os/capability_catalog_latest.json"
+out_md = "日志/agent_os/capability_catalog_latest.md"
+
+[layer_mapping]
+policy-pbc = "core-governance"
+policy-pbc-basics = "core-governance"
+policy-pbc-keyword-index = "core-governance"
+digest = "core-generalist"
+mckinsey-ppt = "delivery-content"
+minimax-docx = "delivery-content"
+minimax-xlsx = "delivery-dataops"
+serp-api = "tooling-external"
+finance-industry = "domain-pack-finance"
+ai-industry = "domain-pack-research"

@@ -1041,6 +1041,22 @@ run_autonomous() {
   automation_log "INFO" "autonomous" "done"
 }
 
+run_agent_os() {
+  local text="${1:-}"
+  shift || true
+  local params_json="${1:-}"
+  if [ -z "${text}" ]; then
+    echo "agent 命令需要任务文本"
+    return "${E_USAGE}"
+  fi
+  if [ -z "${params_json}" ]; then
+    params_json='{}'
+  fi
+  automation_log "INFO" "agent" "start"
+  python3 "${ROOT_DIR}/scripts/agent_os.py" --text "${text}" --params-json "${params_json}" || return "${E_SKILL}"
+  automation_log "INFO" "agent" "done"
+}
+
 run_autonomy_observe() {
   automation_log "INFO" "autonomy-observe" "start"
   python3 "${ROOT_DIR}/scripts/autonomy_observability.py" "$@" || return "${E_SKILL}"
@@ -1051,6 +1067,12 @@ run_autonomy_eval() {
   automation_log "INFO" "autonomy-eval" "start"
   python3 "${ROOT_DIR}/scripts/autonomy_strategy_eval.py" "$@" || return "${E_SKILL}"
   automation_log "INFO" "autonomy-eval" "done"
+}
+
+run_capability_catalog() {
+  automation_log "INFO" "capability-catalog" "start"
+  python3 "${ROOT_DIR}/scripts/capability_catalog.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "capability-catalog" "done"
 }
 
 run_cycle_preroute() {
@@ -1188,8 +1210,10 @@ Usage:
   scripts/agentsys.sh stock-hub [--query <text> --symbols <csv> --universe <name> --no-sync]
   scripts/agentsys.sh skill-route [route|execute|dump] [args...]
   scripts/agentsys.sh autonomous "<task>" ['{"autonomous":true,"dry_run":false}']
+  scripts/agentsys.sh agent "<task>" ['{"profile":"strict","dry_run":true}']
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
+  scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
 EOF
 }
 
@@ -1284,7 +1308,9 @@ case "${cmd}" in
   stock-hub) shift; run_stock_hub "$@" ;;
   skill-route) shift; run_skill_route "${1:-route}" "${@:2}" ;;
   autonomous) shift; run_autonomous "${1:-}" "${2:-}" ;;
+  agent) shift; run_agent_os "${1:-}" "${2:-}" ;;
   autonomy-observe) shift; run_autonomy_observe "$@" ;;
   autonomy-eval) shift; run_autonomy_eval "$@" ;;
+  capability-catalog) shift; run_capability_catalog "$@" ;;
   *) usage; send_alert "WARN" "agentsys参数错误" "invalid command: ${cmd:-<empty>}"; exit "${E_USAGE}" ;;
 esac

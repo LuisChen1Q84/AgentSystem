@@ -1,0 +1,16 @@
+[defaults]
+profile = "strict"
+log_dir = "日志/agent_os"
+capability_catalog_cfg = "config/capability_catalog.toml"
+
+[profiles.strict]
+execution_mode = "strict"
+deterministic = true
+learning_enabled = false
+max_fallback_steps = 3
+
+[profiles.adaptive]
+execution_mode = "auto"
+deterministic = false
+learning_enabled = true
+max_fallback_steps = 5

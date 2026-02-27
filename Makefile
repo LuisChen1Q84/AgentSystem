@@ -16,7 +16,7 @@ ROOT ?= $(CURDIR)
 	mcp-doctor mcp-route-smart mcp-run mcp-replay mcp-pipeline \
 	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
 	stock-env-check stock-health-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
-	skill-route skill-execute autonomous autonomy-observe autonomy-eval image-hub image-hub-observe
+	skill-route skill-execute autonomous agent capability-catalog autonomy-observe autonomy-eval image-hub image-hub-observe
 
 help:
 	@echo "Available targets:"
@@ -27,7 +27,7 @@ help:
 	@echo "  make stock-env-check [root='$(ROOT)']"
 	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
-	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | autonomy-observe [days=14] | autonomy-eval | image-hub text='...' [params='{\"k\":\"v\"}'] | image-hub-observe [days=7]"
+	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict\"}'] | capability-catalog | autonomy-observe [days=14] | autonomy-eval | image-hub text='...' [params='{\"k\":\"v\"}'] | image-hub-observe [days=7]"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
@@ -866,6 +866,13 @@ skill-execute:
 autonomous:
 	@if [ -z "$(text)" ]; then echo "Usage: make autonomous text='<query>' [params='{\"k\":\"v\"}']"; exit 2; fi
 	@$(ROOT)/scripts/agentsys.sh autonomous "$(text)" '$(or $(params),{})'
+
+agent:
+	@if [ -z "$(text)" ]; then echo "Usage: make agent text='<query>' [params='{\"profile\":\"strict\"}']"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh agent "$(text)" '$(or $(params),{})'
+
+capability-catalog:
+	@$(ROOT)/scripts/agentsys.sh capability-catalog $(if $(cfg),--cfg "$(cfg)",) $(if $(out_json),--out-json "$(out_json)",) $(if $(out_md),--out-md "$(out_md)",)
 
 autonomy-observe:
 	@$(ROOT)/scripts/agentsys.sh autonomy-observe $(if $(days),--days $(days),) $(if $(out_json),--out-json "$(out_json)",) $(if $(out_md),--out-md "$(out_md)",)
