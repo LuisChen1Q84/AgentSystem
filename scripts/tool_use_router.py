@@ -389,7 +389,7 @@ class ToolUseRouter:
             "name": tool_call.name,
             "arguments": tool_call.arguments
         }, sort_keys=True)
-        return f"tool_call:{hashlib.md5(content.encode()).hexdigest()}"
+        return f"tool_call:{hashlib.sha256(content.encode()).hexdigest()}"
 
     # ==================== 工具定义管理 ====================
 

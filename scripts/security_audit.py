@@ -75,7 +75,7 @@ def finding_key(item: dict) -> str:
             item.get("snippet", ""),
         ]
     )
-    return hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()
+    return hashlib.sha256(raw.encode("utf-8", errors="ignore")).hexdigest()
 
 
 def should_skip(path: Path):

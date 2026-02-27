@@ -49,6 +49,15 @@
 - 文件: `scripts/secret_scan.sh`
 - 变更: 增加示例文件排除，避免把教学示例当真实泄漏
 
+4. 弱哈希清理（后续加固）
+- 文件:
+  - `scripts/cache_service.py`
+  - `scripts/tool_use_router.py`
+  - `scripts/pattern_learner.py`
+  - `scripts/image_creator_hub.py`
+  - `scripts/security_audit.py`
+- 变更: 将 `md5/sha1` 统一迁移为 `sha256`；保留原有截断长度策略（如 `[:8]`, `[:12]`）以兼容命名与键格式。
+
 ## 3) 漏洞与风险清单
 
 ### [中] TLS 证书校验存在降级回退风险（已修复）

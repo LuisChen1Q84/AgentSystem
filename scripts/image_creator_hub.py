@@ -574,7 +574,7 @@ class MockImageBackend:
     def generate(self, prompt: str, n: int, reference_files: List[str], meta: Dict[str, Any]) -> List[str]:
         out = []
         now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        seed_base = hashlib.sha1((prompt + "|" + now).encode("utf-8")).hexdigest()[:8]
+        seed_base = hashlib.sha256((prompt + "|" + now).encode("utf-8")).hexdigest()[:8]
         for i in range(n):
             name = f"image_{now}_{seed_base}_{i+1}.png"
             path = self.out_dir / name
@@ -614,7 +614,7 @@ class OpenAICompatibleBackend:
 
     def _save_png_bytes(self, blob: bytes, prompt: str, idx: int) -> str:
         now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        seed_base = hashlib.sha1((prompt + "|" + str(idx) + "|" + now).encode("utf-8")).hexdigest()[:8]
+        seed_base = hashlib.sha256((prompt + "|" + str(idx) + "|" + now).encode("utf-8")).hexdigest()[:8]
         name = f"image_{now}_{seed_base}_{idx+1}.png"
         path = self.out_dir / name
         path.write_bytes(blob)
@@ -722,7 +722,7 @@ class MiniMaxBackend:
 
     def _save_image_bytes(self, blob: bytes, prompt: str, idx: int) -> str:
         now = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        seed_base = hashlib.sha1((prompt + "|" + str(idx) + "|" + now).encode("utf-8")).hexdigest()[:8]
+        seed_base = hashlib.sha256((prompt + "|" + str(idx) + "|" + now).encode("utf-8")).hexdigest()[:8]
         name = f"image_{now}_{seed_base}_{idx+1}.jpeg"
         path = self.out_dir / name
         path.write_bytes(blob)

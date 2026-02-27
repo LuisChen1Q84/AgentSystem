@@ -150,7 +150,7 @@ class CacheService:
     def _generate_tool_key(self, server: str, tools_data: Dict[str, Any]) -> str:
         """生成工具缓存键"""
         content = json.dumps(tools_data, sort_keys=True)
-        return f"tool:{server}:{hashlib.md5(content.encode()).hexdigest()}"
+        return f"tool:{server}:{hashlib.sha256(content.encode()).hexdigest()}"
 
     # ==================== 技能缓存 ====================
 
@@ -189,7 +189,7 @@ class CacheService:
     def _generate_skill_key(self, skill_name: str, prompt_data: Dict[str, Any]) -> str:
         """生成技能缓存键"""
         content = json.dumps(prompt_data, sort_keys=True)
-        return f"skill:{skill_name}:{hashlib.md5(content.encode()).hexdigest()}"
+        return f"skill:{skill_name}:{hashlib.sha256(content.encode()).hexdigest()}"
 
     # ==================== 上下文缓存 ====================
 
@@ -241,7 +241,7 @@ class CacheService:
     def _generate_context_key(self, doc_id: str, context_data: Dict[str, Any]) -> str:
         """生成上下文缓存键"""
         content = json.dumps(context_data, sort_keys=True)
-        return f"context:{doc_id}:{hashlib.md5(content.encode()).hexdigest()}"
+        return f"context:{doc_id}:{hashlib.sha256(content.encode()).hexdigest()}"
 
     def _is_relevant_to_query(self, keywords: List[str], query: str) -> bool:
         """检查缓存内容是否与查询相关"""

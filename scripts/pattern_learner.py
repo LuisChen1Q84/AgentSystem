@@ -59,7 +59,7 @@ def init_db():
 def generate_pattern_id(description: str, category: str = "general") -> str:
     """生成模式ID"""
     raw = f"{category}:{description}"
-    return hashlib.md5(raw.encode()).hexdigest()[:12]
+    return hashlib.sha256(raw.encode()).hexdigest()[:12]
 
 
 def add_pattern(description: str, category: str, context: dict, solution: dict,
