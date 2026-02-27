@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import re
 import sqlite3
 from typing import List, Tuple
 
@@ -63,8 +64,18 @@ def build_base_where(args) -> Tuple[str, List[str]]:
     if args.micro:
         cond.append(f"json_extract({payload_doc}, '$.is_micro') = ?")
         vals.append(args.micro)
+    if args.from_date:
+        cond.append("event_date >= ?")
+        vals.append(args.from_date)
+    if args.to_date:
+        cond.append("event_date <= ?")
+        vals.append(args.to_date)
 
     return " AND ".join(cond), vals
+
+
+def _is_valid_date(s: str) -> bool:
+    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", s))
 
 
 def query_metrics(args):
@@ -74,8 +85,14 @@ def query_metrics(args):
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
     try:
+        known_metrics = set()
+        if args.validate_metrics:
+            rows = conn.execute("SELECT metric FROM metric_dictionary").fetchall()
+            known_metrics = {str(r[0]) for r in rows}
         out = []
         for label, metric, agg, unit, period in specs:
+            if known_metrics and metric not in known_metrics:
+                raise ValueError(f"unknown metric in dictionary: {metric}")
             where_sql = base_sql
             where_vals = list(base_vals)
             if period == "global":
@@ -149,6 +166,9 @@ def main():
     parser.add_argument("--month", help="YYYY-MM")
     parser.add_argument("--province")
     parser.add_argument("--micro")
+    parser.add_argument("--from-date", help="YYYY-MM-DD")
+    parser.add_argument("--to-date", help="YYYY-MM-DD")
+    parser.add_argument("--validate-metrics", action="store_true", help="validate spec metric against metric_dictionary")
     parser.add_argument("--preset", choices=["table1_annual_core", "table1_active_subject_month"])
     parser.add_argument("--spec", action="append", default=[], help="label:metric:agg:unit[:period], period支持 global/year/month/YYYY/YYYY-MM/all")
     parser.add_argument("--json", action="store_true")
@@ -160,6 +180,12 @@ def main():
     if not specs:
         raise SystemExit("请至少提供一个 --spec 或 --preset")
     args.spec = specs
+    if args.from_date and not _is_valid_date(args.from_date):
+        raise SystemExit("--from-date 格式必须为 YYYY-MM-DD")
+    if args.to_date and not _is_valid_date(args.to_date):
+        raise SystemExit("--to-date 格式必须为 YYYY-MM-DD")
+    if args.from_date and args.to_date and args.from_date > args.to_date:
+        raise SystemExit("--from-date 不能晚于 --to-date")
 
     items = query_metrics(args)
     if args.json:

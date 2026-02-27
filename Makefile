@@ -8,7 +8,7 @@ ROOT ?= $(CURDIR)
 	risk dashboard weekly-review okr-init okr-report decision optimize strategy \
 	forecast experiment learning autopilot agents roi experiment-eval release-ctrl ceo-brief \
 	anomaly resilience northstar capital autonomy-audit board-packet security-audit \
-	datahub-init datahub-ingest datahub-quality-gate datahub-clean datahub-model datahub-quality datahub-analyze datahub-api datahub-cycle datahub-table1 datahub-table2 \
+	datahub-init datahub-ingest datahub-quality-gate datahub-clean datahub-model datahub-quality datahub-analyze datahub-api datahub-cycle datahub-table1 datahub-table2 datahub-db-health datahub-db-optimize datahub-db-sql \
 	report-xlsx-plan report-xlsx-apply report-xlsx-run table5-v2-reconcile table5-new-backfill table5-new-generate table4-quarterly-export table4-generate table3-ingest table6-generate report-regression report-anomaly report-explain report-dashboard report-digest report-archive report-publish report-rollback report-replay report-auto-run report-orchestrate report-schedule report-watch report-governance report-tower report-remediation report-remediation-run report-learning report-escalation report-release-gate report-registry report-task-reconcile report-ops-brief report-sla report-action-center report-data-readiness \
 	cycle-daily cycle-weekly cycle-monthly cycle-intel cycle-evolve cycle-autonomous cycle-ultimate \
 	preflight release check ci test-all \
@@ -35,7 +35,7 @@ help:
 	@echo "  make forecast|experiment|learning|autopilot|agents|roi|experiment-eval|release-ctrl|ceo-brief"
 	@echo "  make anomaly|resilience|northstar|capital|autonomy-audit|board-packet"
 	@echo "  make security-audit"
-	@echo "  make datahub-init|datahub-ingest|datahub-quality-gate|datahub-clean|datahub-model|datahub-quality|datahub-analyze|datahub-api|datahub-cycle|datahub-table1|datahub-table2"
+	@echo "  make datahub-init|datahub-ingest|datahub-quality-gate|datahub-clean|datahub-model|datahub-quality|datahub-analyze|datahub-api|datahub-cycle|datahub-table1|datahub-table2|datahub-db-health|datahub-db-optimize|datahub-db-sql"
 	@echo "  make report-xlsx-plan xlsx='/path/to/file.xlsx' [date='2026年2月25日'] [merchant='16100']"
 	@echo "  make report-xlsx-apply xlsx='/path/to/file.xlsx' [date='2026年2月25日'] [merchant='16100']"
 	@echo "  make report-xlsx-run xlsx='/path/to/file.xlsx' [date='2026年2月25日'] [merchant='16100']"
@@ -251,11 +251,21 @@ datahub-integrity:
 	@$(ROOT)/scripts/agentsys.sh datahub-integrity
 
 datahub-backup:
-	@$(ROOT)/scripts/agentsys.sh datahub-backup
+	@$(ROOT)/scripts/agentsys.sh datahub-backup $(args)
 
 datahub-restore:
 	@if [ -z "$(backup)" ]; then echo "请提供 backup 参数，例如 make datahub-restore backup='私有数据/backup/business_20260224_190000.db'"; exit 2; fi
-	@$(ROOT)/scripts/agentsys.sh datahub-restore "$(backup)"
+	@$(ROOT)/scripts/agentsys.sh datahub-restore "$(backup)" $(args)
+
+datahub-db-health:
+	@$(ROOT)/scripts/agentsys.sh datahub-db health $(if $(full),--full-integrity,) $(if $(noreport),--no-report,)
+
+datahub-db-optimize:
+	@$(ROOT)/scripts/agentsys.sh datahub-db optimize $(if $(vacuum),--vacuum,) $(if $(noreport),--no-report,)
+
+datahub-db-sql:
+	@if [ -z "$(sql)" ]; then echo "请提供 sql 参数，例如 make datahub-db-sql sql='SELECT COUNT(*) AS c FROM silver_events'"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh datahub-db sql --sql "$(sql)" $(if $(params),--params-json '$(params)',) $(if $(limit),--limit $(limit),)
 
 datahub-api:
 	@$(ROOT)/scripts/agentsys.sh datahub-api

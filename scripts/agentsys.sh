@@ -745,7 +745,7 @@ run_datahub_integrity() {
 run_datahub_backup() {
   automation_log "INFO" "datahub-backup" "start"
   python3 "${ROOT_DIR}/scripts/datahub_backup.py" \
-    --db "${DATAHUB_DB}" || return "${E_DATAHUB}"
+    --db "${DATAHUB_DB}" "$@" || return "${E_DATAHUB}"
   automation_log "INFO" "datahub-backup" "done"
 }
 
@@ -755,11 +755,22 @@ run_datahub_restore() {
     echo "datahub-restore 命令需要 backup 文件路径"
     return "${E_USAGE}"
   fi
+  shift || true
   automation_log "INFO" "datahub-restore" "start backup=${backup_file}"
   python3 "${ROOT_DIR}/scripts/datahub_restore.py" \
     --db "${DATAHUB_DB}" \
-    --backup "${backup_file}" || return "${E_DATAHUB}"
+    --backup "${backup_file}" "$@" || return "${E_DATAHUB}"
   automation_log "INFO" "datahub-restore" "done"
+}
+
+run_datahub_db() {
+  local action="${1:-health}"
+  shift || true
+  automation_log "INFO" "datahub-db" "action=${action}"
+  python3 "${ROOT_DIR}/scripts/datahub_db_admin.py" \
+    --db "${DATAHUB_DB}" \
+    "${action}" "$@" || return "${E_DATAHUB}"
+  automation_log "INFO" "datahub-db" "done action=${action}"
 }
 
 run_datahub_api() {
@@ -1114,8 +1125,9 @@ Usage:
   scripts/agentsys.sh datahub-feedback [import-actions|record|learn ...]
   scripts/agentsys.sh datahub-expert-cycle
   scripts/agentsys.sh datahub-integrity
-  scripts/agentsys.sh datahub-backup
-  scripts/agentsys.sh datahub-restore "<backup_file>"
+  scripts/agentsys.sh datahub-backup [--out-dir <path> --keep N --no-verify]
+  scripts/agentsys.sh datahub-restore "<backup_file>" [--dry-run --force --no-verify]
+  scripts/agentsys.sh datahub-db [health|sql|optimize] [args...]
   scripts/agentsys.sh datahub-api
   scripts/agentsys.sh datahub-cycle
   scripts/agentsys.sh pipeline "<topic>"
@@ -1207,8 +1219,9 @@ case "${cmd}" in
   datahub-feedback) shift; run_datahub_feedback "$@" ;;
   datahub-expert-cycle) run_datahub_expert_cycle ;;
   datahub-integrity) run_datahub_integrity ;;
-  datahub-backup) run_datahub_backup ;;
-  datahub-restore) shift; run_datahub_restore "${1:-}" ;;
+  datahub-backup) shift; run_datahub_backup "$@" ;;
+  datahub-restore) shift; run_datahub_restore "${1:-}" "${@:2}" ;;
+  datahub-db) shift; run_datahub_db "${1:-health}" "${@:2}" ;;
   datahub-api) run_datahub_api ;;
   datahub-cycle) run_datahub_cycle ;;
   pipeline) shift; run_pipeline "${1:-}" ;;
