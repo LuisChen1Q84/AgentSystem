@@ -1,0 +1,284 @@
+#!/usr/bin/env python3
+"""Unified interaction surface for Personal Agent OS."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shlex
+from pathlib import Path
+from typing import Any, Dict
+
+ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
+
+import sys
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    from core.agent_service_registry import AgentServiceRegistry
+except ModuleNotFoundError:  # direct
+    from agent_service_registry import AgentServiceRegistry  # type: ignore
+
+
+def _print_run_summary(out: Dict[str, Any]) -> None:
+    if not isinstance(out, dict):
+        print(json.dumps({"ok": False, "error": "invalid_result"}, ensure_ascii=False, indent=2))
+        return
+    selected = out.get("result", {}).get("selected", {}) if isinstance(out.get("result", {}), dict) else {}
+    print(
+        json.dumps(
+            {
+                "ok": bool(out.get("ok", False)),
+                "run_id": out.get("run_id", ""),
+                "profile": out.get("profile", ""),
+                "task_kind": out.get("task_kind", ""),
+                "selected_strategy": selected.get("strategy", ""),
+                "duration_ms": out.get("duration_ms", 0),
+                "clarification": out.get("clarification", {}),
+                "deliver_assets": out.get("deliver_assets", {}),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, params_json: str, data_dir: str) -> int:
+    params = {}
+    if params_json.strip():
+        try:
+            raw = json.loads(params_json)
+            if isinstance(raw, dict):
+                params.update(raw)
+        except Exception as e:
+            print(json.dumps({"ok": False, "error": f"invalid params-json: {e}"}, ensure_ascii=False, indent=2))
+            return 2
+    if profile.strip():
+        params["profile"] = profile.strip()
+    if dry_run:
+        params["dry_run"] = True
+    if data_dir.strip():
+        p = Path(data_dir)
+        params["agent_log_dir"] = str(p)
+        params["autonomy_log_dir"] = str(p / "autonomy")
+        params["memory_file"] = str(p / "memory.json")
+    out = reg.execute("agent.run", text=text, params=params)
+    _print_run_summary(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _observe_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
+    out = reg.execute("agent.observe", days=days, data_dir=data_dir or str(ROOT / "日志/agent_os"))
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _recommend_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
+    out = reg.execute("agent.recommend", days=days, data_dir=data_dir or str(ROOT / "日志/agent_os"))
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _slo_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
+    out = reg.execute("agent.slo", data_dir=data_dir or str(ROOT / "日志/agent_os"), cfg={"defaults": {}})
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _pending_cmd(reg: AgentServiceRegistry, limit: int, task_kind: str, profile: str, data_dir: str) -> int:
+    out = reg.execute(
+        "agent.feedback.pending",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        limit=limit,
+        task_kind=task_kind,
+        profile=profile,
+    )
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _feedback_add_cmd(
+    reg: AgentServiceRegistry,
+    run_id: str,
+    rating: int,
+    note: str,
+    profile: str,
+    task_kind: str,
+    data_dir: str,
+) -> int:
+    out = reg.execute(
+        "agent.feedback.add",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        run_id=run_id,
+        rating=rating,
+        note=note,
+        profile=profile,
+        task_kind=task_kind,
+    )
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _feedback_stats_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
+    out = reg.execute("agent.feedback.stats", data_dir=data_dir or str(ROOT / "日志/agent_os"))
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _services_cmd(reg: AgentServiceRegistry) -> int:
+    print(json.dumps({"ok": True, "services": reg.list_services()}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
+    print(
+        "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], pending [limit], "
+        "feedback <run_id> <rating> [note], stats, services, exit"
+    )
+    while True:
+        try:
+            line = input("agent> ").strip()
+        except EOFError:
+            break
+        if not line:
+            continue
+        if line in {"exit", "quit"}:
+            break
+        parts = shlex.split(line)
+        cmd = parts[0]
+        args = parts[1:]
+        if cmd == "run":
+            text = " ".join(args).strip()
+            if not text:
+                print("usage: run <task text>")
+                continue
+            _run_cmd(reg, text=text, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir)
+            continue
+        if cmd == "observe":
+            days = int(args[0]) if args else 14
+            _observe_cmd(reg, days=days, data_dir=data_dir)
+            continue
+        if cmd == "recommend":
+            days = int(args[0]) if args else 30
+            _recommend_cmd(reg, days=days, data_dir=data_dir)
+            continue
+        if cmd == "pending":
+            limit = int(args[0]) if args else 10
+            _pending_cmd(reg, limit=limit, task_kind="", profile="", data_dir=data_dir)
+            continue
+        if cmd == "feedback":
+            if len(args) < 2:
+                print("usage: feedback <run_id> <rating> [note]")
+                continue
+            run_id = str(args[0])
+            try:
+                rating = int(args[1])
+            except ValueError:
+                print("rating must be integer in {-1,0,1}")
+                continue
+            note = " ".join(args[2:]) if len(args) > 2 else ""
+            _feedback_add_cmd(
+                reg,
+                run_id=run_id,
+                rating=rating,
+                note=note,
+                profile="",
+                task_kind="",
+                data_dir=data_dir,
+            )
+            continue
+        if cmd == "stats":
+            _feedback_stats_cmd(reg, data_dir=data_dir)
+            continue
+        if cmd == "slo":
+            _slo_cmd(reg, data_dir=data_dir)
+            continue
+        if cmd == "services":
+            _services_cmd(reg)
+            continue
+        # fallback: direct natural language task
+        _run_cmd(reg, text=line, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir)
+    return 0
+
+
+def build_cli() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="Agent Studio")
+    p.add_argument("--data-dir", default=str(ROOT / "日志/agent_os"))
+    sp = p.add_subparsers(dest="cmd")
+
+    run = sp.add_parser("run")
+    run.add_argument("--text", required=True)
+    run.add_argument("--profile", default="auto")
+    run.add_argument("--dry-run", action="store_true")
+    run.add_argument("--params-json", default="{}")
+
+    ob = sp.add_parser("observe")
+    ob.add_argument("--days", type=int, default=14)
+
+    rec = sp.add_parser("recommend")
+    rec.add_argument("--days", type=int, default=30)
+
+    sp.add_parser("slo")
+
+    pend = sp.add_parser("pending")
+    pend.add_argument("--limit", type=int, default=10)
+    pend.add_argument("--task-kind", default="")
+    pend.add_argument("--profile", default="")
+
+    fb = sp.add_parser("feedback-add")
+    fb.add_argument("--run-id", default="")
+    fb.add_argument("--rating", type=int, required=True)
+    fb.add_argument("--note", default="")
+    fb.add_argument("--profile", default="")
+    fb.add_argument("--task-kind", default="")
+
+    sp.add_parser("feedback-stats")
+    sp.add_parser("services")
+    sp.add_parser("repl")
+    return p
+
+
+def main() -> int:
+    args = build_cli().parse_args()
+    reg = AgentServiceRegistry(root=ROOT)
+    data_dir = str(args.data_dir)
+
+    if args.cmd == "run":
+        return _run_cmd(
+            reg,
+            text=str(args.text),
+            profile=str(args.profile),
+            dry_run=bool(args.dry_run),
+            params_json=str(args.params_json),
+            data_dir=data_dir,
+        )
+    if args.cmd == "observe":
+        return _observe_cmd(reg, days=int(args.days), data_dir=data_dir)
+    if args.cmd == "recommend":
+        return _recommend_cmd(reg, days=int(args.days), data_dir=data_dir)
+    if args.cmd == "slo":
+        return _slo_cmd(reg, data_dir=data_dir)
+    if args.cmd == "pending":
+        return _pending_cmd(reg, limit=int(args.limit), task_kind=str(args.task_kind), profile=str(args.profile), data_dir=data_dir)
+    if args.cmd == "feedback-add":
+        return _feedback_add_cmd(
+            reg,
+            run_id=str(args.run_id),
+            rating=int(args.rating),
+            note=str(args.note),
+            profile=str(args.profile),
+            task_kind=str(args.task_kind),
+            data_dir=data_dir,
+        )
+    if args.cmd == "feedback-stats":
+        return _feedback_stats_cmd(reg, data_dir=data_dir)
+    if args.cmd == "services":
+        return _services_cmd(reg)
+    return _repl(reg, data_dir=data_dir)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

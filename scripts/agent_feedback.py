@@ -77,6 +77,43 @@ def summarize(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"total": total, "positive": pos, "neutral": neu, "negative": neg, "avg_rating": avg}
 
 
+def list_pending_feedback(
+    *,
+    runs_file: Path,
+    feedback_file: Path,
+    limit: int = 10,
+    task_kind: str = "",
+    profile: str = "",
+) -> List[Dict[str, Any]]:
+    run_rows = _load_jsonl(runs_file)
+    feedback_rows = _load_jsonl(feedback_file)
+    done_ids = {str(x.get("run_id", "")).strip() for x in feedback_rows if str(x.get("run_id", "")).strip()}
+    tk = task_kind.strip()
+    pf = profile.strip()
+    out: List[Dict[str, Any]] = []
+    for r in reversed(run_rows):
+        rid = str(r.get("run_id", "")).strip()
+        if not rid or rid in done_ids:
+            continue
+        if tk and str(r.get("task_kind", "")).strip() != tk:
+            continue
+        if pf and str(r.get("profile", "")).strip() != pf:
+            continue
+        out.append(
+            {
+                "run_id": rid,
+                "ts": str(r.get("ts", "")),
+                "profile": str(r.get("profile", "")),
+                "task_kind": str(r.get("task_kind", "")),
+                "selected_strategy": str(r.get("selected_strategy", "")),
+                "duration_ms": int(r.get("duration_ms", 0) or 0),
+            }
+        )
+        if len(out) >= max(1, int(limit)):
+            break
+    return out
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Agent feedback collector")
     p.add_argument("--data-dir", default=str(DATA_DIR_DEFAULT))
@@ -92,6 +129,12 @@ def main() -> int:
 
     stats = sub.add_parser("stats")
     stats.add_argument("--data-dir", default="")
+
+    pending = sub.add_parser("pending")
+    pending.add_argument("--data-dir", default="")
+    pending.add_argument("--limit", type=int, default=10)
+    pending.add_argument("--task-kind", default="")
+    pending.add_argument("--profile", default="")
     args = p.parse_args()
 
     data_dir_arg = str(getattr(args, "data_dir", "") or "")
@@ -110,6 +153,29 @@ def main() -> int:
             task_kind=str(args.task_kind),
         )
         print(json.dumps({"ok": True, "item": item, "feedback_file": str(feedback_file)}, ensure_ascii=False, indent=2))
+        return 0
+
+    if args.cmd == "pending":
+        rows = list_pending_feedback(
+            runs_file=runs_file,
+            feedback_file=feedback_file,
+            limit=int(args.limit),
+            task_kind=str(args.task_kind),
+            profile=str(args.profile),
+        )
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "rows": rows,
+                    "count": len(rows),
+                    "runs_file": str(runs_file),
+                    "feedback_file": str(feedback_file),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
 
     rows = _load_jsonl(feedback_file)

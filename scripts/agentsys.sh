@@ -1113,6 +1113,12 @@ run_skill_contract_lint() {
   automation_log "INFO" "skill-contract-lint" "done"
 }
 
+run_agent_studio() {
+  automation_log "INFO" "agent-studio" "start"
+  python3 "${ROOT_DIR}/scripts/agent_studio.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "agent-studio" "done"
+}
+
 run_autonomy_observe() {
   automation_log "INFO" "autonomy-observe" "start"
   python3 "${ROOT_DIR}/scripts/autonomy_observability.py" "$@" || return "${E_SKILL}"
@@ -1273,9 +1279,10 @@ Usage:
   scripts/agentsys.sh agent-slo-guard [--enforce --cfg <path>]
   scripts/agentsys.sh agent-golden [--strict --tasks <path>]
   scripts/agentsys.sh agent-fault [--strict]
-  scripts/agentsys.sh agent-feedback [add|stats] [args...]
+  scripts/agentsys.sh agent-feedback [add|stats|pending] [args...]
   scripts/agentsys.sh agent-learn [--apply --cfg <path>]
   scripts/agentsys.sh skill-contract-lint [--strict --cfg <path>]
+  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|slo|pending|feedback-add|feedback-stats|services] [args...]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
@@ -1383,6 +1390,7 @@ case "${cmd}" in
   agent-feedback) shift; run_agent_feedback "${1:-stats}" "${@:2}" ;;
   agent-learn) shift; run_agent_learn "$@" ;;
   skill-contract-lint) shift; run_skill_contract_lint "$@" ;;
+  agent-studio) shift; run_agent_studio "$@" ;;
   autonomy-observe) shift; run_autonomy_observe "$@" ;;
   autonomy-eval) shift; run_autonomy_eval "$@" ;;
   capability-catalog) shift; run_capability_catalog "$@" ;;
