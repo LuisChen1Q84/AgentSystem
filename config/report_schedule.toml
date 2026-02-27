@@ -103,6 +103,16 @@ auto_task_on_run = true
 auto_close_on_run = true
 fail_on_error = false
 
+[skills_intelligence]
+enabled = true
+scorecard_config = "/Volumes/Luis_MacData/AgentSystem/config/skills_scorecard.toml"
+optimizer_config = "/Volumes/Luis_MacData/AgentSystem/config/skills_optimizer.toml"
+weekdays = [2]
+days = 30
+auto_task_on_run = true
+auto_close_on_run = true
+fail_on_error = false
+
 [data_readiness]
 enabled = true
 readiness_config = "/Volumes/Luis_MacData/AgentSystem/config/report_data_readiness.toml"

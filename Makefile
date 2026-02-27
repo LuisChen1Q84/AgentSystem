@@ -535,6 +535,24 @@ report-registry-trends:
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/report_registry_trends.py $$EXTRA"
 
+skills-scorecard:
+	@CFG="$(or $(config),$(ROOT)/config/skills_scorecard.toml)"; \
+	EXTRA=" --config '$$CFG'"; \
+	if [ -n "$(days)" ]; then EXTRA="$$EXTRA --days '$(days)'"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/skills_scorecard.py $$EXTRA"
+
+skills-optimize:
+	@CFG="$(or $(config),$(ROOT)/config/skills_optimizer.toml)"; \
+	EXTRA=" --config '$$CFG'"; \
+	if [ -n "$(scorecard_json)" ]; then EXTRA="$$EXTRA --scorecard-json '$(scorecard_json)'"; fi; \
+	if [ "$(auto)" = "1" ]; then EXTRA="$$EXTRA --auto-task"; fi; \
+	if [ "$(close)" = "1" ]; then EXTRA="$$EXTRA --auto-close-tasks"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/skills_optimizer.py $$EXTRA"
+
 report-learning:
 	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi
 	@CFG="$(or $(config),$(ROOT)/config/report_learning.toml)"; \

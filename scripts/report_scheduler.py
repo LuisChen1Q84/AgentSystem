@@ -715,6 +715,61 @@ def run_state_health(cfg: Dict[str, Any], asof: dt.date, run_mode: bool) -> Dict
     }
 
 
+def run_skills_intelligence(cfg: Dict[str, Any], asof: dt.date, run_mode: bool) -> Dict[str, Any]:
+    s = cfg.get("skills_intelligence", {})
+    enabled = bool(s.get("enabled", False))
+    if not enabled:
+        return {"enabled": False, "ok": True, "returncode": 0}
+    weekdays = list(s.get("weekdays", [2]))
+    scheduled = should_run_weekly(asof, weekdays)
+    if not scheduled:
+        return {"enabled": True, "scheduled": 0, "ok": True, "returncode": 0}
+
+    cmd_score = [
+        "python3",
+        str(ROOT / "scripts/skills_scorecard.py"),
+        "--config",
+        str(s.get("scorecard_config", ROOT / "config/skills_scorecard.toml")),
+        "--days",
+        str(int(s.get("days", 30))),
+    ]
+    p1 = run_cmd(cmd_score)
+    if p1.returncode != 0:
+        ok = not bool(s.get("fail_on_error", False))
+        return {
+            "enabled": True,
+            "scheduled": 1,
+            "ok": ok,
+            "returncode": int(p1.returncode),
+            "cmd_score": cmd_score,
+            "cmd_optimize": [],
+            "fail_on_error": bool(s.get("fail_on_error", False)),
+        }
+
+    cmd_opt = [
+        "python3",
+        str(ROOT / "scripts/skills_optimizer.py"),
+        "--config",
+        str(s.get("optimizer_config", ROOT / "config/skills_optimizer.toml")),
+    ]
+    if run_mode and bool(s.get("auto_task_on_run", True)):
+        cmd_opt.append("--auto-task")
+    if run_mode and bool(s.get("auto_close_on_run", True)):
+        cmd_opt.append("--auto-close-tasks")
+    p2 = run_cmd(cmd_opt)
+    fail_on_error = bool(s.get("fail_on_error", False))
+    ok = (p2.returncode == 0) or (not fail_on_error)
+    return {
+        "enabled": True,
+        "scheduled": 1,
+        "ok": ok,
+        "returncode": int(p2.returncode),
+        "cmd_score": cmd_score,
+        "cmd_optimize": cmd_opt,
+        "fail_on_error": fail_on_error,
+    }
+
+
 def main() -> None:
     global TELEMETRY
     parser = argparse.ArgumentParser(description="Report scheduler with retry and lock")
@@ -874,10 +929,12 @@ def main() -> None:
                 "release_gate": gate_result,
                 "registry_trends": run_registry_trends(cfg=cfg, run_mode=bool(args.run)),
                 "state_health": run_state_health(cfg=cfg, asof=asof, run_mode=bool(args.run)),
+                "skills_intelligence": run_skills_intelligence(cfg=cfg, asof=asof, run_mode=bool(args.run)),
                 "skipped_due_to_data_not_ready": 1,
             }
             ok = ok and bool(report["registry_trends"].get("ok", True))
             ok = ok and bool(report["state_health"].get("ok", True))
+            ok = ok and bool(report["skills_intelligence"].get("ok", True))
             stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
             out = logs_dir / f"scheduler_run_{stamp}.json"
             out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -938,6 +995,8 @@ def main() -> None:
         ok = ok and bool(trends_result.get("ok", True))
         state_health_result = run_state_health(cfg=cfg, asof=asof, run_mode=bool(args.run))
         ok = ok and bool(state_health_result.get("ok", True))
+        skills_result = run_skills_intelligence(cfg=cfg, asof=asof, run_mode=bool(args.run))
+        ok = ok and bool(skills_result.get("ok", True))
         report = {
             "as_of": asof.isoformat(),
             "trace_id": run_ctx.trace_id,
@@ -971,6 +1030,7 @@ def main() -> None:
             "action_center": action_result,
             "registry_trends": trends_result,
             "state_health": state_health_result,
+            "skills_intelligence": skills_result,
         }
     finally:
         release_lock(lock_file)
