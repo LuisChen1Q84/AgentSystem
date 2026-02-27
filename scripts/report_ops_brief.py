@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any, Dict
@@ -13,6 +14,9 @@ from typing import Any, Dict
 
 ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
 CFG_DEFAULT = ROOT / "config/report_ops.toml"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.state_store import StateStore
 
 
 def load_cfg(path: Path) -> Dict[str, Any]:
@@ -68,6 +72,7 @@ def main() -> None:
     out_dir = Path(d["out_dir"])
     output_dir = Path(d["output_dir"])
     events = Path(d["task_events"])
+    state_db = Path(str(d.get("state_db", ROOT / "日志/state/system_state.db")))
 
     gate = load_json(logs / f"release_gate_{target}.json")
     gov = load_json(logs / f"governance_score_{target}.json")
@@ -83,6 +88,9 @@ def main() -> None:
         "digest": output_dir / f"日报摘要_{target}.md",
     }
     pending = pending_watch_tasks(events, target)
+    state = StateStore(state_db)
+    run_stats = state.runs_summary(days=int(d.get("state_window_days", 30)))
+    hotspots = state.step_hotspots(days=int(d.get("state_window_days", 30)), limit=3)
     out = out_dir / f"ops_brief_{target}.md"
 
     lines = [
@@ -93,12 +101,19 @@ def main() -> None:
         f"- governance: {gov.get('score',0)} ({gov.get('grade','')})",
         f"- anomaly: warns={warns}, errors={errors}",
         f"- pending_watch_tasks: {pending}",
+        f"- state_runs_30d: total={run_stats.get('total_runs',0)}, failed={run_stats.get('failed_runs',0)}",
         "",
         "## Artifacts",
         "",
     ]
     for k, p in files.items():
         lines.append(f"- {k}: {'OK' if p.exists() else 'MISSING'} | {p}")
+    lines += ["", "## Failure Hotspots (State Store)", ""]
+    if hotspots:
+        for i, h in enumerate(hotspots, start=1):
+            lines.append(f"{i}. {h.get('module','')}/{h.get('step','')} | fail_count={h.get('fail_count',0)}")
+    else:
+        lines.append("1. 无失败热点。")
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"target_month={target}")
@@ -107,4 +122,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

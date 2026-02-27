@@ -3,4 +3,5 @@ logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
 out_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
 task_events = "/Volumes/Luis_MacData/AgentSystem/任务系统/tasks.jsonl"
 output_dir = "/Volumes/Luis_MacData/AgentSystem/产出"
-
+state_db = "/Volumes/Luis_MacData/AgentSystem/日志/state/system_state.db"
+state_window_days = 30

@@ -243,6 +243,28 @@ class StateStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def latest_module_run(self, *, module: str, target_month: str = "") -> Dict[str, Any]:
+        q = """
+            SELECT run_id, module, trace_id, target_month, profile, as_of, dry_run, status, started_at, ended_at, meta_json
+            FROM runs
+            WHERE module = ?
+        """
+        params: List[Any] = [module]
+        if target_month:
+            q += " AND target_month = ?"
+            params.append(target_month)
+        q += " ORDER BY started_at DESC LIMIT 1"
+        with self._connect() as conn:
+            row = conn.execute(q, params).fetchone()
+        if row is None:
+            return {}
+        out = dict(row)
+        try:
+            out["meta"] = json.loads(str(out.get("meta_json", "{}")))
+        except Exception:
+            out["meta"] = {}
+        return out
+
     def runs_summary(self, *, days: int = 30) -> Dict[str, int]:
         with self._connect() as conn:
             total = conn.execute(

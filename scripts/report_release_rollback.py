@@ -176,7 +176,7 @@ def main() -> None:
         state.finish_run(
             run_id=run_id,
             status="ok",
-            meta={"target_month": args.target_month, "restored_files": restored},
+            meta={"target_month": args.target_month, "restored_files": restored, "approved_by": args.approved_by},
         )
 
         print(f"target={args.target_month}")
@@ -193,7 +193,11 @@ def main() -> None:
             returncode=1,
             meta={"reason": str(e)},
         )
-        state.finish_run(run_id=run_id, status="failed", meta={"reason": str(e), "target_month": args.target_month})
+        state.finish_run(
+            run_id=run_id,
+            status="failed",
+            meta={"reason": str(e), "target_month": args.target_month, "approved_by": args.approved_by},
+        )
         raise
 
 

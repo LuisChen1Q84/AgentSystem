@@ -2,4 +2,4 @@
 logs_dir = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate"
 registry_jsonl = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_registry.jsonl"
 registry_md = "/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/report_registry.md"
-
+state_db = "/Volumes/Luis_MacData/AgentSystem/日志/state/system_state.db"

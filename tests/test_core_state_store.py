@@ -38,6 +38,9 @@ class CoreStateStoreTest(unittest.TestCase):
             summary = s.runs_summary(days=7)
             self.assertEqual(summary["total_runs"], 1)
             self.assertEqual(summary["failed_runs"], 1)
+            latest = s.latest_module_run(module="report_orchestrator", target_month="202602")
+            self.assertEqual(latest.get("run_id", ""), "r1")
+            self.assertEqual(latest.get("status", ""), "failed")
 
 
 if __name__ == "__main__":

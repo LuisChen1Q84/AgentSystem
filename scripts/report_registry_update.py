@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any, Dict, List
@@ -13,6 +14,9 @@ from typing import Any, Dict, List
 
 ROOT = Path("/Volumes/Luis_MacData/AgentSystem")
 CFG_DEFAULT = ROOT / "config/report_registry.toml"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from core.state_store import StateStore
 
 
 def load_cfg(path: Path) -> Dict[str, Any]:
@@ -69,6 +73,7 @@ def main() -> None:
     cfg = load_cfg(Path(args.config))
     d = cfg["defaults"]
     logs = Path(d["logs_dir"])
+    state_db = Path(str(d.get("state_db", ROOT / "日志/state/system_state.db")))
     target = args.target_month
     asof = dt.date.today() if not args.as_of else dt.datetime.strptime(args.as_of, "%Y-%m-%d").date()
 
@@ -77,6 +82,11 @@ def main() -> None:
     gate = load_json(logs / f"release_gate_{target}.json")
     anomaly = load_json(logs / f"anomaly_guard_{target}.json")
     remediation = load_json(logs / f"remediation_exec_{target}.json")
+    state = StateStore(state_db)
+    publish_run = state.latest_module_run(module="report_publish_release", target_month=target)
+    rollback_run = state.latest_module_run(module="report_release_rollback", target_month=target)
+    publish_meta = publish_run.get("meta", {}) if isinstance(publish_run.get("meta", {}), dict) else {}
+    rollback_meta = rollback_run.get("meta", {}) if isinstance(rollback_run.get("meta", {}), dict) else {}
 
     summary = anomaly.get("summary", {}) if isinstance(anomaly.get("summary", {}), dict) else {}
     row = {
@@ -89,6 +99,12 @@ def main() -> None:
         "warns": int(summary.get("warns", anomaly.get("warns", 0)) or 0),
         "errors": int(summary.get("errors", anomaly.get("errors", 0)) or 0),
         "release_decision": gate.get("decision", ""),
+        "publish_status": publish_run.get("status", ""),
+        "publish_run_id": publish_run.get("run_id", ""),
+        "publish_approved_by": publish_meta.get("approved_by", ""),
+        "rollback_status": rollback_run.get("status", ""),
+        "rollback_run_id": rollback_run.get("run_id", ""),
+        "rollback_approved_by": rollback_meta.get("approved_by", ""),
         "remediation_dry_run": int(remediation.get("dry_run", 1) or 1),
         "remediation_ok": int(remediation.get("ok", 0) or 0),
     }
@@ -125,14 +141,15 @@ def main() -> None:
     lines = [
         "# 报表运行台账",
         "",
-        "| as_of | target_month | profile | ok | governance | warns | errors | release | remediation |",
-        "|---|---|---|---:|---|---:|---:|---|---|",
+        "| as_of | target_month | profile | ok | governance | warns | errors | release | publish | rollback | remediation |",
+        "|---|---|---|---:|---|---:|---:|---|---|---|---|",
     ]
     for r in recent:
         lines.append(
             f"| {r.get('as_of','')} | {r.get('target_month','')} | {r.get('profile','')} | {r.get('schedule_ok',0)} | "
             f"{r.get('governance_score',0)}({r.get('governance_grade','')}) | {r.get('warns',0)} | {r.get('errors',0)} | "
-            f"{r.get('release_decision','')} | {r.get('remediation_ok',0)}/dry={r.get('remediation_dry_run',1)} |"
+            f"{r.get('release_decision','')} | {r.get('publish_status','')}/{r.get('publish_approved_by','')} | "
+            f"{r.get('rollback_status','')}/{r.get('rollback_approved_by','')} | {r.get('remediation_ok',0)}/dry={r.get('remediation_dry_run',1)} |"
         )
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

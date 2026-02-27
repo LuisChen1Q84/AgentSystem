@@ -286,7 +286,7 @@ def main() -> None:
         state.finish_run(
             run_id=run_id,
             status="ok",
-            meta={"target_month": target, "copied_files": len(copied)},
+            meta={"target_month": target, "copied_files": len(copied), "approved_by": args.approved_by},
         )
 
         print(f"release_dir={release_dir}")
@@ -303,7 +303,11 @@ def main() -> None:
             returncode=1,
             meta={"reason": str(e)},
         )
-        state.finish_run(run_id=run_id, status="failed", meta={"reason": str(e), "target_month": target})
+        state.finish_run(
+            run_id=run_id,
+            status="failed",
+            meta={"reason": str(e), "target_month": target, "approved_by": args.approved_by},
+        )
         raise
 
 
