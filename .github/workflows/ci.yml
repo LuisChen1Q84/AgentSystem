@@ -1,4 +1,4 @@
-name: Local Checks
+name: CI Security Gate
 
 on:
   push:
@@ -17,3 +17,7 @@ jobs:
         run: |
           chmod +x scripts/*.sh
           bash scripts/checks.sh
+      - name: Security audit gate
+        run: python3 scripts/security_audit.py --strict
+      - name: Policy gate
+        run: python3 scripts/policy_check.py --strict

@@ -2,6 +2,10 @@
 root_dir = "/Volumes/Luis_MacData/AgentSystem/发布/reports"
 archive_root = "/Volumes/Luis_MacData/AgentSystem/任务归档/reports"
 
+[approval]
+enabled = true
+token_file = "/Volumes/Luis_MacData/AgentSystem/config/release_approvals.json"
+
 [publish.outputs]
 manifest_name = "manifest.json"
 package_suffix = "_report_package.zip"

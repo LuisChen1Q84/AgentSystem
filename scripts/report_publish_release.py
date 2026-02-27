@@ -46,6 +46,62 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _parse_iso(s: str) -> dt.datetime | None:
+    text = (s or "").strip()
+    if not text:
+        return None
+    try:
+        return dt.datetime.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def assert_release_approval(
+    cfg: Dict,
+    *,
+    action: str,
+    target_month: str,
+    approved_by: str,
+    approval_token_file: str,
+    skip_approval: bool,
+) -> None:
+    ap = cfg.get("approval", {})
+    enabled = bool(ap.get("enabled", False))
+    if not enabled or skip_approval:
+        return
+    if not approved_by.strip():
+        raise SystemExit("发布审批失败: 请提供 --approved-by")
+
+    token_file = Path(approval_token_file.strip() or str(ap.get("token_file", "")))
+    if not token_file.exists():
+        raise SystemExit(f"发布审批失败: 审批文件不存在 {token_file}")
+    try:
+        payload = json.loads(token_file.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise SystemExit(f"发布审批失败: 审批文件无法解析 {token_file}: {e}") from e
+
+    approvals = payload.get("approvals", []) if isinstance(payload, dict) else []
+    now = dt.datetime.now()
+    for a in approvals:
+        if not isinstance(a, dict):
+            continue
+        if str(a.get("status", "")).lower() != "approved":
+            continue
+        if str(a.get("action", "")).lower() != action.lower():
+            continue
+        if str(a.get("target_month", "")) != target_month:
+            continue
+        if str(a.get("approved_by", "")) != approved_by:
+            continue
+        expires_at = _parse_iso(str(a.get("expires_at", "")))
+        if expires_at and now > expires_at:
+            continue
+        return
+    raise SystemExit(
+        f"发布审批失败: 未找到有效审批(action={action}, target={target_month}, approved_by={approved_by})"
+    )
+
+
 def render_release_note(target: str, as_of: str, files: Dict[str, Path], manifest: Dict) -> str:
     lines: List[str] = []
     lines.append(f"# 发布说明（{month_label(target)}）")
@@ -94,6 +150,9 @@ def main() -> None:
     parser.add_argument("--outdir", required=True, help="产出目录")
     parser.add_argument("--skip-gate", action="store_true", help="skip release gate check")
     parser.add_argument("--gate-json", default="", help="release_gate_xxx.json path")
+    parser.add_argument("--approved-by", default="", help="approval owner")
+    parser.add_argument("--approval-token-file", default="", help="approval json file path")
+    parser.add_argument("--skip-approval", action="store_true", help="skip approval gate")
     args = parser.parse_args()
 
     cfg = load_cfg()
@@ -101,6 +160,14 @@ def main() -> None:
     archive_root = Path(cfg["publish"]["archive_root"])
     outdir = Path(args.outdir)
     target = args.target_month
+    assert_release_approval(
+        cfg,
+        action="publish",
+        target_month=target,
+        approved_by=args.approved_by,
+        approval_token_file=args.approval_token_file,
+        skip_approval=bool(args.skip_approval),
+    )
 
     if not args.skip_gate:
         gate_path = Path(args.gate_json) if args.gate_json else Path(

@@ -1,0 +1,21 @@
+{
+  "approvals": [
+    {
+      "action": "publish",
+      "target_month": "202602",
+      "approved_by": "luis",
+      "approved_at": "2026-02-27T09:00:00",
+      "expires_at": "2026-03-02T00:00:00",
+      "status": "approved"
+    },
+    {
+      "action": "rollback",
+      "target_month": "202602",
+      "approved_by": "luis",
+      "approved_at": "2026-02-27T09:05:00",
+      "expires_at": "2026-03-02T00:00:00",
+      "status": "approved"
+    }
+  ]
+}
+
