@@ -1,0 +1,40 @@
+{
+  "tasks": [
+    {
+      "id": "golden_report_001",
+      "text": "请生成一份本周工作复盘框架",
+      "params": {
+        "profile": "strict",
+        "dry_run": true
+      },
+      "expect": {
+        "ok": true,
+        "task_kind": "report"
+      }
+    },
+    {
+      "id": "golden_presentation_001",
+      "text": "请做一份董事会汇报PPT的大纲",
+      "params": {
+        "profile": "auto",
+        "dry_run": true
+      },
+      "expect": {
+        "ok": true,
+        "task_kind": "presentation"
+      }
+    },
+    {
+      "id": "golden_market_001",
+      "text": "请分析SPY当前支撑与风险",
+      "params": {
+        "profile": "strict",
+        "dry_run": true
+      },
+      "expect": {
+        "ok": true,
+        "task_kind": "market"
+      }
+    }
+  ]
+}

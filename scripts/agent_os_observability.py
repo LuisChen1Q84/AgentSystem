@@ -61,6 +61,7 @@ def aggregate(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
     durations = [int(r.get("duration_ms", 0) or 0) for r in scoped]
     fallback_cnt = sum(1 for r in scoped if int(r.get("attempt_count", 0) or 0) > 1)
     takeover_cnt = sum(1 for r in scoped if not bool(r.get("ok", False)))
+    clarify_cnt = sum(1 for r in scoped if bool(r.get("clarify_needed", False)))
 
     by_profile = Counter(str(r.get("profile", "unknown")) for r in scoped)
     by_strategy = Counter(str(r.get("selected_strategy", "unknown")) for r in scoped if str(r.get("selected_strategy", "")).strip())
@@ -94,6 +95,7 @@ def aggregate(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
             "p95_ms": _percentile(durations, 95.0),
             "fallback_rate": round((fallback_cnt / total) * 100, 2) if total else 0.0,
             "manual_takeover_rate": round((takeover_cnt / total) * 100, 2) if total else 0.0,
+            "clarify_rate": round((clarify_cnt / total) * 100, 2) if total else 0.0,
             "profile_distribution": dict(by_profile),
             "strategy_distribution": dict(by_strategy),
             "task_kind_distribution": dict(by_task_kind),
@@ -114,6 +116,7 @@ def _render_md(report: Dict[str, Any]) -> str:
         f"- p95_ms: {s['p95_ms']}",
         f"- fallback_rate: {s['fallback_rate']}%",
         f"- manual_takeover_rate: {s['manual_takeover_rate']}%",
+        f"- clarify_rate: {s.get('clarify_rate', 0.0)}%",
         f"- profile_distribution: {s['profile_distribution']}",
         f"- strategy_distribution: {s['strategy_distribution']}",
         f"- task_kind_distribution: {s['task_kind_distribution']}",

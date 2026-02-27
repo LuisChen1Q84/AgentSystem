@@ -37,6 +37,7 @@ def load_cfg(path: Path = CFG_DEFAULT) -> Dict[str, Any]:
                 "log_dir": str(ROOT / "日志" / "agent_os"),
                 "out_json": str(ROOT / "日志" / "agent_os" / "capability_catalog_latest.json"),
                 "out_md": str(ROOT / "日志" / "agent_os" / "capability_catalog_latest.md"),
+                "contracts_cfg": str(ROOT / "config" / "skill_contracts.toml"),
             },
             "layer_mapping": {},
         }
@@ -59,7 +60,33 @@ def _heuristic_layer(name: str, description: str, calls: Iterable[str]) -> str:
     return "core-generalist"
 
 
-def _contract_checks(skill: SkillMeta) -> Dict[str, Any]:
+def _load_contract_registry(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        with path.open("rb") as f:
+            payload = tomllib.load(f)
+        rows = payload.get("contracts", {}) if isinstance(payload.get("contracts", {}), dict) else {}
+        return rows
+    except Exception:
+        return {}
+
+
+def _contract_checks(skill: SkillMeta, contracts: Dict[str, Any]) -> Dict[str, Any]:
+    c = contracts.get(skill.name, {}) if isinstance(contracts, dict) else {}
+    if isinstance(c, dict) and c:
+        issues: List[str] = []
+        for key in ("inputs", "decision_gates", "execution_mode", "fallback", "outputs", "acceptance", "risk_level"):
+            if key not in c:
+                issues.append(f"missing_{key}")
+        if str(c.get("execution_mode", "")).strip() not in {"advisor", "operator"}:
+            issues.append("invalid_execution_mode")
+        if str(c.get("risk_level", "")).strip() not in {"low", "medium", "high"}:
+            issues.append("invalid_risk_level")
+        if not issues:
+            maturity = "production-ready" if str(c.get("execution_mode", "")) == "operator" else "hardened"
+            return {"contract_score": 4, "issues": [], "maturity": maturity}
+
     issues: List[str] = []
     if not str(skill.description or "").strip():
         issues.append("missing_description")
@@ -81,6 +108,9 @@ def _contract_checks(skill: SkillMeta) -> Dict[str, Any]:
 
 def scan(skills: List[SkillMeta] | None = None, cfg: Dict[str, Any] | None = None) -> Dict[str, Any]:
     payload = cfg or load_cfg(CFG_DEFAULT)
+    defaults = payload.get("defaults", {}) if isinstance(payload.get("defaults", {}), dict) else {}
+    contracts_cfg = Path(str(defaults.get("contracts_cfg", ROOT / "config" / "skill_contracts.toml")))
+    contracts = _load_contract_registry(contracts_cfg)
     layer_mapping = payload.get("layer_mapping", {}) if isinstance(payload, dict) else {}
     builtins = payload.get("builtins", {}) if isinstance(payload, dict) else {}
     rows: List[Dict[str, Any]] = []
@@ -89,7 +119,7 @@ def scan(skills: List[SkillMeta] | None = None, cfg: Dict[str, Any] | None = Non
     for skill in (skills if skills is not None else parse_all_skills(silent=True)):
         mapped = str(layer_mapping.get(skill.name, "")).strip()
         layer = mapped if mapped else _heuristic_layer(skill.name, skill.description, skill.calls)
-        contract = _contract_checks(skill)
+        contract = _contract_checks(skill, contracts)
         row = {
             "skill": skill.name,
             "layer": layer,
@@ -110,7 +140,9 @@ def scan(skills: List[SkillMeta] | None = None, cfg: Dict[str, Any] | None = Non
         if any(str(r.get("skill", "")) == str(name) for r in rows):
             continue
         layer = str((meta or {}).get("layer", "core-generalist"))
-        maturity = str((meta or {}).get("maturity", "hardened"))
+        c = contracts.get(str(name), {}) if isinstance(contracts, dict) else {}
+        c_mode = str(c.get("execution_mode", "")).strip() if isinstance(c, dict) else ""
+        maturity = "production-ready" if c_mode == "operator" else str((meta or {}).get("maturity", "hardened"))
         row = {
             "skill": str(name),
             "layer": layer,

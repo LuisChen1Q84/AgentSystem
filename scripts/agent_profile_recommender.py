@@ -42,12 +42,27 @@ def _in_scope(ts: str, scope: set[str]) -> bool:
     return (ts or "")[:10] in scope
 
 
-def _score_profile(success_rate: float, avg_ms: float) -> float:
+def _score_profile(success_rate: float, avg_ms: float, avg_feedback: float = 0.0) -> float:
     speed = max(0.0, 1.0 - min(avg_ms, 12000.0) / 12000.0)
-    return round(100.0 * (0.7 * success_rate + 0.3 * speed), 2)
+    fb = (avg_feedback + 1.0) / 2.0  # -1..1 -> 0..1
+    return round(100.0 * (0.65 * success_rate + 0.25 * speed + 0.10 * fb), 2)
 
 
-def _profile_rows(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _feedback_lookup(feedback_rows: List[Dict[str, Any]]) -> Dict[Tuple[str, str], float]:
+    buckets: Dict[Tuple[str, str], List[int]] = defaultdict(list)
+    for r in feedback_rows:
+        kind = str(r.get("task_kind", "generic")).strip() or "generic"
+        profile = str(r.get("profile", "")).strip()
+        if not profile:
+            continue
+        buckets[(kind, profile)].append(int(r.get("rating", 0)))
+    out: Dict[Tuple[str, str], float] = {}
+    for k, vals in buckets.items():
+        out[k] = float(sum(vals) / max(1, len(vals)))
+    return out
+
+
+def _profile_rows(rows: List[Dict[str, Any]], task_kind: str = "", feedback_lookup: Dict[Tuple[str, str], float] | None = None) -> Dict[str, Dict[str, Any]]:
     stats: Dict[str, Dict[str, Any]] = {}
     for r in rows:
         p = str(r.get("profile", "")).strip()
@@ -64,18 +79,22 @@ def _profile_rows(rows: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
         ok = int(rec["ok"])
         avg_ms = round(sum(rec["durations"]) / max(1, len(rec["durations"])), 2) if rec["durations"] else 0.0
         sr = (ok / runs) if runs else 0.0
+        avg_fb = float((feedback_lookup or {}).get((task_kind or "generic", p), 0.0))
         out[p] = {
             "runs": runs,
             "success_rate": round(sr * 100.0, 2),
             "avg_ms": avg_ms,
-            "score": _score_profile(sr, avg_ms),
+            "avg_feedback": round(avg_fb, 4),
+            "score": _score_profile(sr, avg_ms, avg_fb),
         }
     return out
 
 
-def recommend(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
+def recommend(rows: List[Dict[str, Any]], days: int, feedback_rows: List[Dict[str, Any]] | None = None) -> Dict[str, Any]:
     scope = _days_scope(days)
     scoped = [r for r in rows if _in_scope(str(r.get("ts", "")), scope)]
+    scoped_feedback = [r for r in (feedback_rows or []) if _in_scope(str(r.get("ts", "")), scope)]
+    feedback_lookup = _feedback_lookup(scoped_feedback)
 
     by_task_kind: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for r in scoped:
@@ -85,7 +104,7 @@ def recommend(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
     task_kind_profiles: Dict[str, str] = {}
     task_kind_evidence: Dict[str, Dict[str, Any]] = {}
     for kind, rs in sorted(by_task_kind.items()):
-        prof_stats = _profile_rows(rs)
+        prof_stats = _profile_rows(rs, task_kind=kind, feedback_lookup=feedback_lookup)
         ranked: List[Tuple[float, str]] = []
         for p, v in prof_stats.items():
             ranked.append((float(v.get("score", 0.0)), p))
@@ -95,7 +114,7 @@ def recommend(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
             task_kind_profiles[kind] = chosen
             task_kind_evidence[kind] = {"profiles": prof_stats, "selected": chosen}
 
-    global_stats = _profile_rows(scoped)
+    global_stats = _profile_rows(scoped, task_kind="generic", feedback_lookup=feedback_lookup)
     default_profile = ""
     if global_stats:
         best = sorted(((float(v.get("score", 0.0)), p) for p, v in global_stats.items()), reverse=True)
@@ -117,6 +136,7 @@ def recommend(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
         "window_days": days,
         "summary": {
             "runs": len(scoped),
+            "feedback": len(scoped_feedback),
             "task_kinds": len(task_kind_profiles),
             "default_profile": default_profile,
         },
@@ -134,6 +154,7 @@ def _render_md(report: Dict[str, Any]) -> str:
         f"- generated_at: {report['ts']}",
         f"- window_days: {report['window_days']}",
         f"- runs: {s['runs']}",
+        f"- feedback: {s.get('feedback', 0)}",
         f"- task_kinds: {s['task_kinds']}",
         f"- default_profile: {s['default_profile']}",
         "",
@@ -163,11 +184,14 @@ def main() -> int:
     p.add_argument("--out-json", default="")
     p.add_argument("--out-md", default="")
     p.add_argument("--overrides-file", default=str(OVERRIDES_DEFAULT))
+    p.add_argument("--feedback-file", default="")
     p.add_argument("--apply", action="store_true")
     args = p.parse_args()
 
     rows = _load_jsonl(Path(args.data_dir) / "agent_runs.jsonl")
-    report = recommend(rows, days=max(1, int(args.days)))
+    feedback_path = Path(args.feedback_file) if args.feedback_file else Path(args.data_dir) / "feedback.jsonl"
+    feedback_rows = _load_jsonl(feedback_path)
+    report = recommend(rows, days=max(1, int(args.days)), feedback_rows=feedback_rows)
 
     out_json = Path(args.out_json) if args.out_json else Path(args.data_dir) / "profile_recommend_latest.json"
     out_md = Path(args.out_md) if args.out_md else Path(args.data_dir) / "profile_recommend_latest.md"

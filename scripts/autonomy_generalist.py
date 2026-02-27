@@ -170,6 +170,7 @@ def _plan_candidates(
     execution_mode: str,
     allowed_strategies: set[str],
     blocked_strategies: set[str],
+    enforce_allow_list: bool,
 ) -> List[Dict[str, Any]]:
     defaults = cfg.get("defaults", {})
     min_skill_score = float(defaults.get("min_skill_score", 0.12))
@@ -217,7 +218,9 @@ def _plan_candidates(
         }
     )
 
-    if allowed_strategies:
+    if enforce_allow_list and not allowed_strategies:
+        rows = []
+    elif allowed_strategies:
         rows = [r for r in rows if str(r.get("strategy", "")) in allowed_strategies]
     if blocked_strategies:
         rows = [r for r in rows if str(r.get("strategy", "")) not in blocked_strategies]
@@ -298,6 +301,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     learning_enabled = bool(values.get("learning_enabled", defaults.get("learning_enabled", True)))
     allowed_strategies = _as_name_set(values.get("allowed_strategies", []))
     blocked_strategies = _as_name_set(values.get("blocked_strategies", []))
+    enforce_allow_list = bool(values.get("enforce_allow_list", False))
     if deterministic:
         learning_enabled = False
 
@@ -309,8 +313,11 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         execution_mode=execution_mode,
         allowed_strategies=allowed_strategies,
         blocked_strategies=blocked_strategies,
+        enforce_allow_list=enforce_allow_list,
     )
     top_gap = round(float(candidates[0]["score"]) - float(candidates[1]["score"]), 4) if len(candidates) > 1 else 1.0
+    if not candidates:
+        top_gap = 0.0
     ambiguity_flag = bool(top_gap < ambiguity_gap_threshold and len(candidates) > 1)
     ambiguity_resolution = "none"
     if ambiguity_flag and deterministic:
@@ -407,6 +414,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         "candidate_filter": {
             "allowed_strategies": sorted(list(allowed_strategies)),
             "blocked_strategies": sorted(list(blocked_strategies)),
+            "enforce_allow_list": enforce_allow_list,
         },
         "top_gap": top_gap,
         "ambiguity_flag": ambiguity_flag,

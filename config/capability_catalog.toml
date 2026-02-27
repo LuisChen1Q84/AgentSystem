@@ -2,6 +2,7 @@
 log_dir = "日志/agent_os"
 out_json = "日志/agent_os/capability_catalog_latest.json"
 out_md = "日志/agent_os/capability_catalog_latest.md"
+contracts_cfg = "config/skill_contracts.toml"
 
 [layer_mapping]
 policy-pbc = "core-governance"

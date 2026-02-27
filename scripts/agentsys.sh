@@ -1076,6 +1076,43 @@ run_agent_pack() {
   python3 "${ROOT_DIR}/scripts/agent_pack_manager.py" "${subcmd}" "$@" || return "${E_SKILL}"
 }
 
+run_agent_slo_guard() {
+  automation_log "INFO" "agent-slo-guard" "start"
+  python3 "${ROOT_DIR}/scripts/agent_slo_guard.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "agent-slo-guard" "done"
+}
+
+run_agent_golden() {
+  automation_log "INFO" "agent-golden" "start"
+  python3 "${ROOT_DIR}/scripts/agent_golden_regression.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "agent-golden" "done"
+}
+
+run_agent_fault() {
+  automation_log "INFO" "agent-fault" "start"
+  python3 "${ROOT_DIR}/scripts/agent_fault_injection.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "agent-fault" "done"
+}
+
+run_agent_feedback() {
+  local subcmd="${1:-stats}"
+  shift || true
+  automation_log "INFO" "agent-feedback" "subcmd=${subcmd}"
+  python3 "${ROOT_DIR}/scripts/agent_feedback.py" "${subcmd}" "$@" || return "${E_SKILL}"
+}
+
+run_agent_learn() {
+  automation_log "INFO" "agent-learn" "start"
+  python3 "${ROOT_DIR}/scripts/agent_controlled_learning.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "agent-learn" "done"
+}
+
+run_skill_contract_lint() {
+  automation_log "INFO" "skill-contract-lint" "start"
+  python3 "${ROOT_DIR}/scripts/skill_contract_lint.py" "$@" || return "${E_SKILL}"
+  automation_log "INFO" "skill-contract-lint" "done"
+}
+
 run_autonomy_observe() {
   automation_log "INFO" "autonomy-observe" "start"
   python3 "${ROOT_DIR}/scripts/autonomy_observability.py" "$@" || return "${E_SKILL}"
@@ -1233,6 +1270,12 @@ Usage:
   scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
   scripts/agentsys.sh agent-pack [list|enable|disable] [--name <pack>] [--cfg <path>]
+  scripts/agentsys.sh agent-slo-guard [--enforce --cfg <path>]
+  scripts/agentsys.sh agent-golden [--strict --tasks <path>]
+  scripts/agentsys.sh agent-fault [--strict]
+  scripts/agentsys.sh agent-feedback [add|stats] [args...]
+  scripts/agentsys.sh agent-learn [--apply --cfg <path>]
+  scripts/agentsys.sh skill-contract-lint [--strict --cfg <path>]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
@@ -1334,6 +1377,12 @@ case "${cmd}" in
   agent-observe) shift; run_agent_observe "$@" ;;
   agent-recommend) shift; run_agent_recommend "$@" ;;
   agent-pack) shift; run_agent_pack "${1:-list}" "${@:2}" ;;
+  agent-slo-guard) shift; run_agent_slo_guard "$@" ;;
+  agent-golden) shift; run_agent_golden "$@" ;;
+  agent-fault) shift; run_agent_fault "$@" ;;
+  agent-feedback) shift; run_agent_feedback "${1:-stats}" "${@:2}" ;;
+  agent-learn) shift; run_agent_learn "$@" ;;
+  skill-contract-lint) shift; run_skill_contract_lint "$@" ;;
   autonomy-observe) shift; run_autonomy_observe "$@" ;;
   autonomy-eval) shift; run_autonomy_eval "$@" ;;
   capability-catalog) shift; run_capability_catalog "$@" ;;

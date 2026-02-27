@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import tomllib
 import uuid
 from pathlib import Path
@@ -26,11 +27,13 @@ if str(ROOT) not in sys.path:
 try:
     from core.skill_intelligence import build_loop_closure
     from scripts import autonomy_generalist
+    from scripts.agent_delivery_card import build_card, render_md as render_delivery_md
     from scripts.capability_catalog import load_cfg as load_catalog_cfg
     from scripts.capability_catalog import scan as scan_catalog
 except ModuleNotFoundError:  # direct script execution
     from core.skill_intelligence import build_loop_closure
     import autonomy_generalist  # type: ignore
+    from agent_delivery_card import build_card, render_md as render_delivery_md  # type: ignore
     from capability_catalog import load_cfg as load_catalog_cfg  # type: ignore
     from capability_catalog import scan as scan_catalog  # type: ignore
 
@@ -106,13 +109,48 @@ def _task_kind(text: str) -> str:
         return "presentation"
     if any(k in low for k in ["图像", "图片", "画", "海报", "image", "poster"]):
         return "image"
-    if any(k in low for k in ["股票", "etf", "k线", "market", "quant", "回测"]):
+    if any(k in low for k in ["股票", "etf", "k线", "market", "quant", "回测", "spy", "qqq", "支撑", "压力", "buy", "sell"]):
         return "market"
     if any(k in low for k in ["报告", "总结", "复盘", "brief", "summary"]):
         return "report"
     if any(k in low for k in ["表格", "excel", "xlsx", "数据", "sql"]):
         return "dataops"
     return "general"
+
+
+def _clarification_plan(text: str, task_kind: str) -> Dict[str, Any]:
+    t = text.strip()
+    low = t.lower()
+    questions: List[str] = []
+    assumptions: List[str] = []
+
+    if len(t) < 8:
+        questions.append("你希望最终交付是什么格式（清单/报告/PPT/表格）？")
+        assumptions.append("默认先输出结构化 markdown 清单。")
+
+    if task_kind == "presentation":
+        if not re.search(r"(董事会|管理层|客户|投资人|audience)", t, re.IGNORECASE):
+            questions.append("这份演示文稿的受众是谁？")
+            assumptions.append("默认受众为管理层。")
+        if not re.search(r"(10页|15页|20页|页|slides?)", low):
+            questions.append("你希望控制在多少页以内？")
+            assumptions.append("默认 12 页以内。")
+
+    if task_kind == "report":
+        if not re.search(r"(本周|本月|季度|年度|today|week|month|quarter|year)", low):
+            questions.append("时间范围是本周、本月还是自定义区间？")
+            assumptions.append("默认时间范围为本周。")
+
+    if task_kind == "market":
+        if not re.search(r"(A股|港股|美股|etf|symbol|代码)", low):
+            questions.append("请确认市场与标的代码（如 SPY、513180）。")
+            assumptions.append("默认按美股ETF语境进行框架化分析。")
+
+    return {
+        "needed": len(questions) > 0,
+        "questions": questions[:2],
+        "assumptions": assumptions[:2],
+    }
 
 
 def _load_profile_overrides(path: Path) -> Dict[str, Any]:
@@ -250,6 +288,8 @@ def _build_strategy_controls(
         risk = str(strategy_risk.get(s, "medium")).strip().lower()
 
         reasons: List[str] = []
+        if not enabled_layers:
+            reasons.append("no_enabled_layers")
         if effective_allowed_layers and layer not in effective_allowed_layers:
             reasons.append(f"layer_blocked:{layer}")
         if blocked_maturity and maturity in blocked_maturity:
@@ -282,6 +322,8 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         str(values.get("profile_overrides_file", defaults.get("profile_overrides_file", str(PROFILE_OVERRIDES_DEFAULT))))
     )
     profile_name, governor, profile_meta = _resolve_profile(cfg, str(values.get("profile", "")), text, overrides_file)
+    task_kind = str(profile_meta.get("task_kind", "general"))
+    clarification = _clarification_plan(text, task_kind)
 
     log_dir = Path(str(values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")))
     )
@@ -298,6 +340,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     aut_params["learning_enabled"] = governor["learning_enabled"]
     aut_params["max_fallback_steps"] = governor["max_fallback_steps"]
     aut_params["allowed_strategies"] = strategy_controls["allowed_strategies"]
+    aut_params["enforce_allow_list"] = True
     aut_log_dir = str(values.get("autonomy_log_dir", "")).strip()
     if aut_log_dir:
         aut_params["log_dir"] = aut_log_dir
@@ -305,7 +348,9 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     result = autonomy_generalist.run_request(text, aut_params)
     ok = bool(result.get("ok", False))
     duration_ms = int((dt.datetime.now() - t0).total_seconds() * 1000)
-    task_kind = str(profile_meta.get("task_kind", "general"))
+    selected_obj = result.get("selected", {})
+    if not isinstance(selected_obj, dict):
+        selected_obj = {}
 
     payload = {
         "run_id": run_id,
@@ -317,6 +362,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         "governor": governor,
         "request": {"text": text, "params": values},
         "task_kind": task_kind,
+        "clarification": clarification,
         "duration_ms": duration_ms,
         "capability_snapshot": capability_snapshot,
         "strategy_controls": strategy_controls,
@@ -328,7 +374,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
             evidence={
                 "profile": profile_name,
                 "task_kind": task_kind,
-                "selected_strategy": result.get("selected", {}).get("strategy", ""),
+                "selected_strategy": selected_obj.get("strategy", ""),
                 "attempts": len(result.get("attempts", [])),
                 "duration_ms": duration_ms,
             },
@@ -342,6 +388,11 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
 
     out_file = log_dir / f"agent_run_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    delivery_card = build_card(payload)
+    card_json = log_dir / f"agent_delivery_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    card_md = log_dir / f"agent_delivery_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+    card_json.write_text(json.dumps(delivery_card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    card_md.write_text(render_delivery_md(delivery_card), encoding="utf-8")
     _append_jsonl(
         log_dir / "agent_runs.jsonl",
         {
@@ -351,14 +402,17 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
             "profile": profile_name,
             "task_kind": task_kind,
             "duration_ms": duration_ms,
-            "selected_strategy": result.get("selected", {}).get("strategy", ""),
+            "selected_strategy": selected_obj.get("strategy", ""),
             "attempt_count": len(result.get("attempts", [])),
+            "clarify_needed": bool(clarification.get("needed", False)),
         },
     )
 
     payload["deliver_assets"] = {
         "items": [
             {"path": str(out_file)},
+            {"path": str(card_json)},
+            {"path": str(card_md)},
             {"path": str(log_dir / "agent_runs.jsonl")},
         ]
     }

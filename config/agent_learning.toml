@@ -1,0 +1,12 @@
+[defaults]
+window_days = 30
+min_samples = 3
+runs_file = "日志/agent_os/agent_runs.jsonl"
+feedback_file = "日志/agent_os/feedback.jsonl"
+overrides_file = "config/agent_profile_overrides.json"
+out_json = "日志/agent_os/controlled_learning_latest.json"
+out_md = "日志/agent_os/controlled_learning_latest.md"
+
+[guards]
+market = "strict"
+dataops = "strict"

@@ -1,0 +1,10 @@
+[defaults]
+window_days = 14
+min_runs = 5
+min_success_rate = 80.0
+max_p95_ms = 5000
+max_manual_takeover_rate = 30.0
+max_fallback_rate = 70.0
+data_dir = "日志/agent_os"
+out_json = "日志/agent_os/slo_guard_latest.json"
+out_md = "日志/agent_os/slo_guard_latest.md"

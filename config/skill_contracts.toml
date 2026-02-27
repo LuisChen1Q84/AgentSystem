@@ -1,0 +1,121 @@
+[defaults]
+log_dir = "日志/skills"
+out_json = "日志/skills/contract_lint_latest.json"
+out_md = "日志/skills/contract_lint_latest.md"
+
+[contracts.policy-pbc]
+inputs = ["topic", "region", "focus"]
+decision_gates = ["has_topic", "source_reliability_gte_0.7", "policy_time_window_checked"]
+execution_mode = "advisor"
+fallback = ["policy-pbc-basics", "mcp-generalist"]
+outputs = ["markdown"]
+acceptance = ["includes_policy_summary", "includes_source_evidence", "includes_risk_assessment"]
+risk_level = "medium"
+
+[contracts.policy-pbc-basics]
+inputs = ["topic"]
+decision_gates = ["has_topic"]
+execution_mode = "advisor"
+fallback = ["mcp-generalist"]
+outputs = ["markdown"]
+acceptance = ["includes_key_points", "includes_reference_links"]
+risk_level = "low"
+
+[contracts.policy-pbc-keyword-index]
+inputs = ["topic"]
+decision_gates = ["has_topic"]
+execution_mode = "advisor"
+fallback = ["mcp-generalist"]
+outputs = ["markdown"]
+acceptance = ["includes_keywords", "includes_taxonomy"]
+risk_level = "low"
+
+[contracts.digest]
+inputs = ["action", "source", "query", "type"]
+decision_gates = ["has_action", "source_available"]
+execution_mode = "operator"
+fallback = ["mcp-generalist"]
+outputs = ["markdown", "json"]
+acceptance = ["includes_summary_blocks", "includes_sources", "timestamp_recorded"]
+risk_level = "low"
+
+[contracts.mckinsey-ppt]
+inputs = ["topic", "audience", "deadline"]
+decision_gates = ["has_topic", "has_audience"]
+execution_mode = "advisor"
+fallback = ["digest", "mcp-generalist"]
+outputs = ["markdown", "pptx"]
+acceptance = ["includes_storyline", "includes_key_message", "includes_next_steps"]
+risk_level = "low"
+
+[contracts.minimax-docx]
+inputs = ["topic", "format"]
+decision_gates = ["has_topic"]
+execution_mode = "advisor"
+fallback = ["digest", "mcp-generalist"]
+outputs = ["docx", "markdown"]
+acceptance = ["docx_generated", "content_structured"]
+risk_level = "low"
+
+[contracts.minimax-xlsx]
+inputs = ["action", "sheet", "range"]
+decision_gates = ["has_action", "sheet_exists"]
+execution_mode = "operator"
+fallback = ["mcp-generalist"]
+outputs = ["xlsx", "json"]
+acceptance = ["file_updated", "validation_passed"]
+risk_level = "medium"
+
+[contracts.finance-industry]
+inputs = ["topic", "period"]
+decision_gates = ["has_topic"]
+execution_mode = "advisor"
+fallback = ["digest", "mcp-generalist"]
+outputs = ["markdown"]
+acceptance = ["includes_market_view", "includes_risk_notes"]
+risk_level = "medium"
+
+[contracts.ai-industry]
+inputs = ["topic", "period"]
+decision_gates = ["has_topic"]
+execution_mode = "advisor"
+fallback = ["digest", "mcp-generalist"]
+outputs = ["markdown"]
+acceptance = ["includes_trend_view", "includes_source_links"]
+risk_level = "low"
+
+[contracts.serp-api]
+inputs = ["query", "limit"]
+decision_gates = ["has_query"]
+execution_mode = "operator"
+fallback = ["mcp-generalist"]
+outputs = ["json", "markdown"]
+acceptance = ["results_non_empty", "source_urls_present"]
+risk_level = "medium"
+
+[contracts.mcp-generalist]
+inputs = ["problem"]
+decision_gates = ["problem_non_empty"]
+execution_mode = "operator"
+fallback = []
+outputs = ["json", "markdown"]
+acceptance = ["selected_tool_recorded", "risk_checked"]
+risk_level = "medium"
+
+[contracts.image-creator-hub]
+inputs = ["prompt", "style"]
+decision_gates = ["prompt_non_empty"]
+execution_mode = "operator"
+fallback = ["mcp-generalist"]
+outputs = ["png", "json"]
+acceptance = ["image_file_generated", "metadata_recorded"]
+risk_level = "medium"
+
+[contracts.stock-market-hub]
+inputs = ["query", "symbols", "universe"]
+decision_gates = ["query_non_empty", "market_data_fresh"]
+execution_mode = "advisor"
+fallback = ["digest", "mcp-generalist"]
+outputs = ["markdown", "json"]
+acceptance = ["includes_trading_view", "includes_risk_disclaimer"]
+risk_level = "high"
