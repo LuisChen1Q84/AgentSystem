@@ -1,6 +1,35 @@
 ---
-description: 专业的文档处理助手 - 创建、转换、整理、操作 PDF 和 DOCX
-argument-hint: [任务描述或 --file <输入文件>] [选项]
+skill:
+  name: minimax-docx
+  version: 1.28
+  description: 专业的文档处理助手 - 创建、转换、整理、操作 PDF 和 DOCX
+
+triggers:
+  - PDF
+  - DOCX
+  - Word
+  - 文档
+  - 转换
+  - 合并
+  - 拆分
+
+parameters:
+  - name: task
+    type: string
+    required: true
+    description: 任务描述
+    aliases: [任务, 操作]
+
+  - name: file
+    type: string
+    required: false
+    description: 输入文件路径
+
+  - name: output
+    type: string
+    required: false
+    description: 输出文件路径
+
 allowed-tools: Task, Read, Write, Edit, Glob, Grep, Bash
 model: opus
 ---

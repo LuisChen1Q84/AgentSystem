@@ -19,6 +19,7 @@ try:
     from scripts.stock_market_hub import run_report as run_stock_hub_report
     from scripts.stock_market_hub import load_cfg as load_stock_hub_cfg
     from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
+    from scripts.skill_parser import parse_all_skills, match_triggers, extract_parameters
 except ModuleNotFoundError:  # direct script execution
     from mcp_connector import Registry, Runtime, parse_params
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
@@ -26,6 +27,7 @@ except ModuleNotFoundError:  # direct script execution
     from stock_market_hub import run_report as run_stock_hub_report  # type: ignore
     from stock_market_hub import load_cfg as load_stock_hub_cfg  # type: ignore
     from stock_market_hub import pick_symbols as pick_stock_symbols  # type: ignore
+    from skill_parser import parse_all_skills, match_triggers, extract_parameters  # type: ignore
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
@@ -182,6 +184,43 @@ def route_text(text: str, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def route_text_enhanced(text: str, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    增强版路由：结合传统规则匹配 + 技能元数据触发匹配
+    """
+    # 1. 优先使用技能解析器的触发短语匹配
+    try:
+        skills = parse_all_skills()
+        trigger_matches = match_triggers(text, skills)
+
+        if trigger_matches:
+            # 使用最高分的触发匹配结果
+            best_match = trigger_matches[0]
+            skill_name = best_match["skill"]
+
+            # 尝试提取参数
+            skill_obj = next((s for s in skills if s.name == skill_name), None)
+            params = {}
+            if skill_obj:
+                params = extract_parameters(text, skill_obj)
+
+            return {
+                "section": "技能元数据触发",
+                "skill": skill_name,
+                "description": f"通过触发短语匹配 (score: {best_match['score']})",
+                "keywords": best_match["matched_triggers"],
+                "score": best_match["score"] + 20,  # 触发匹配优先权更高
+                "params": params,  # 提取的参数
+                "calls": skill_obj.calls if skill_obj else [],  # 技能链
+            }
+    except Exception as e:
+        # 如果解析失败，回退到传统路由
+        pass
+
+    # 2. 回退到传统规则匹配
+    return route_text(text, rules)
+
+
 def _server_from_skill(skill: str) -> str:
     s = skill.lower()
     if "filesystem" in s:
@@ -215,7 +254,8 @@ def _default_call(server: str, text: str) -> Tuple[str, Dict[str, Any]]:
 
 def execute_route(text: str, params_json: str) -> Dict[str, Any]:
     rules = parse_route_doc()
-    route = route_text(text, rules)
+    # 使用增强版路由（结合技能元数据触发匹配）
+    route = route_text_enhanced(text, rules)
     skill = route["skill"]
 
     if skill.startswith("stock-market-hub"):
@@ -338,7 +378,7 @@ def main(argv: List[str] | None = None) -> int:
             print_json({"rules": parse_route_doc()})
             return 0
         if args.command == "route":
-            print_json(route_text(args.text, parse_route_doc()))
+            print_json(route_text_enhanced(args.text, parse_route_doc()))
             return 0
         if args.command == "execute":
             print_json(execute_route(args.text, args.params_json))

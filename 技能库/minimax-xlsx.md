@@ -1,8 +1,39 @@
 ---
-description: Excel 处理助手 - 专业的电子表格处理专家
-argument-hint: [任务描述或 --file <输入文件>] [选项]
+skill:
+  name: minimax-xlsx
+  version: 1.28
+  description: Excel 处理助手 - 专业的电子表格处理专家
+
+triggers:
+  - Excel
+  - 表格
+  - xlsx
+  - 电子表格
+  - 报表
+  - 数据分析
+
+parameters:
+  - name: task
+    type: string
+    required: true
+    description: 任务描述
+    aliases: [任务, 操作, 做什么]
+
+  - name: file
+    type: string
+    required: false
+    description: 输入文件路径
+    aliases: [文件, 路径]
+
+  - name: output
+    type: string
+    required: false
+    description: 输出文件路径
+
 allowed-tools: Task, Read, Write, Edit, Glob, Grep, Bash
 model: opus
+
+calls: []
 ---
 
 # Excel 处理助手

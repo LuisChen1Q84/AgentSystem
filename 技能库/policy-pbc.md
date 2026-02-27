@@ -1,3 +1,47 @@
+---
+skill:
+  name: policy-pbc
+  version: 1.28
+  description: 央行政策决策参谋Agent，专注于金融监管政策与支付行业领域，将复杂的金融政策文件转化为高价值的《决策内参简报》
+
+triggers:
+  - 分析政策
+  - 监管动态
+  - 支付行业
+  - 央行文件
+  - 清算监管
+  - 非银行支付
+  - 银行卡清算
+
+parameters:
+  - name: topic
+    type: string
+    required: true
+    description: 政策主题/关键词
+    aliases: [政策, 主题, 关键词]
+
+  - name: region
+    type: string
+    required: false
+    description: 目标地域
+    aliases: [地域, 地区, 城市, 省, 市]
+
+  - name: focus
+    type: string
+    required: false
+    description: 分析重点领域
+    aliases: [重点, 领域, 方向]
+
+calls:
+  - serp-api
+  - policy-pbc-basics
+  - minimax-docx
+
+output:
+  format: markdown
+  template: 政策简报模板.md
+---
+
 # 政策决策参谋 (policy-pbc)
 
 **触发词**: /policy-pbc
