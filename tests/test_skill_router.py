@@ -45,6 +45,17 @@ class SkillRouterTest(unittest.TestCase):
         self.assertTrue(out["result"]["ok"])
         self.assertIn("deliver_assets", out["result"])
 
+    def test_execute_clarify_fallback_to_autonomous(self):
+        with patch.object(skill_router, "route_text_enhanced", return_value={"skill": "clarify"}):
+            with patch.object(
+                skill_router.autonomy_generalist,
+                "run_request",
+                return_value={"ok": True, "candidates": [], "attempts": [], "loop_closure": {}},
+            ):
+                out = skill_router.execute_route("做一个通用任务处理方案", "{}")
+        self.assertEqual(out["execute"]["type"], "autonomous-generalist")
+        self.assertTrue(out["result"]["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()

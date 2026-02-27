@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""Generalist autonomous engine: dynamic strategy planning + execution + reflection."""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import tomllib
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
+
+import sys
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core.skill_intelligence import build_loop_closure, compose_prompt_v2
+from scripts import mckinsey_ppt_engine
+from scripts.image_creator_hub import CFG_DEFAULT as IMAGE_CFG_DEFAULT
+from scripts.image_creator_hub import load_cfg as load_image_cfg
+from scripts.image_creator_hub import run_request as run_image_hub_request
+from scripts.mcp_cli import cmd_run as mcp_cmd_run
+from scripts.skill_parser import SkillMeta, parse_all_skills
+from scripts.stock_market_hub import load_cfg as load_stock_cfg
+from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
+from scripts.stock_market_hub import run_report as run_stock_hub_report
+
+
+CFG_DEFAULT = ROOT / "config" / "autonomy_generalist.toml"
+MEMORY_DEFAULT = ROOT / "日志" / "autonomy" / "memory.json"
+
+SUPPORTED_SKILLS = {
+    "image-creator-hub": "image",
+    "mckinsey-ppt": "ppt",
+    "stock-market-hub": "stock",
+    "digest": "digest",
+}
+
+
+def _now() -> str:
+    return dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _lang(text: str) -> str:
+    for ch in text:
+        if "\u4e00" <= ch <= "\u9fff":
+            return "zh"
+    return "en"
+
+
+def _tokenize(text: str) -> List[str]:
+    return re.findall(r"[a-zA-Z0-9_]+|[\u4e00-\u9fff]+", text.lower())
+
+
+def _load_cfg(path: Path = CFG_DEFAULT) -> Dict[str, Any]:
+    if not path.exists():
+        return {
+            "defaults": {
+                "max_strategy_candidates": 4,
+                "min_skill_score": 0.12,
+                "memory_prior": 2.0,
+                "mcp_top_k": 3,
+                "mcp_max_attempts": 2,
+                "mcp_cooldown_sec": 300,
+                "mcp_failure_threshold": 3,
+                "mcp_metrics_days": 14,
+                "log_dir": str(ROOT / "日志" / "autonomy"),
+            }
+        }
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
+def _load_memory(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {"strategies": {}, "updated_at": _now()}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"strategies": {}, "updated_at": _now()}
+
+
+def _save_memory(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _memory_rate(memory: Dict[str, Any], key: str, prior: float) -> float:
+    rec = memory.get("strategies", {}).get(key, {})
+    succ = float(rec.get("success", 0))
+    fail = float(rec.get("fail", 0))
+    return (succ + 0.5 * prior) / (succ + fail + prior)
+
+
+def _update_memory(memory: Dict[str, Any], key: str, ok: bool) -> Dict[str, Any]:
+    strategies = memory.setdefault("strategies", {})
+    rec = strategies.setdefault(key, {"success": 0, "fail": 0, "last_ts": ""})
+    if ok:
+        rec["success"] = int(rec.get("success", 0)) + 1
+    else:
+        rec["fail"] = int(rec.get("fail", 0)) + 1
+    rec["last_ts"] = _now()
+    memory["updated_at"] = _now()
+    return memory
+
+
+def _skill_score(text: str, skill: SkillMeta) -> Tuple[float, Dict[str, Any]]:
+    low = text.lower()
+    hits = [t for t in skill.triggers if str(t).lower() in low]
+    trigger_score = float(len(hits)) * 0.4
+
+    tks = set(_tokenize(text))
+    desc_tks = set(_tokenize(f"{skill.name} {skill.description} {' '.join(skill.triggers)} {' '.join(skill.calls)}"))
+    overlap = len(tks.intersection(desc_tks))
+    overlap_score = min(1.0, overlap / max(1, len(tks))) * 0.8
+
+    score = round(trigger_score + overlap_score, 4)
+    return score, {"trigger_hits": hits, "token_overlap": overlap}
+
+
+def _plan_candidates(text: str, cfg: Dict[str, Any], memory: Dict[str, Any]) -> List[Dict[str, Any]]:
+    defaults = cfg.get("defaults", {})
+    min_skill_score = float(defaults.get("min_skill_score", 0.12))
+    prior = float(defaults.get("memory_prior", 2.0))
+    top_n = int(defaults.get("max_strategy_candidates", 4))
+
+    skills = parse_all_skills(silent=True)
+    rows: List[Dict[str, Any]] = []
+    for s in skills:
+        if s.name not in SUPPORTED_SKILLS:
+            continue
+        base, details = _skill_score(text, s)
+        mem = _memory_rate(memory, s.name, prior=prior)
+        final = round(base * 0.75 + mem * 0.25, 4)
+        if final < min_skill_score:
+            continue
+        rows.append(
+            {
+                "strategy": s.name,
+                "executor": SUPPORTED_SKILLS[s.name],
+                "score": final,
+                "score_detail": {
+                    "skill_score": base,
+                    "memory_rate": round(mem, 4),
+                    **details,
+                },
+            }
+        )
+
+    mcp_mem = _memory_rate(memory, "mcp-generalist", prior=prior)
+    rows.append(
+        {
+            "strategy": "mcp-generalist",
+            "executor": "mcp",
+            "score": round(0.45 + 0.25 * mcp_mem, 4),
+            "score_detail": {"skill_score": 0.45, "memory_rate": round(mcp_mem, 4)},
+        }
+    )
+
+    rows.sort(key=lambda x: x["score"], reverse=True)
+    return rows[: max(1, top_n)]
+
+
+def _exec_digest(text: str) -> Dict[str, Any]:
+    text_lower = text.lower()
+    if "采集" in text or "收集" in text:
+        cmd = ["python3", str(ROOT / "scripts/digest/main.py"), "collect", "rss", "--preset", "business", "--limit", "20"]
+    elif "摘要" in text or "generate" in text_lower:
+        cmd = ["python3", str(ROOT / "scripts/digest/main.py"), "digest", "generate", "--type", "daily"]
+    else:
+        cmd = ["python3", str(ROOT / "scripts/digest/main.py"), "digest", "show", "--type", "daily"]
+    result = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=120)
+    output = result.stdout if result.returncode == 0 else result.stderr
+    return {"ok": result.returncode == 0, "mode": "digest", "cmd": cmd, "output": output}
+
+
+def _exec_strategy(executor: str, text: str, params: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
+    defaults = cfg.get("defaults", {})
+    if executor == "image":
+        image_cfg = load_image_cfg(Path(IMAGE_CFG_DEFAULT))
+        out = run_image_hub_request(image_cfg, text, params)
+        return {"ok": bool(out.get("ok", False)), "mode": "image", "result": out}
+    if executor == "ppt":
+        out = mckinsey_ppt_engine.run_request(text, params)
+        return {"ok": bool(out.get("ok", False)), "mode": "ppt", "result": out}
+    if executor == "stock":
+        stock_cfg = load_stock_cfg(ROOT / "config" / "stock_market_hub.toml")
+        symbols = pick_stock_symbols(stock_cfg, text, str(params.get("symbols", "")))
+        universe = str(params.get("universe", "")).strip() or str(
+            stock_cfg.get("defaults", {}).get("default_universe", "global_core")
+        )
+        no_sync = bool(params.get("no_sync", False))
+        out = run_stock_hub_report(stock_cfg, text, universe, symbols, no_sync)
+        return {"ok": True, "mode": "stock", "result": out}
+    if executor == "digest":
+        out = _exec_digest(text)
+        return {"ok": bool(out.get("ok", False)), "mode": "digest", "result": out}
+
+    mcp_out = mcp_cmd_run(
+        text=text,
+        override_params=params,
+        top_k=int(defaults.get("mcp_top_k", 3)),
+        max_attempts=int(defaults.get("mcp_max_attempts", 2)),
+        cooldown_sec=int(defaults.get("mcp_cooldown_sec", 300)),
+        failure_threshold=int(defaults.get("mcp_failure_threshold", 3)),
+        dry_run=bool(params.get("dry_run", False)),
+        metrics_days=int(defaults.get("mcp_metrics_days", 14)),
+    )
+    return {"ok": bool(mcp_out.get("ok", False)), "mode": "mcp", "result": mcp_out}
+
+
+def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
+    cfg = _load_cfg(Path(values.get("cfg", CFG_DEFAULT)))
+    defaults = cfg.get("defaults", {})
+    memory_file = Path(str(values.get("memory_file", MEMORY_DEFAULT)))
+    log_dir = Path(str(defaults.get("log_dir", ROOT / "日志" / "autonomy")))
+    log_dir.mkdir(parents=True, exist_ok=True)
+    memory = _load_memory(memory_file)
+
+    lang = _lang(text)
+    candidates = _plan_candidates(text, cfg, memory)
+
+    prompt_packet = compose_prompt_v2(
+        objective="Choose and execute the best strategy for the user's task with autonomous fallback",
+        language=lang,
+        context={"text": text, "candidate_count": len(candidates), "params": values},
+        references=[c["strategy"] for c in candidates],
+        constraints=[
+            "Prefer highest-confidence strategy first",
+            "If failure, automatically fallback to next candidate",
+            "Persist decision trace and outcomes",
+        ],
+        output_contract=[
+            "Return selected strategy and attempts",
+            "Return execution result and closure",
+            "Provide next actions",
+        ],
+        negative_constraints=["Do not loop forever", "Do not stop at first failure without fallback"],
+    )
+
+    attempts: List[Dict[str, Any]] = []
+    selected: Dict[str, Any] | None = None
+    final: Dict[str, Any] | None = None
+
+    for cand in candidates:
+        strategy = cand["strategy"]
+        t0 = dt.datetime.now()
+        try:
+            out = _exec_strategy(cand["executor"], text, values, cfg)
+            ok = bool(out.get("ok", False))
+            memory = _update_memory(memory, strategy, ok)
+            attempts.append(
+                {
+                    "strategy": strategy,
+                    "executor": cand["executor"],
+                    "score": cand["score"],
+                    "ok": ok,
+                    "duration_ms": int((dt.datetime.now() - t0).total_seconds() * 1000),
+                    "result_mode": out.get("mode", ""),
+                }
+            )
+            if ok:
+                selected = cand
+                final = out
+                break
+        except Exception as e:
+            memory = _update_memory(memory, strategy, False)
+            attempts.append(
+                {
+                    "strategy": strategy,
+                    "executor": cand["executor"],
+                    "score": cand["score"],
+                    "ok": False,
+                    "duration_ms": int((dt.datetime.now() - t0).total_seconds() * 1000),
+                    "error": f"{type(e).__name__}: {e}",
+                }
+            )
+
+    _save_memory(memory_file, memory)
+
+    payload = {
+        "ok": final is not None,
+        "mode": "autonomous-generalist",
+        "ts": _now(),
+        "request": {"text": text, "params": values},
+        "candidates": candidates,
+        "attempts": attempts,
+        "selected": selected,
+        "result": final.get("result") if final else {},
+        "prompt_packet": prompt_packet,
+        "loop_closure": build_loop_closure(
+            skill="autonomy-generalist",
+            status="completed" if final is not None else "advisor",
+            reason="" if final is not None else "all_strategies_failed",
+            evidence={"attempts": len(attempts), "selected": selected.get("strategy") if selected else ""},
+            next_actions=[
+                "If result quality is low, refine task constraints and rerun autonomous",
+                "Promote successful strategy into reusable skill triggers",
+            ],
+        ),
+    }
+
+    out_file = log_dir / f"autonomy_run_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    payload["deliver_assets"] = {"items": [{"path": str(out_file)}]}
+    return payload
+
+
+def build_cli() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="Generalist autonomy engine")
+    p.add_argument("--text", required=True)
+    p.add_argument("--params-json", default="{}")
+    return p
+
+
+def main() -> int:
+    args = build_cli().parse_args()
+    try:
+        values = json.loads(args.params_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("params-json must be object")
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": f"invalid params-json: {e}"}, ensure_ascii=False, indent=2))
+        return 1
+    out = run_request(args.text, values)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0 if out.get("ok", False) else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

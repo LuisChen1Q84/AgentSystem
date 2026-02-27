@@ -12,9 +12,14 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+BOOT_ROOT = Path(__file__).resolve().parents[1]
+if str(BOOT_ROOT) not in sys.path:
+    sys.path.insert(0, str(BOOT_ROOT))
+
 try:
     from core.skill_intelligence import build_loop_closure
     from core.skill_guard import SkillQualityGuard
+    from scripts import autonomy_generalist
     from scripts import mckinsey_ppt_engine
     from scripts.mcp_connector import Registry, Runtime, parse_params
     from scripts.image_creator_hub import load_cfg as load_image_hub_cfg
@@ -27,6 +32,7 @@ try:
 except ModuleNotFoundError:  # direct script execution
     from core.skill_intelligence import build_loop_closure
     from core.skill_guard import SkillQualityGuard
+    import autonomy_generalist  # type: ignore
     import mckinsey_ppt_engine  # type: ignore
     from mcp_connector import Registry, Runtime, parse_params
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
@@ -272,13 +278,61 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
     # 使用增强版路由（结合技能元数据触发匹配）
     route = route_text_enhanced(text, rules)
     skill = route["skill"]
-    guard = GUARD.decide(skill)
-    route["quality_guard"] = guard.to_dict()
+    user_params = parse_params(params_json)
+    autonomous_force = bool(user_params.get("autonomous", False) or user_params.get("generalist", False))
 
     # 记录路由追踪
     duration_ms = int((time.time() - start_time) * 1000)
     trace_id = TRACER.record_route(text, route, duration_ms)
     route["trace_id"] = trace_id
+
+    # 自主模式：可显式强制，也可在 clarify 场景下自动接管
+    if autonomous_force or skill == "clarify":
+        exec_start = time.time()
+        try:
+            auto = autonomy_generalist.run_request(text, user_params)
+            TRACER.record_execution(trace_id, "autonomy-generalist", bool(auto.get("ok", False)), duration_ms=int((time.time() - exec_start) * 1000))
+            return {
+                "route": route,
+                "execute": {
+                    "type": "autonomous-generalist",
+                    "forced": autonomous_force,
+                    "reason": "forced" if autonomous_force else "clarify_fallback",
+                },
+                "result": auto,
+                "meta": {
+                    "mode": "autonomous-generalist",
+                    "next_actions": [
+                        "补充任务约束可提升执行质量",
+                        "将高质量结果沉淀为技能触发短语",
+                    ],
+                },
+                "loop_closure": build_loop_closure(
+                    skill="autonomy-generalist",
+                    status="completed" if auto.get("ok") else "advisor",
+                    reason="" if auto.get("ok") else "autonomy_failed",
+                    evidence={"forced": autonomous_force, "candidates": len(auto.get("candidates", []))},
+                    next_actions=["复盘本次策略命中并优化触发词"],
+                ),
+            }
+        except Exception as e:
+            TRACER.record_execution(trace_id, "autonomy-generalist", False, str(e), duration_ms=int((time.time() - exec_start) * 1000))
+            if skill == "clarify":
+                return {
+                    "route": route,
+                    "execute": {"type": "clarify", "message": "无法明确匹配技能，请补充目标和输入数据"},
+                    "loop_closure": build_loop_closure(
+                        skill=skill,
+                        status="advisor",
+                        reason="clarify_required",
+                        evidence={"autonomy_error": str(e)},
+                        next_actions=["补充目标、输入和期望输出格式"],
+                    ),
+                }
+            raise
+
+    guard = GUARD.decide(skill)
+    route["quality_guard"] = guard.to_dict()
 
     # 在线质量守门：低分/低置信度技能自动降级为 advisor
     if not guard.allow_execute:
@@ -306,7 +360,6 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
         }
 
     if skill.startswith("stock-market-hub"):
-        user_params = parse_params(params_json)
         hub_cfg = load_stock_hub_cfg(STOCK_HUB_CFG)
         symbols = pick_stock_symbols(hub_cfg, text, str(user_params.get("symbols", "")))
         universe = str(user_params.get("universe", "")).strip() or str(
@@ -343,7 +396,6 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             raise
 
     if skill == "mckinsey-ppt":
-        user_params = parse_params(params_json)
         exec_start = time.time()
         try:
             result = mckinsey_ppt_engine.run_request(text, user_params)
@@ -371,7 +423,6 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             raise
 
     if skill.startswith("image-creator-hub"):
-        user_params = parse_params(params_json)
         image_cfg = load_image_hub_cfg(IMAGE_HUB_CFG)
         exec_start = time.time()
         try:
@@ -405,7 +456,6 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
     # Digest 模块处理
     if skill == "digest":
         import subprocess
-        user_params = parse_params(params_json)
 
         # 解析用户意图，决定执行什么命令
         text_lower = text.lower()
@@ -474,7 +524,6 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
     if "mcp-connector" in skill:
         server = _server_from_skill(skill)
         tool, base_params = _default_call(server, text)
-        user_params = parse_params(params_json)
         base_params.update(user_params)
         if server == "filesystem" and "path" in base_params:
             p = Path(str(base_params["path"]))
@@ -513,19 +562,6 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             ),
         }
 
-    if skill == "clarify":
-        return {
-            "route": route,
-            "execute": {"type": "clarify", "message": "无法明确匹配技能，请补充目标和输入数据"},
-            "loop_closure": build_loop_closure(
-                skill=skill,
-                status="advisor",
-                reason="clarify_required",
-                evidence={"quality_guard": guard.to_dict()},
-                next_actions=["补充目标、输入和期望输出格式"],
-            ),
-        }
-
     return {
         "route": route,
         "execute": {
@@ -552,6 +588,10 @@ def build_cli() -> argparse.ArgumentParser:
     ex.add_argument("--text", required=True)
     ex.add_argument("--params-json", default="{}")
 
+    au = sub.add_parser("autonomous", help="force autonomous-generalist execution")
+    au.add_argument("--text", required=True)
+    au.add_argument("--params-json", default="{}")
+
     sub.add_parser("dump", help="dump parsed rules")
     return p
 
@@ -576,6 +616,11 @@ def main(argv: List[str] | None = None) -> int:
             return 0
         if args.command == "execute":
             print_json(execute_route(args.text, args.params_json))
+            return 0
+        if args.command == "autonomous":
+            params = parse_params(args.params_json)
+            params["autonomous"] = True
+            print_json(autonomy_generalist.run_request(args.text, params))
             return 0
         raise SkillRouterError(f"unknown command: {args.command}")
     except Exception as e:

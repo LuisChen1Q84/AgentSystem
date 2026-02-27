@@ -1,0 +1,14 @@
+[defaults]
+max_strategy_candidates = 4
+min_skill_score = 0.12
+memory_prior = 2.0
+
+# MCP fallback strategy
+mcp_top_k = 3
+mcp_max_attempts = 2
+mcp_cooldown_sec = 300
+mcp_failure_threshold = 3
+mcp_metrics_days = 14
+
+# Output location
+log_dir = "/Volumes/Luis_MacData/AgentSystem/日志/autonomy"
