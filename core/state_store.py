@@ -207,6 +207,42 @@ class StateStore:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def module_run_stats(self, *, days: int = 30) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                  module,
+                  COUNT(*) AS total_runs,
+                  SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed_runs
+                FROM runs
+                WHERE started_at >= datetime('now', ?)
+                GROUP BY module
+                ORDER BY failed_runs DESC, total_runs DESC, module ASC
+                """,
+                (f"-{int(days)} day",),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def step_hotspots(self, *, days: int = 30, limit: int = 20) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                  module,
+                  step,
+                  COUNT(*) AS fail_count
+                FROM steps
+                WHERE ts >= datetime('now', ?)
+                  AND status IN ('failed', 'timeout')
+                GROUP BY module, step
+                ORDER BY fail_count DESC, module ASC, step ASC
+                LIMIT ?
+                """,
+                (f"-{int(days)} day", int(limit)),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     def runs_summary(self, *, days: int = 30) -> Dict[str, int]:
         with self._connect() as conn:
             total = conn.execute(

@@ -8,8 +8,11 @@ import datetime as dt
 import json
 import shutil
 import tomllib
+import uuid
 from pathlib import Path
 from typing import Dict, List
+
+from core.state_store import StateStore
 
 
 CFG_PATH = Path("/Volumes/Luis_MacData/AgentSystem/config/report_publish.toml")
@@ -156,92 +159,152 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_cfg()
+    run_id = f"publish_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    state = StateStore()
+    state.start_run(
+        run_id=run_id,
+        module="report_publish_release",
+        target_month=args.target_month,
+        as_of=args.as_of,
+        dry_run=False,
+        meta={"outdir": args.outdir},
+    )
     pub_root = Path(cfg["publish"]["root_dir"])
     archive_root = Path(cfg["publish"]["archive_root"])
     outdir = Path(args.outdir)
     target = args.target_month
-    assert_release_approval(
-        cfg,
-        action="publish",
-        target_month=target,
-        approved_by=args.approved_by,
-        approval_token_file=args.approval_token_file,
-        skip_approval=bool(args.skip_approval),
-    )
-
-    if not args.skip_gate:
-        gate_path = Path(args.gate_json) if args.gate_json else Path(
-            f"/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/release_gate_{target}.json"
+    try:
+        assert_release_approval(
+            cfg,
+            action="publish",
+            target_month=target,
+            approved_by=args.approved_by,
+            approval_token_file=args.approval_token_file,
+            skip_approval=bool(args.skip_approval),
         )
-        if gate_path.exists():
-            gate = json.loads(gate_path.read_text(encoding="utf-8"))
-            decision = str(gate.get("decision", ""))
-            if decision == "HOLD":
-                reasons = gate.get("reasons", [])
-                raise SystemExit(f"发布被闸门阻断: {reasons}")
-        else:
-            raise SystemExit(f"发布闸门文件不存在: {gate_path}")
+        state.append_step(
+            run_id=run_id,
+            module="report_publish_release",
+            step="approval",
+            attempt=1,
+            status="ok",
+            meta={"approved_by": args.approved_by, "skip_approval": int(bool(args.skip_approval))},
+        )
 
-    manifest_name = cfg["publish"]["outputs"]["manifest_name"]
-    package_suffix = cfg["publish"]["outputs"]["package_suffix"]
+        if not args.skip_gate:
+            gate_path = Path(args.gate_json) if args.gate_json else Path(
+                f"/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/release_gate_{target}.json"
+            )
+            if gate_path.exists():
+                gate = json.loads(gate_path.read_text(encoding="utf-8"))
+                decision = str(gate.get("decision", ""))
+                if decision == "HOLD":
+                    reasons = gate.get("reasons", [])
+                    raise SystemExit(f"发布被闸门阻断: {reasons}")
+            else:
+                raise SystemExit(f"发布闸门文件不存在: {gate_path}")
 
-    archive_dir = archive_root / target
-    manifest_path = archive_dir / manifest_name
-    package_path = archive_root / f"{target}{package_suffix}"
+        manifest_name = cfg["publish"]["outputs"]["manifest_name"]
+        package_suffix = cfg["publish"]["outputs"]["package_suffix"]
 
-    quarter = resolve_quarter(dt.datetime.strptime(args.as_of, "%Y-%m-%d").date())
-    year = target[:4]
-    month_i = int(target[4:])
+        archive_dir = archive_root / target
+        manifest_path = archive_dir / manifest_name
+        package_path = archive_root / f"{target}{package_suffix}"
 
-    files: Dict[str, Path] = {
-        "manifest_json": manifest_path,
-        "package_zip": package_path,
-        "dashboard_html": outdir / f"智能看板_{target}.html",
-        "digest_md": outdir / f"日报摘要_{target}.md",
-        "table5_monthly": outdir / f"新表5_{year}年{month_i}月_自动生成.xlsx",
-        "table6_monthly": outdir / f"表6_{year}年{month_i}月_自动生成.xlsx",
-        "anomaly_json": Path(f"/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_{target}.json"),
-        "explain_json": Path(f"/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_{target}.json"),
-    }
-    if quarter:
-        files["table4_quarterly"] = outdir / f"表4_{quarter}_季度数据表.xlsx"
+        quarter = resolve_quarter(dt.datetime.strptime(args.as_of, "%Y-%m-%d").date())
+        year = target[:4]
+        month_i = int(target[4:])
 
-    missing = [k for k, p in files.items() if not find_existing(p) and k in ("manifest_json", "package_zip")]
-    if missing:
-        raise SystemExit(f"缺少关键发布文件: {missing}")
+        files: Dict[str, Path] = {
+            "manifest_json": manifest_path,
+            "package_zip": package_path,
+            "dashboard_html": outdir / f"智能看板_{target}.html",
+            "digest_md": outdir / f"日报摘要_{target}.md",
+            "table5_monthly": outdir / f"新表5_{year}年{month_i}月_自动生成.xlsx",
+            "table6_monthly": outdir / f"表6_{year}年{month_i}月_自动生成.xlsx",
+            "anomaly_json": Path(f"/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/anomaly_guard_{target}.json"),
+            "explain_json": Path(f"/Volumes/Luis_MacData/AgentSystem/日志/datahub_quality_gate/change_explain_{target}.json"),
+        }
+        if quarter:
+            files["table4_quarterly"] = outdir / f"表4_{quarter}_季度数据表.xlsx"
 
-    release_dir = pub_root / target
-    if release_dir.exists():
-        shutil.rmtree(release_dir)
-    release_dir.mkdir(parents=True, exist_ok=True)
+        missing = [k for k, p in files.items() if not find_existing(p) and k in ("manifest_json", "package_zip")]
+        if missing:
+            raise SystemExit(f"缺少关键发布文件: {missing}")
 
-    copied: Dict[str, Path] = {}
-    for k, src in files.items():
-        if find_existing(src):
-            dst = release_dir / src.name
-            shutil.copy2(src, dst)
-            copied[k] = dst
+        release_dir = pub_root / target
+        if release_dir.exists():
+            shutil.rmtree(release_dir)
+        release_dir.mkdir(parents=True, exist_ok=True)
 
-    manifest = json.loads((release_dir / manifest_name).read_text(encoding="utf-8"))
-    release_note = render_release_note(target, args.as_of, copied, manifest)
-    write_text(release_dir / "RELEASE_NOTES.md", release_note)
+        copied: Dict[str, Path] = {}
+        for k, src in files.items():
+            if find_existing(src):
+                dst = release_dir / src.name
+                shutil.copy2(src, dst)
+                copied[k] = dst
+                state.append_artifact(
+                    run_id=run_id,
+                    module="report_publish_release",
+                    name=k,
+                    path=str(dst),
+                    exists=True,
+                    meta={"source": str(src)},
+                )
 
-    # subscriber notes
-    sub_root = release_dir / "subscriptions"
-    for sub in cfg.get("subscriptions", []):
-        note = render_sub_note(sub, target, copied)
-        write_text(sub_root / f"{sub.get('id','unknown')}.md", note)
+        manifest = json.loads((release_dir / manifest_name).read_text(encoding="utf-8"))
+        release_note = render_release_note(target, args.as_of, copied, manifest)
+        write_text(release_dir / "RELEASE_NOTES.md", release_note)
+        state.append_artifact(
+            run_id=run_id,
+            module="report_publish_release",
+            name="release_notes",
+            path=str(release_dir / "RELEASE_NOTES.md"),
+            exists=True,
+            meta={},
+        )
 
-    # latest pointer copy
-    latest_dir = pub_root / "latest"
-    if latest_dir.exists():
-        shutil.rmtree(latest_dir)
-    shutil.copytree(release_dir, latest_dir)
+        # subscriber notes
+        sub_root = release_dir / "subscriptions"
+        for sub in cfg.get("subscriptions", []):
+            note = render_sub_note(sub, target, copied)
+            write_text(sub_root / f"{sub.get('id','unknown')}.md", note)
 
-    print(f"release_dir={release_dir}")
-    print(f"latest_dir={latest_dir}")
-    print(f"copied_files={len(copied)}")
-    print(f"subscriptions={len(cfg.get('subscriptions', []))}")
+        # latest pointer copy
+        latest_dir = pub_root / "latest"
+        if latest_dir.exists():
+            shutil.rmtree(latest_dir)
+        shutil.copytree(release_dir, latest_dir)
+        state.append_artifact(
+            run_id=run_id,
+            module="report_publish_release",
+            name="latest_dir",
+            path=str(latest_dir),
+            exists=latest_dir.exists(),
+            meta={"target_dir": str(release_dir)},
+        )
+        state.finish_run(
+            run_id=run_id,
+            status="ok",
+            meta={"target_month": target, "copied_files": len(copied)},
+        )
+
+        print(f"release_dir={release_dir}")
+        print(f"latest_dir={latest_dir}")
+        print(f"copied_files={len(copied)}")
+        print(f"subscriptions={len(cfg.get('subscriptions', []))}")
+    except SystemExit as e:
+        state.append_step(
+            run_id=run_id,
+            module="report_publish_release",
+            step="publish",
+            attempt=1,
+            status="failed",
+            returncode=1,
+            meta={"reason": str(e)},
+        )
+        state.finish_run(run_id=run_id, status="failed", meta={"reason": str(e), "target_month": target})
+        raise
 
 
 if __name__ == "__main__":

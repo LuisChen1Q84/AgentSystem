@@ -8,8 +8,11 @@ import datetime as dt
 import json
 import shutil
 import tomllib
+import uuid
 from pathlib import Path
 from typing import Dict
+
+from core.state_store import StateStore
 
 
 CFG_PATH = Path("/Volumes/Luis_MacData/AgentSystem/config/report_publish.toml")
@@ -112,35 +115,86 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_cfg()
-    assert_release_approval(
-        cfg,
-        action="rollback",
+    run_id = f"rollback_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}"
+    state = StateStore()
+    state.start_run(
+        run_id=run_id,
+        module="report_release_rollback",
         target_month=args.target_month,
-        approved_by=args.approved_by,
-        approval_token_file=args.approval_token_file,
-        skip_approval=bool(args.skip_approval),
+        dry_run=False,
+        meta={"restore_outdir": args.restore_outdir},
     )
-    root = Path(cfg["publish"]["root_dir"])
-    target_dir = root / args.target_month
-    latest_dir = root / "latest"
-    backup_root = root / "_rollback_backup"
+    try:
+        assert_release_approval(
+            cfg,
+            action="rollback",
+            target_month=args.target_month,
+            approved_by=args.approved_by,
+            approval_token_file=args.approval_token_file,
+            skip_approval=bool(args.skip_approval),
+        )
+        state.append_step(
+            run_id=run_id,
+            module="report_release_rollback",
+            step="approval",
+            attempt=1,
+            status="ok",
+            meta={"approved_by": args.approved_by, "skip_approval": int(bool(args.skip_approval))},
+        )
+        root = Path(cfg["publish"]["root_dir"])
+        target_dir = root / args.target_month
+        latest_dir = root / "latest"
+        backup_root = root / "_rollback_backup"
 
-    if not target_dir.exists():
-        raise SystemExit(f"目标发布目录不存在: {target_dir}")
+        if not target_dir.exists():
+            raise SystemExit(f"目标发布目录不存在: {target_dir}")
 
-    backup_dir = backup_latest(latest_dir, backup_root)
-    if latest_dir.exists():
-        shutil.rmtree(latest_dir)
-    shutil.copytree(target_dir, latest_dir)
+        backup_dir = backup_latest(latest_dir, backup_root)
+        if latest_dir.exists():
+            shutil.rmtree(latest_dir)
+        shutil.copytree(target_dir, latest_dir)
 
-    restored = 0
-    if args.restore_outdir:
-        restored = restore_to_outdir(latest_dir, Path(args.restore_outdir))
+        restored = 0
+        if args.restore_outdir:
+            restored = restore_to_outdir(latest_dir, Path(args.restore_outdir))
+            state.append_artifact(
+                run_id=run_id,
+                module="report_release_rollback",
+                name="restore_outdir",
+                path=args.restore_outdir,
+                exists=Path(args.restore_outdir).exists(),
+                meta={"restored_files": restored},
+            )
+        state.append_artifact(
+            run_id=run_id,
+            module="report_release_rollback",
+            name="latest_dir",
+            path=str(latest_dir),
+            exists=latest_dir.exists(),
+            meta={"backup": str(backup_dir)},
+        )
+        state.finish_run(
+            run_id=run_id,
+            status="ok",
+            meta={"target_month": args.target_month, "restored_files": restored},
+        )
 
-    print(f"target={args.target_month}")
-    print(f"latest={latest_dir}")
-    print(f"backup={backup_dir}")
-    print(f"restored_files={restored}")
+        print(f"target={args.target_month}")
+        print(f"latest={latest_dir}")
+        print(f"backup={backup_dir}")
+        print(f"restored_files={restored}")
+    except SystemExit as e:
+        state.append_step(
+            run_id=run_id,
+            module="report_release_rollback",
+            step="rollback",
+            attempt=1,
+            status="failed",
+            returncode=1,
+            meta={"reason": str(e)},
+        )
+        state.finish_run(run_id=run_id, status="failed", meta={"reason": str(e), "target_month": args.target_month})
+        raise
 
 
 if __name__ == "__main__":

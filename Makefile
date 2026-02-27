@@ -513,6 +513,15 @@ report-failure-insights:
 	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
 	eval "python3 $(ROOT)/scripts/report_failure_insights.py $$EXTRA"
 
+report-state-health:
+	@EXTRA=""; \
+	if [ -n "$(db)" ]; then EXTRA="$$EXTRA --db '$(db)'"; fi; \
+	if [ -n "$(days)" ]; then EXTRA="$$EXTRA --days '$(days)'"; fi; \
+	if [ -n "$(topn)" ]; then EXTRA="$$EXTRA --topn '$(topn)'"; fi; \
+	if [ -n "$(out_json)" ]; then EXTRA="$$EXTRA --out-json '$(out_json)'"; fi; \
+	if [ -n "$(out_md)" ]; then EXTRA="$$EXTRA --out-md '$(out_md)'"; fi; \
+	eval "python3 $(ROOT)/scripts/report_state_health.py $$EXTRA"
+
 report-learning:
 	@if [ -z "$(target)" ]; then echo "请提供 target 参数（YYYYMM）"; exit 2; fi
 	@CFG="$(or $(config),$(ROOT)/config/report_learning.toml)"; \
