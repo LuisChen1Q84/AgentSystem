@@ -21,6 +21,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.context_profile import apply_context_defaults, build_context_profile, context_brief
+from core.kernel.memory_router import build_memory_route
+from core.kernel.reflective_checkpoint import research_checkpoint
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 from openpyxl import Workbook
@@ -1109,6 +1111,48 @@ def _deck_seed(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _research_candidates(
+    playbook: str,
+    req: Dict[str, Any],
+    evidence: List[Dict[str, Any]],
+    review: List[Dict[str, Any]],
+    context_meta: Dict[str, Any],
+    lang: str,
+) -> List[Dict[str, Any]]:
+    high_findings = sum(1 for item in review if str(item.get("severity", "")).lower() == "high")
+    evidence_density = min(100.0, 40.0 + len(evidence) * 12.0)
+    context_fit = 82.0 if str(context_meta.get("audience", "")).strip() else 68.0
+    systematic = playbook in SYSTEMATIC_REVIEW_PLAYBOOKS
+    candidates = [
+        {
+            "candidate_id": "evidence_led",
+            "angle": "evidence-led" if lang == "en" else "证据主导",
+            "thesis": "Lead with evidence strength and method defensibility." if lang == "en" else "先证明证据密度与方法防守力，再下结论。",
+            "report_frame": ["question", "evidence", "claims", "implications"],
+            "score": evidence_density * 0.5 + context_fit * 0.2 + (100 - high_findings * 15) * 0.3 + (8 if systematic else 0),
+        },
+        {
+            "candidate_id": "decision_led",
+            "angle": "decision-led" if lang == "en" else "决策主导",
+            "thesis": "Lead with the decision ask and use evidence to justify the move." if lang == "en" else "先给管理层决策答案，再用证据支撑结论。",
+            "report_frame": ["decision", "claims", "risks", "next_actions"],
+            "score": context_fit * 0.45 + evidence_density * 0.25 + (100 - high_findings * 12) * 0.3 + (6 if not systematic else 0),
+        },
+        {
+            "candidate_id": "risk_led",
+            "angle": "risk-led" if lang == "en" else "风险主导",
+            "thesis": "Lead with fragility, assumptions, and where the evidence could break." if lang == "en" else "先讲证据和假设最脆弱的地方，再给可执行结论。",
+            "report_frame": ["risks", "assumptions", "evidence", "decision"],
+            "score": (100 - high_findings * 10) * 0.45 + evidence_density * 0.2 + context_fit * 0.2 + (15 if high_findings else 4),
+        },
+    ]
+    ranked = sorted(candidates, key=lambda item: (-float(item.get("score", 0.0)), str(item.get("candidate_id", ""))))
+    for idx, item in enumerate(ranked, start=1):
+        item["rank"] = idx
+        item["score"] = round(float(item.get("score", 0.0)), 2)
+    return ranked
+
+
 def _markdown_report(payload: Dict[str, Any]) -> str:
     req = payload["request"]
     lines = [
@@ -1146,6 +1190,12 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     resolved_values = apply_context_defaults(values, context_profile, domain="research")
     context_meta = context_brief(context_profile)
     lang = str(resolved_values.get("preferred_language", "")).strip() or _language(text)
+    memory_route = build_memory_route(
+        data_dir=resolved_values.get("data_dir", ROOT / "日志" / "agent_os"),
+        task_kind="research",
+        context_profile=context_profile,
+        values=resolved_values,
+    )
     playbooks = _load_playbooks()
     playbook = _infer_playbook(text, resolved_values)
     playbook_meta = (
@@ -1166,19 +1216,30 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     claims = _claim_cards(body["claims"], evidence)
     citations = _citations(evidence)
     review = _peer_review_findings(playbook, evidence, assumptions, lang)
+    candidate_set = _research_candidates(playbook, req, evidence, review, context_meta, lang)
+    selected_candidate = dict(candidate_set[0]) if candidate_set else {}
     systematic_review = _build_systematic_review_outputs(playbook, req, evidence, assumptions, review, body["analysis_objects"], lang)
     ppt_bridge = _ppt_bridge(req, playbook, sections)
+    if selected_candidate:
+        ppt_bridge["story_angle"] = selected_candidate.get("angle", "")
+        ppt_bridge["report_frame"] = selected_candidate.get("report_frame", [])
     methods = _reference_points()
 
     prompt_packet = compose_prompt_v2(
         objective=f"Produce evidence-led research report via {playbook}",
         language=lang,
-        context={**req, "context_profile": context_meta},
+        context={
+            **req,
+            "context_profile": context_meta,
+            "memory_fusion": memory_route.get("fusion", {}),
+            "selected_candidate": selected_candidate,
+        },
         references=[
             *methods[:5],
             *[str(x.get("title", "")) for x in evidence[:4]],
             str(context_meta.get("output_standards", "")).strip(),
             str(context_meta.get("domain_rules", "")).strip(),
+            *[str(item.get("reason", "")).strip() for item in memory_route.get("fusion", {}).get("recent_lessons", []) if str(item.get("reason", "")).strip()],
         ],
         constraints=[
             "Separate evidence from assumptions",
@@ -1215,12 +1276,15 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "claim_cards": claims,
         "citation_block": citations,
         "peer_review_findings": review,
+        "candidate_set": candidate_set,
+        "selected_candidate": selected_candidate,
         "systematic_review": systematic_review,
         "ppt_bridge": ppt_bridge,
         "prompt_packet": prompt_packet,
         "reference_digest": {"methods": methods[:6]},
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
+        "memory_route": memory_route,
     }
 
     out_root = out_dir or (ROOT / "日志" / "research_hub")
@@ -1269,6 +1333,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "claim_cards": claims,
         "citation_block": citations,
         "peer_review_findings": review,
+        "candidate_set": candidate_set,
+        "selected_candidate": selected_candidate,
         "systematic_review": systematic_review,
         "ppt_bridge": ppt_bridge,
         "json_path": str(out_json),
@@ -1298,10 +1364,18 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "prompt_packet": prompt_packet,
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
+        "memory_route": memory_route,
+        "reflective_checkpoint": {},
         "loop_closure": build_loop_closure(
             skill="research-hub",
             status="completed",
-            evidence={"playbook": playbook, "section_count": len(sections), "citation_count": len(citations), "systematic_appendix": int(bool(appendix_text))},
+            evidence={
+                "playbook": playbook,
+                "section_count": len(sections),
+                "citation_count": len(citations),
+                "systematic_appendix": int(bool(appendix_text)),
+                "selected_candidate": selected_candidate.get("candidate_id", ""),
+            },
             next_actions=[
                 "Backfill primary sources for high-risk assumptions.",
                 "Run peer review before publishing externally.",
@@ -1309,6 +1383,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             ],
         ),
     }
+    result["reflective_checkpoint"] = research_checkpoint(result)
     result.update(build_output_objects("research.report", result, entrypoint="scripts.research_hub"))
     return result
 
@@ -1336,8 +1411,10 @@ def run_deck_request(text: str, values: Dict[str, Any], out_dir: Path | None = N
         "deck": deck,
         "deck_seed": deck_params,
         "ppt_bridge": report.get("ppt_bridge", {}),
+        "selected_candidate": report.get("selected_candidate", {}),
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
+        "memory_route": report.get("memory_route", {}),
         "json_path": report.get("json_path", ""),
         "md_path": report.get("md_path", ""),
         "html_path": report.get("html_path", ""),

@@ -60,6 +60,10 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertEqual(out.get("market_committee", {}).get("source_gate_status"), "clear")
             self.assertFalse(out.get("market_committee", {}).get("decision", {}).get("source_adjusted", True))
             self.assertNotIn("recommended_next_actions", out.get("market_committee", {}).get("decision", {}))
+            self.assertTrue(out.get("market_committee", {}).get("decision_candidates"))
+            self.assertTrue(out.get("market_committee", {}).get("selected_decision_candidate", {}).get("candidate_id"))
+            self.assertIn("reflective_checkpoint", out)
+            self.assertEqual(out.get("memory_route", {}).get("fusion", {}).get("audience"), "investment committee")
 
     def test_run_committee_marks_source_gate_when_connectors_are_stale_or_missing(self):
         with tempfile.TemporaryDirectory() as td:
@@ -99,6 +103,7 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertEqual(out.get("market_committee", {}).get("decision", {}).get("sizing_band"), "0%")
             self.assertTrue(out.get("market_committee", {}).get("decision", {}).get("recommended_next_actions"))
             self.assertTrue(out.get("market_committee", {}).get("recommended_next_actions"))
+            self.assertEqual(out.get("market_committee", {}).get("selected_decision_candidate", {}).get("stance"), "defensive")
 
 
 if __name__ == "__main__":

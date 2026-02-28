@@ -40,6 +40,9 @@ class AgentKernelTest(unittest.TestCase):
             self.assertIn("evidence_object", out)
             self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
+            self.assertIn("subtask_plan", out)
+            self.assertIn("memory_route", out)
+            self.assertIn("reflective_checkpoint", out)
             items = out.get("deliver_assets", {}).get("items", [])
             self.assertGreaterEqual(len(items), 4)
             self.assertTrue((root / "agent" / "agent_evaluations.jsonl").exists())
@@ -76,6 +79,8 @@ class AgentKernelTest(unittest.TestCase):
             self.assertEqual(out.get("status"), "needs_input")
             self.assertTrue(out.get("awaiting_input"))
             self.assertTrue(out.get("question_set_id"))
+            self.assertIn("subtask_plan", out)
+            self.assertIn("memory_route", out)
             self.assertTrue((root / "agent" / "pending_question_sets.jsonl").exists())
 
 

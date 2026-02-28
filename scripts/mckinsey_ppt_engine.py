@@ -20,6 +20,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.context_profile import apply_context_defaults, build_context_profile, context_brief
+from core.kernel.memory_router import build_memory_route
+from core.kernel.reflective_checkpoint import ppt_checkpoint
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 from scripts.mckinsey_ppt_html_renderer import render_deck_html
@@ -171,6 +173,7 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "time_horizon": str(values.get("time_horizon", "12 months")).strip(),
         "brand": str(values.get("brand", "Private Agent Office")).strip(),
         "theme": str(values.get("theme", "boardroom-signal")).strip(),
+        "theme_explicit": bool(str(values.get("theme", "")).strip()),
         "style": str(values.get("style", "consulting-premium")).strip(),
         "industry": str(values.get("industry", "通用业务" if lang == "zh" else "general business")).strip(),
         "deliverable": str(values.get("deliverable", default_deliverable)).strip(),
@@ -191,7 +194,41 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "research_systematic_review": research_systematic_review,
         "research_appendix_assets": research_appendix_assets,
         "has_systematic_appendix": has_systematic_appendix,
-    }
+}
+
+
+def _ppt_candidates(req: Dict[str, Any], context_meta: Dict[str, Any], lang: str) -> List[Dict[str, Any]]:
+    audience = str(req.get("audience", "")).strip().lower()
+    tone = str(req.get("tone", "")).strip().lower()
+    concise = "concise" in str(req.get("detail_level", context_meta.get("detail_level", ""))).strip().lower()
+    candidates = [
+        {
+            "candidate_id": "board_clarity",
+            "angle": "board clarity" if lang == "en" else "董事会清晰度",
+            "theme": "boardroom-signal",
+            "story_bias": "decision_first",
+            "score": 78.0 + (10.0 if "board" in audience or "management" in audience else 0.0) + (6.0 if concise else 0.0),
+        },
+        {
+            "candidate_id": "operator_execution",
+            "angle": "operator execution" if lang == "en" else "执行推进",
+            "theme": "harbor-brief",
+            "story_bias": "execution_first",
+            "score": 74.0 + (10.0 if "operator" in audience or "ops" in audience else 0.0) + (6.0 if tone == "executive" else 0.0),
+        },
+        {
+            "candidate_id": "investor_proof",
+            "angle": "investor proof" if lang == "en" else "投资人证据导向",
+            "theme": "ivory-ledger",
+            "story_bias": "proof_first",
+            "score": 72.0 + (12.0 if "investor" in audience or "finance" in audience else 0.0) + (4.0 if len(req.get("benchmarks", [])) >= 2 else 0.0),
+        },
+    ]
+    ranked = sorted(candidates, key=lambda item: (-float(item.get("score", 0.0)), str(item.get("candidate_id", ""))))
+    for idx, item in enumerate(ranked, start=1):
+        item["rank"] = idx
+        item["score"] = round(float(item.get("score", 0.0)), 2)
+    return ranked
 
 
 def _metric_value_rows(req: Dict[str, Any], lang: str) -> List[Dict[str, str]]:
@@ -1648,7 +1685,17 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     resolved_values = apply_context_defaults(values, context_profile, domain="ppt")
     context_meta = context_brief(context_profile)
     lang = str(resolved_values.get("preferred_language", "")).strip() or _language(text)
+    memory_route = build_memory_route(
+        data_dir=resolved_values.get("data_dir", ROOT / "日志" / "agent_os"),
+        task_kind="presentation",
+        context_profile=context_profile,
+        values=resolved_values,
+    )
     req = _extract_values(text, resolved_values, lang)
+    candidate_set = _ppt_candidates(req, context_meta, lang)
+    selected_candidate = dict(candidate_set[0]) if candidate_set else {}
+    if selected_candidate and not bool(req.get("theme_explicit", False)):
+        req["theme"] = str(selected_candidate.get("theme", req.get("theme", "boardroom-signal"))).strip()
     layout_catalog = _load_layout_catalog()
     design_reference = _read_reference_points(DESIGN_RULES_PATH)
     story_reference = _read_reference_points(STORY_PATTERNS_PATH)
@@ -1662,7 +1709,12 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     prompt_packet = compose_prompt_v2(
         objective=f"Build premium strategy deck for {req['topic']}",
         language=lang,
-        context={**req, "context_profile": context_meta},
+        context={
+            **req,
+            "context_profile": context_meta,
+            "memory_fusion": memory_route.get("fusion", {}),
+            "selected_candidate": selected_candidate,
+        },
         references=[
             "SCQA",
             "Pyramid Principle",
@@ -1671,6 +1723,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             *story_reference[:3],
             str(context_meta.get("output_standards", "")).strip(),
             str(context_meta.get("domain_rules", "")).strip(),
+            *[str(item.get("reason", "")).strip() for item in memory_route.get("fusion", {}).get("recent_lessons", []) if str(item.get("reason", "")).strip()],
         ],
         constraints=[
             "Every slide title must be an assertion",
@@ -1707,11 +1760,14 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             "story_patterns": story_reference[:5],
         },
         "quality_review": quality_review,
+        "candidate_set": candidate_set,
+        "selected_candidate": selected_candidate,
         "design_handoff": design_handoff,
         "slides": slides,
         "prompt_packet": prompt_packet,
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
+        "memory_route": memory_route,
     }
 
     out_root = out_dir or (ROOT / "日志" / "mckinsey_ppt")
@@ -1738,6 +1794,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "storyline": storyline,
         "design_system": design,
         "reference_digest": payload["reference_digest"],
+        "candidate_set": candidate_set,
+        "selected_candidate": selected_candidate,
         "design_handoff": design_handoff,
         "slides": slides,
         "export_manifest": payload["export_manifest"],
@@ -1757,6 +1815,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "prompt_packet": prompt_packet,
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
+        "memory_route": memory_route,
+        "reflective_checkpoint": {},
         "loop_closure": build_loop_closure(
             skill="mckinsey-ppt",
             status="completed",
@@ -1764,6 +1824,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
                 "slides": len(slides),
                 "storyline_blocks": len(storyline),
                 "consulting_score": quality_review["consulting_score"],
+                "selected_candidate": selected_candidate.get("candidate_id", ""),
             },
             next_actions=[
                 "Review deck_preview HTML before exporting to PPTX.",
@@ -1772,6 +1833,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             ],
         ),
     }
+    result["reflective_checkpoint"] = ppt_checkpoint(result)
     result.update(build_output_objects("ppt.generate", result, entrypoint="scripts.mckinsey_ppt_engine"))
     return result
 

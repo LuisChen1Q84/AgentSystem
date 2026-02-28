@@ -28,16 +28,20 @@ if str(ROOT) not in sys.path:
 try:
     from core.kernel.question_flow import apply_answer_packet
     from core.kernel.context_profile import build_context_profile
+    from core.kernel.memory_router import build_memory_route
     from core.kernel.models import ExecutionPlan, RunContext, RunRequest, TaskSpec
     from core.kernel.question_set import build_question_set
+    from core.kernel.subtask_planner import build_subtask_plan
     from scripts import autonomy_generalist
     from scripts.capability_catalog import load_cfg as load_catalog_cfg
     from scripts.capability_catalog import scan as scan_catalog
 except ModuleNotFoundError:  # direct
     from question_flow import apply_answer_packet  # type: ignore
     from context_profile import build_context_profile  # type: ignore
+    from memory_router import build_memory_route  # type: ignore
     from models import ExecutionPlan, RunContext, RunRequest, TaskSpec  # type: ignore
     from question_set import build_question_set  # type: ignore
+    from subtask_planner import build_subtask_plan  # type: ignore
     import autonomy_generalist  # type: ignore
     from capability_catalog import load_cfg as load_catalog_cfg  # type: ignore
     from capability_catalog import scan as scan_catalog  # type: ignore
@@ -390,9 +394,21 @@ def build_strategy_controls(
 
 
 
-def build_run_context(values: Dict[str, Any], strategy_controls: Dict[str, Any], capability: Dict[str, Any], context_profile: Dict[str, Any]) -> RunContext:
+def build_run_context(
+    values: Dict[str, Any],
+    strategy_controls: Dict[str, Any],
+    capability: Dict[str, Any],
+    context_profile: Dict[str, Any],
+    memory_route: Dict[str, Any],
+    subtask_plan: Dict[str, Any],
+) -> RunContext:
     return RunContext(
-        memory_refs=[str(values.get("memory_file", ""))] if str(values.get("memory_file", "")).strip() else [],
+        knowledge_refs=[
+            str(item)
+            for item in ([context_profile.get("context_dir", "")] + list((memory_route.get("fusion", {}) if isinstance(memory_route.get("fusion", {}), dict) else {}).get("connectors", [])))
+            if str(item).strip()
+        ],
+        memory_refs=list(memory_route.get("memory_refs", [])),
         available_services=sorted(set(strategy_controls.get("allowed_strategies", []))),
         enabled_packs=list(strategy_controls.get("enabled_layers", [])),
         governance_policy={
@@ -400,28 +416,43 @@ def build_run_context(values: Dict[str, Any], strategy_controls: Dict[str, Any],
             "blocked": strategy_controls.get("blocked_details", []),
         },
         environment={"root": str(ROOT), "context_dir": str(context_profile.get("context_dir", ""))},
-        session_state={"capability_error": capability.get("error", ""), "context_profile": context_profile},
+        session_state={
+            "capability_error": capability.get("error", ""),
+            "context_profile": context_profile,
+            "memory_route": memory_route,
+            "subtask_plan": subtask_plan,
+        },
     )
 
 
 
-def build_execution_plan(request: RunRequest, clarification: Dict[str, Any], strategy_controls: Dict[str, Any], governor: Dict[str, Any]) -> ExecutionPlan:
+def build_execution_plan(
+    request: RunRequest,
+    clarification: Dict[str, Any],
+    strategy_controls: Dict[str, Any],
+    governor: Dict[str, Any],
+    subtask_plan: Dict[str, Any],
+) -> ExecutionPlan:
     allowed = list(strategy_controls.get("allowed_strategies", []))
     selected = allowed[0] if allowed else "mcp-generalist"
-    return ExecutionPlan(
-        selected_strategy=selected,
-        fallback_chain=allowed[1:4],
-        clarification=clarification,
-        steps=[
+    steps = list(subtask_plan.get("phases", [])) if isinstance(subtask_plan.get("phases", []), list) else []
+    if not steps:
+        steps = [
             {"name": "classify_task", "status": "planned"},
             {"name": "apply_governance", "status": "planned"},
             {"name": "delegate_autonomy_generalist", "status": "planned"},
             {"name": "package_delivery", "status": "planned"},
-        ],
+        ]
+    return ExecutionPlan(
+        selected_strategy=selected,
+        fallback_chain=allowed[1:4],
+        clarification=clarification,
+        steps=steps,
         guards={
             "allowed_strategies": allowed,
             "max_risk_level": strategy_controls.get("max_risk_level", "medium"),
             "deterministic": governor.get("deterministic", True),
+            "reflective_checkpoints": subtask_plan.get("review_points", []),
         },
         retry_policy={"max_fallback_steps": int(governor.get("max_fallback_steps", 3))},
     )
@@ -461,6 +492,19 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
         context_profile=context_profile,
         answers=resolved_values.get("answer_packet", {}),
     )
+    memory_route = build_memory_route(
+        data_dir=resolved_values.get("agent_log_dir", log_dir),
+        task_kind=task.task_kind,
+        context_profile=context_profile,
+        values=resolved_values,
+    )
+    subtask_plan = build_subtask_plan(
+        task_kind=task.task_kind,
+        text=text,
+        clarification=clarification,
+        context_profile=context_profile,
+        values=resolved_values,
+    )
     capability = capability_report(resolved_values, cfg)
     cap_snapshot = capability_snapshot(capability)
     strategy_controls = build_strategy_controls(profile_name, resolved_values, cfg, capability, strategy_overrides_file)
@@ -477,17 +521,21 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
             "context_profile": context_profile,
             "question_set": clarification,
             "answer_packet": resolved_values.get("answer_packet", {}),
+            "memory_route": memory_route,
+            "subtask_plan": subtask_plan,
         },
         runtime_overrides=dict(resolved_values),
     )
-    run_context = build_run_context(resolved_values, strategy_controls, capability, context_profile)
-    plan = build_execution_plan(run_request, clarification, strategy_controls, governor)
+    run_context = build_run_context(resolved_values, strategy_controls, capability, context_profile, memory_route, subtask_plan)
+    plan = build_execution_plan(run_request, clarification, strategy_controls, governor, subtask_plan)
     return {
         "run_request": run_request,
         "run_context": run_context,
         "execution_plan": plan,
         "clarification": clarification,
         "context_profile": context_profile,
+        "memory_route": memory_route,
+        "subtask_plan": subtask_plan,
         "governor": governor,
         "profile_meta": profile_meta,
         "preferences_file": str(preferences_file),

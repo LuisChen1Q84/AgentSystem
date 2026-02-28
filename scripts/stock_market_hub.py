@@ -24,6 +24,8 @@ ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from core.kernel.context_profile import context_brief
+from core.kernel.memory_router import build_memory_route
+from core.kernel.reflective_checkpoint import market_checkpoint
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 CFG_DEFAULT = ROOT / "config" / "stock_market_hub.toml"
@@ -246,6 +248,70 @@ def _committee_payload(
         ],
         "factor_explanations": factor_explanations,
     }
+
+
+def _decision_candidates(committee: Dict[str, Any], source_gate: Dict[str, Any], quality_gate: Dict[str, Any]) -> List[Dict[str, Any]]:
+    decision = committee.get("decision", {}) if isinstance(committee.get("decision", {}), dict) else {}
+    risk_gate = committee.get("risk_gate", {}) if isinstance(committee.get("risk_gate", {}), dict) else {}
+    current_stance = str(decision.get("stance", "watchlist_only")).strip() or "watchlist_only"
+    current_conviction = str(decision.get("conviction", "medium")).strip() or "medium"
+    source_flags = source_gate.get("flags", []) if isinstance(source_gate.get("flags", []), list) else []
+    risk_flags = risk_gate.get("risk_flags", []) if isinstance(risk_gate.get("risk_flags", []), list) else []
+    base_penalty = len(source_flags) * 12 + len(risk_flags) * 5 + (18 if not bool(quality_gate.get("passed", False)) else 0)
+    candidates = [
+        {
+            "candidate_id": "offensive",
+            "stance": "accumulate_small",
+            "conviction": "high" if not source_flags else "medium",
+            "sizing_band": "20-30%" if not source_flags else "10-20%",
+            "score": 84.0 - base_penalty,
+            "reason": "Push exposure only if source quality, factor support, and coverage remain clean.",
+        },
+        {
+            "candidate_id": "balanced",
+            "stance": current_stance,
+            "conviction": current_conviction,
+            "sizing_band": str(decision.get("sizing_band", "0-10%")).strip() or "0-10%",
+            "score": 78.0 - len(source_flags) * 6 - (8 if not bool(quality_gate.get("passed", False)) else 0),
+            "reason": "Respect the current committee view while keeping risk gates explicit.",
+        },
+        {
+            "candidate_id": "defensive",
+            "stance": "defensive",
+            "conviction": "low",
+            "sizing_band": "0%",
+            "score": 70.0 + len(source_flags) * 14 + (16 if not bool(quality_gate.get("passed", False)) else 0),
+            "reason": "Preserve capital until coverage, freshness, and connector conflicts are repaired.",
+        },
+    ]
+    ranked = sorted(candidates, key=lambda item: (-float(item.get("score", 0.0)), str(item.get("candidate_id", ""))))
+    for idx, item in enumerate(ranked, start=1):
+        item["rank"] = idx
+        item["score"] = round(float(item.get("score", 0.0)), 2)
+    return ranked
+
+
+def _apply_selected_decision_candidate(committee: Dict[str, Any], candidate: Dict[str, Any]) -> None:
+    decision = committee.get("decision", {}) if isinstance(committee.get("decision", {}), dict) else {}
+    if not decision or not candidate:
+        return
+    decision["pre_candidate_stance"] = str(decision.get("stance", "")).strip()
+    decision["pre_candidate_conviction"] = str(decision.get("conviction", "")).strip()
+    decision["stance"] = str(candidate.get("stance", decision.get("stance", ""))).strip()
+    decision["conviction"] = str(candidate.get("conviction", decision.get("conviction", ""))).strip()
+    decision["sizing_band"] = str(candidate.get("sizing_band", decision.get("sizing_band", ""))).strip()
+    decision["candidate_reason"] = str(candidate.get("reason", "")).strip()
+    decision["candidate_adjusted"] = (
+        decision.get("pre_candidate_stance") != decision.get("stance")
+        or decision.get("pre_candidate_conviction") != decision.get("conviction")
+    )
+    if decision.get("stance") == "defensive":
+        decision["position_sizing_note"] = "Preserve capital until coverage, freshness, and conflict issues are resolved."
+    elif decision.get("stance") == "watchlist_only":
+        decision["position_sizing_note"] = "Keep the name on watchlist or paper-trade until signal quality improves."
+    elif decision.get("stance") == "accumulate_small":
+        decision["position_sizing_note"] = "Start with a controlled starter size and scale only after confirmation."
+    committee["decision"] = decision
 
 
 def evaluate_quality_gate(cfg: Dict[str, Any], freefirst: Dict[str, Any]) -> Dict[str, Any]:
@@ -476,6 +542,7 @@ def _run_report(
     committee_mode: bool,
     context_profile: Dict[str, Any] | None = None,
     context_inheritance: Dict[str, Any] | None = None,
+    memory_route: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     defaults = cfg.get("defaults", {})
     sq_cfg = Path(str(defaults.get("stock_quant_config", ROOT / "config/stock_quant.toml")))
@@ -526,6 +593,12 @@ def _run_report(
     out_json = report_dir / f"stock_market_{universe}_{ts}.json"
 
     context_meta = context_brief(context_profile or {})
+    memory_route_obj = memory_route or build_memory_route(
+        data_dir=report_dir.parent,
+        task_kind="market",
+        context_profile=context_profile or {},
+        values={"source_connectors": [], "query": query},
+    )
     payload = {
         "ts": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "query": query,
@@ -542,7 +615,13 @@ def _run_report(
         "prompt_packet": compose_prompt_v2(
             objective="Build global market strategy brief",
             language="zh",
-            context={"query": query, "universe": universe, "symbols": symbols, "context_profile": context_meta},
+            context={
+                "query": query,
+                "universe": universe,
+                "symbols": symbols,
+                "context_profile": context_meta,
+                "memory_fusion": memory_route_obj.get("fusion", {}),
+            },
             references=["stock_quant analyze/backtest", "mcp_freefirst coverage"],
             constraints=[
                 "Do not provide investment advice",
@@ -555,6 +634,7 @@ def _run_report(
         ),
         "context_profile": context_profile or {},
         "context_inheritance": context_inheritance or {"enabled": False},
+        "memory_route": memory_route_obj,
         "report_md": str(out_md),
         "report_json": str(out_json),
     }
@@ -571,7 +651,16 @@ def _run_report(
     )
     if committee_mode:
         payload["market_committee"] = _committee_payload(query, universe, analyze, backtest, portfolio, portfolio_backtest, freefirst, quality_gate)
+        source_gate = payload.get("source_risk_gate", {}) if isinstance(payload.get("source_risk_gate", {}), dict) else {}
+        decision_candidates = _decision_candidates(payload["market_committee"], source_gate, quality_gate)
+        payload["market_committee"]["decision_candidates"] = decision_candidates
+        payload["market_committee"]["selected_decision_candidate"] = dict(decision_candidates[0]) if decision_candidates else {}
+        if decision_candidates:
+            _apply_selected_decision_candidate(payload["market_committee"], dict(decision_candidates[0]))
         payload["summary"] = f"Market committee completed a multi-role review for {query or universe}."
+        payload["reflective_checkpoint"] = market_checkpoint(payload)
+    else:
+        payload["reflective_checkpoint"] = market_checkpoint(payload)
     payload.update(build_output_objects(service_name, payload, entrypoint="scripts.stock_market_hub"))
     out_md.write_text(render_md(payload), encoding="utf-8")
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -590,6 +679,7 @@ def run_report(
     *,
     context_profile: Dict[str, Any] | None = None,
     context_inheritance: Dict[str, Any] | None = None,
+    memory_route: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     return _run_report(
         cfg,
@@ -601,6 +691,7 @@ def run_report(
         committee_mode=False,
         context_profile=context_profile,
         context_inheritance=context_inheritance,
+        memory_route=memory_route,
     )
 
 
@@ -613,6 +704,7 @@ def run_committee(
     *,
     context_profile: Dict[str, Any] | None = None,
     context_inheritance: Dict[str, Any] | None = None,
+    memory_route: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     return _run_report(
         cfg,
@@ -624,6 +716,7 @@ def run_committee(
         committee_mode=True,
         context_profile=context_profile,
         context_inheritance=context_inheritance,
+        memory_route=memory_route,
     )
 
 

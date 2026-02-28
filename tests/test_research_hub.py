@@ -26,6 +26,10 @@ class ResearchHubTest(unittest.TestCase):
             self.assertIn("database_coverage", analysis)
             self.assertIn("prisma_flow", analysis)
             self.assertIn("systematic_review", out)
+            self.assertIn("candidate_set", out)
+            self.assertIn("selected_candidate", out)
+            self.assertIn("memory_route", out)
+            self.assertIn("reflective_checkpoint", out)
             self.assertTrue(Path(out.get("appendix_md_path", "")).exists())
             self.assertTrue(Path(out.get("quality_scorecard_csv_path", "")).exists())
             self.assertTrue(Path(out.get("citation_appendix_csv_path", "")).exists())
@@ -54,6 +58,8 @@ class ResearchHubTest(unittest.TestCase):
             self.assertGreaterEqual(len(out.get("claim_cards", [])), 1)
             self.assertGreaterEqual(len(out.get("citation_block", [])), 1)
             self.assertIn("ppt_bridge", out)
+            self.assertTrue(out.get("candidate_set"))
+            self.assertTrue(out.get("selected_candidate", {}).get("candidate_id"))
             self.assertTrue(Path(out["json_path"]).exists())
             self.assertTrue(Path(out["md_path"]).exists())
             self.assertTrue(Path(out["html_path"]).exists())
@@ -161,6 +167,7 @@ class ResearchHubTest(unittest.TestCase):
             self.assertTrue(out.get("ok", False))
             self.assertEqual(out.get("context_profile", {}).get("project_name"), "Research Board Pack")
             self.assertIn("source_connectors", out.get("context_inheritance", {}).get("applied_defaults", []))
+            self.assertEqual(out.get("memory_route", {}).get("fusion", {}).get("audience"), "board")
 
 
 if __name__ == "__main__":

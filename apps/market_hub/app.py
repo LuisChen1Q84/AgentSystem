@@ -16,7 +16,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.context_profile import apply_context_defaults, build_context_profile
-from scripts.stock_market_hub import CFG_DEFAULT, load_cfg, pick_symbols, run_committee, run_report
+from core.kernel.memory_router import build_memory_route
+from core.kernel.reflective_checkpoint import market_checkpoint
+from scripts.stock_market_hub import CFG_DEFAULT, _apply_selected_decision_candidate, _decision_candidates, load_cfg, pick_symbols, run_committee, run_report
 from scripts.research_source_adapters import lookup_sources
 
 
@@ -286,6 +288,12 @@ class MarketHubApp:
         query = str(resolved_params.get("query", text)).strip() or text
         universe = str(resolved_params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
         symbols = pick_symbols(cfg, query, str(resolved_params.get("symbols", "")))
+        memory_route = build_memory_route(
+            data_dir=resolved_params.get("data_dir", self.root / "日志" / "agent_os"),
+            task_kind="market",
+            context_profile=context_profile,
+            values=resolved_params,
+        )
         return run_report(
             cfg,
             query,
@@ -294,6 +302,7 @@ class MarketHubApp:
             bool(resolved_params.get("no_sync", False)),
             context_profile=context_profile,
             context_inheritance=resolved_params.get("context_inheritance", {}),
+            memory_route=memory_route,
         )
 
     def run_committee(self, text: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -306,6 +315,12 @@ class MarketHubApp:
         query = str(resolved_params.get("query", text)).strip() or text
         universe = str(resolved_params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
         symbols = pick_symbols(cfg, query, str(resolved_params.get("symbols", "")))
+        memory_route = build_memory_route(
+            data_dir=resolved_params.get("data_dir", self.root / "日志" / "agent_os"),
+            task_kind="market",
+            context_profile=context_profile,
+            values=resolved_params,
+        )
         payload = run_committee(
             cfg,
             query,
@@ -314,6 +329,7 @@ class MarketHubApp:
             bool(resolved_params.get("no_sync", False)),
             context_profile=context_profile,
             context_inheritance=resolved_params.get("context_inheritance", {}),
+            memory_route=memory_route,
         )
         lookup_params = dict(resolved_params)
         if not lookup_params.get("source_connectors"):
@@ -322,6 +338,7 @@ class MarketHubApp:
         payload["source_intel"] = source_intel
         payload["context_profile"] = context_profile
         payload["context_inheritance"] = resolved_params.get("context_inheritance", {})
+        payload["memory_route"] = memory_route
         payload["source_evidence_map"] = _source_summary(source_intel.get("items", []) if isinstance(source_intel.get("items", []), list) else [])
         requested_connectors = source_intel.get("connectors", []) if isinstance(source_intel.get("connectors", []), list) else []
         payload["source_risk_gate"] = _source_risk_gate(payload["source_evidence_map"], requested_connectors)
@@ -348,6 +365,15 @@ class MarketHubApp:
                     risk_gate["risk_level"] = "medium"
                 payload["market_committee"]["risk_gate"] = risk_gate
             _downgrade_decision_for_source_gate(payload["market_committee"], payload["source_risk_gate"])
+            decision_candidates = _decision_candidates(
+                payload["market_committee"],
+                payload["source_risk_gate"],
+                payload.get("quality_gate", {}) if isinstance(payload.get("quality_gate", {}), dict) else {},
+            )
+            payload["market_committee"]["decision_candidates"] = decision_candidates
+            payload["market_committee"]["selected_decision_candidate"] = dict(decision_candidates[0]) if decision_candidates else {}
+            if decision_candidates:
+                _apply_selected_decision_candidate(payload["market_committee"], dict(decision_candidates[0]))
             loop_closure = payload.get("loop_closure", {})
             if isinstance(loop_closure, dict):
                 next_actions = loop_closure.get("next_actions", []) if isinstance(loop_closure.get("next_actions", []), list) else []
@@ -355,4 +381,5 @@ class MarketHubApp:
                     dict.fromkeys(next_actions + list(payload["market_committee"].get("recommended_next_actions", [])))
                 )
                 payload["loop_closure"] = loop_closure
+            payload["reflective_checkpoint"] = market_checkpoint(payload)
         return payload

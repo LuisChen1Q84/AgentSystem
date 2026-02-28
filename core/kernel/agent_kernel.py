@@ -20,12 +20,14 @@ try:
     from core.kernel.evaluator import persist_agent_payload
     from core.kernel.planner import build_run_blueprint, load_agent_cfg, now_ts, resolve_path
     from core.kernel.question_flow import persist_pending_question_set, should_pause_for_questions
+    from core.kernel.reflective_checkpoint import kernel_checkpoint
     from core.skill_intelligence import build_loop_closure
     from scripts import autonomy_generalist
 except ModuleNotFoundError:  # direct
     from evaluator import persist_agent_payload  # type: ignore
     from planner import build_run_blueprint, load_agent_cfg, now_ts, resolve_path  # type: ignore
     from question_flow import persist_pending_question_set, should_pause_for_questions  # type: ignore
+    from reflective_checkpoint import kernel_checkpoint  # type: ignore
     from core.skill_intelligence import build_loop_closure  # type: ignore
     import autonomy_generalist  # type: ignore
 
@@ -50,6 +52,8 @@ class AgentKernel:
         cap_snapshot = blueprint["capability_snapshot"]
         strategy_controls = blueprint["strategy_controls"]
         context_profile = blueprint["context_profile"]
+        memory_route = blueprint["memory_route"]
+        subtask_plan = blueprint["subtask_plan"]
         resolved_values = blueprint["resolved_values"]
 
         log_dir = resolve_path(values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), self.root)
@@ -84,6 +88,8 @@ class AgentKernel:
                 "duration_ms": int((dt.datetime.now() - started).total_seconds() * 1000),
                 "capability_snapshot": cap_snapshot,
                 "strategy_controls": strategy_controls,
+                "memory_route": memory_route,
+                "subtask_plan": subtask_plan,
                 "kernel": {
                     "task": run_request.task.to_dict(),
                     "run_request": run_request.to_dict(),
@@ -138,6 +144,8 @@ class AgentKernel:
             "task_kind": run_request.task.task_kind,
             "clarification": clarification,
             "context_profile": context_profile,
+            "memory_route": memory_route,
+            "subtask_plan": subtask_plan,
             "duration_ms": duration_ms,
             "capability_snapshot": cap_snapshot,
             "strategy_controls": strategy_controls,
@@ -148,6 +156,7 @@ class AgentKernel:
                 "execution_plan": execution_plan.to_dict(),
             },
             "result": result,
+            "reflective_checkpoint": kernel_checkpoint({"result": result}, task_kind=run_request.task.task_kind),
             "loop_closure": build_loop_closure(
                 skill="agent-os",
                 status="completed" if ok else "advisor",
