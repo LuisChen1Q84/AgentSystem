@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,7 +8,7 @@ from scripts.mckinsey_ppt_engine import run_request
 
 
 class McKinseyPptEngineTest(unittest.TestCase):
-    def test_run_request_generates_assets_and_closure(self):
+    def test_run_request_generates_spec_markdown_and_html(self):
         with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
             out = run_request(
                 "帮我做AI业务增长战略汇报",
@@ -16,6 +17,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
                     "objective": "推进预算决策",
                     "page_count": 8,
                     "time_horizon": "18 months",
+                    "key_metrics": ["收入增长", "毛利率", "回收期"],
                 },
                 Path(td),
             )
@@ -29,20 +31,36 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("evidence_object", out)
             self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
+            self.assertIn("quality_review", out)
+            self.assertIn("html_path", out)
             self.assertEqual(out["request"]["page_count"], 8)
 
             items = out["deliver_assets"]["items"]
-            self.assertEqual(len(items), 2)
+            self.assertEqual(len(items), 3)
             for item in items:
                 self.assertTrue(Path(item["path"]).exists())
 
-    def test_page_count_is_bounded(self):
+            spec = json.loads(Path(out["json_path"]).read_text(encoding="utf-8"))
+            self.assertIn("quality_review", spec)
+            self.assertIn("slides", spec)
+            self.assertGreaterEqual(spec["quality_review"]["consulting_score"], 60)
+            self.assertEqual(len(spec["slides"]), 8)
+            self.assertIn("decision_link", spec["slides"][0])
+
+            html_text = Path(out["html_path"]).read_text(encoding="utf-8")
+            self.assertIn("slide-card", html_text)
+            self.assertIn("--accent", html_text)
+            self.assertIn("Slide Preview", html_text)
+
+    def test_page_count_is_bounded_and_quality_review_exists(self):
         out = run_request("Growth strategy", {"page_count": 99})
         self.assertTrue(out["ok"])
         self.assertEqual(out["request"]["page_count"], 20)
         self.assertIn("delivery_bundle", out)
         self.assertIn("delivery_object", out)
         self.assertIn("delivery_protocol", out)
+        self.assertIn("quality_review", out)
+        self.assertIn("consulting_score", out["quality_review"])
 
 
 if __name__ == "__main__":

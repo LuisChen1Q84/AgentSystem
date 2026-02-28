@@ -405,17 +405,17 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                 "execute": {"type": "mckinsey-ppt", "engine": "mckinsey_ppt_engine"},
                 "result": result,
                 "meta": {
-                    "mode": "deck-spec",
+                    "mode": "deck-spec-preview",
                     "next_actions": [
-                        "review deck_spec_*.json and fill evidence",
-                        "convert spec to pptx in next step",
+                        "review deck_preview_*.html and tighten evidence",
+                        "convert approved spec to pptx in next step",
                     ],
                 },
                 "loop_closure": build_loop_closure(
                     skill=skill,
                     status="completed",
                     evidence={"assets": len(result.get("deliver_assets", {}).get("items", []))},
-                    next_actions=["补齐关键数据证据后再进入视觉精修"],
+                    next_actions=["先在 HTML 预览中确认版式与逻辑，再进入 PPTX 精修"],
                 ),
             }
         except Exception as e:

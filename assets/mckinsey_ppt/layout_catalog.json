@@ -1,0 +1,100 @@
+{
+  "themes": {
+    "boardroom-signal": {
+      "ink": "#0F172A",
+      "accent": "#0F766E",
+      "accent_soft": "#D6F3EE",
+      "warn": "#B45309",
+      "paper": "#F7F4ED",
+      "panel": "#FFFDFC",
+      "line": "#D7CEC2",
+      "muted": "#667085"
+    }
+  },
+  "layouts": {
+    "cover_signal": {
+      "intent": "Open with the verdict and signal executive tone",
+      "composition": "Hero title + metric strip + decision box",
+      "density": "medium",
+      "primary_chart": "hero-metrics",
+      "visual_modules": ["hero-title", "metric-strip", "decision-box"]
+    },
+    "executive_summary": {
+      "intent": "Compress the case into three executive-ready messages",
+      "composition": "Three-column summary",
+      "density": "medium",
+      "primary_chart": "summary-cards",
+      "visual_modules": ["summary-card", "evidence-chip", "next-step"]
+    },
+    "situation_snapshot": {
+      "intent": "Show where the business is actually under pressure",
+      "composition": "Evidence panel + insight panel",
+      "density": "medium",
+      "primary_chart": "trend-with-callouts",
+      "visual_modules": ["trend-chart", "numeric-callout", "insight-box"]
+    },
+    "issue_tree": {
+      "intent": "Break a vague problem into governable causes",
+      "composition": "Cause tree + root cause cards",
+      "density": "dense",
+      "primary_chart": "issue-tree",
+      "visual_modules": ["cause-tree", "root-cause-card", "decision-implication"]
+    },
+    "benchmark_matrix": {
+      "intent": "Anchor priority setting with external proof",
+      "composition": "Comparison matrix + highlighted gaps",
+      "density": "medium",
+      "primary_chart": "benchmark-matrix",
+      "visual_modules": ["peer-column", "gap-highlight", "priority-note"]
+    },
+    "strategic_options": {
+      "intent": "Force explicit trade-offs across options",
+      "composition": "Option table with four comparison axes",
+      "density": "medium",
+      "primary_chart": "option-scorecard",
+      "visual_modules": ["option-card", "risk-bar", "resource-tag"]
+    },
+    "initiative_portfolio": {
+      "intent": "Turn many initiatives into a prioritised portfolio",
+      "composition": "Impact-feasibility matrix",
+      "density": "medium",
+      "primary_chart": "priority-matrix",
+      "visual_modules": ["bubble-matrix", "priority-label", "resource-envelope"]
+    },
+    "roadmap_track": {
+      "intent": "Translate choices into sequence and ownership",
+      "composition": "Three-wave roadmap",
+      "density": "medium",
+      "primary_chart": "wave-roadmap",
+      "visual_modules": ["wave-track", "milestone-chip", "owner-row"]
+    },
+    "risk_control": {
+      "intent": "Show governance, risk, and correction logic",
+      "composition": "Risk table + cadence panel",
+      "density": "medium",
+      "primary_chart": "risk-grid",
+      "visual_modules": ["risk-card", "mitigation-note", "cadence-box"]
+    },
+    "decision_ask": {
+      "intent": "Close with approval asks and immediate next actions",
+      "composition": "Decision checklist + impact summary",
+      "density": "low",
+      "primary_chart": "decision-boxes",
+      "visual_modules": ["approval-card", "resource-summary", "start-now-list"]
+    },
+    "appendix_evidence": {
+      "intent": "Back up the main narrative with challenge-ready proof",
+      "composition": "Evidence index + source notes",
+      "density": "dense",
+      "primary_chart": "evidence-index",
+      "visual_modules": ["source-table", "assumption-note", "metric-definition"]
+    },
+    "metric_deep_dive": {
+      "intent": "Use extra slides only for decision-bearing proof",
+      "composition": "Compact chart + three proof bullets",
+      "density": "medium",
+      "primary_chart": "single-metric-deep-dive",
+      "visual_modules": ["metric-hero", "proof-bullet", "decision-implication"]
+    }
+  }
+}

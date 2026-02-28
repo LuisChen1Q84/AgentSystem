@@ -18,9 +18,16 @@ model: opus
 - 数据可视化
 - 结构化分析框架
 - 专业演示文稿
+- 高保真 HTML 预览
+- 断言标题与证据校验
 
 ---
 
 ## 详细资料
 
 如需完整方法论，请查阅：`技能库/references/mckinsey-ppt/完整版.md`
+
+当前引擎额外输出：
+- `deck_spec_*.json`
+- `deck_spec_*.md`
+- `deck_preview_*.html`
