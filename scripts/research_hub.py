@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import json
 import os
@@ -896,6 +897,15 @@ def _systematic_appendix_markdown(payload: Dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _write_csv(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: row.get(key, "") for key in fieldnames})
+
+
 def _ppt_bridge(req: Dict[str, Any], playbook: str, sections: List[Dict[str, Any]]) -> Dict[str, Any]:
     deck_title = f"{req['title']} | Executive Readout"
     if playbook == "ceo_text_deck":
@@ -1126,6 +1136,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     out_md = out_root / f"research_report_{ts}.md"
     out_html = out_root / f"research_report_{ts}.html"
     out_appendix_md = out_root / f"research_appendix_{ts}.md"
+    out_quality_csv = out_root / f"research_quality_scorecard_{ts}.csv"
+    out_citations_csv = out_root / f"research_citation_appendix_{ts}.csv"
 
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     out_md.write_text(_markdown_report(payload), encoding="utf-8")
@@ -1133,6 +1145,16 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     appendix_text = _systematic_appendix_markdown(payload)
     if appendix_text:
         out_appendix_md.write_text(appendix_text, encoding="utf-8")
+        _write_csv(
+            out_quality_csv,
+            systematic_review.get("quality_scorecard", []) if isinstance(systematic_review.get("quality_scorecard", []), list) else [],
+            ["study_id", "title", "tool", "risk_of_bias", "certainty", "notes"],
+        )
+        _write_csv(
+            out_citations_csv,
+            systematic_review.get("citation_appendix", []) if isinstance(systematic_review.get("citation_appendix", []), list) else [],
+            ["id", "title", "type", "url"],
+        )
 
     result: Dict[str, Any] = {
         "ok": True,
@@ -1155,7 +1177,22 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "md_path": str(out_md),
         "html_path": str(out_html),
         "appendix_md_path": str(out_appendix_md) if appendix_text else "",
-        "deliver_assets": {"items": ([{"path": str(out_json)}, {"path": str(out_md)}, {"path": str(out_html)}] + ([{"path": str(out_appendix_md)}] if appendix_text else []))},
+        "quality_scorecard_csv_path": str(out_quality_csv) if appendix_text else "",
+        "citation_appendix_csv_path": str(out_citations_csv) if appendix_text else "",
+        "deliver_assets": {
+            "items": (
+                [{"path": str(out_json)}, {"path": str(out_md)}, {"path": str(out_html)}]
+                + (
+                    [
+                        {"path": str(out_appendix_md)},
+                        {"path": str(out_quality_csv)},
+                        {"path": str(out_citations_csv)},
+                    ]
+                    if appendix_text
+                    else []
+                )
+            )
+        },
         "prompt_packet": prompt_packet,
         "loop_closure": build_loop_closure(
             skill="research-hub",

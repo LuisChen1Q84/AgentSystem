@@ -391,6 +391,7 @@ def render_md(payload: Dict[str, Any]) -> str:
         debate = committee.get("debate_summary", {}) if isinstance(committee.get("debate_summary", {}), dict) else {}
         risk_gate = committee.get("risk_gate", {}) if isinstance(committee.get("risk_gate", {}), dict) else {}
         source_intel = payload.get("source_intel", {}) if isinstance(payload.get("source_intel", {}), dict) else {}
+        source_evidence_map = payload.get("source_evidence_map", {}) if isinstance(payload.get("source_evidence_map", {}), dict) else {}
         lines.extend([
             "## Market Committee",
             "",
@@ -414,6 +415,14 @@ def render_md(payload: Dict[str, Any]) -> str:
             lines.extend(["", "### Source Intel", ""])
             for item in source_intel.get("items", [])[:6]:
                 lines.append(f"- {item.get('title','')} | {item.get('connector','')} | {item.get('url','') or item.get('path','')}")
+        if source_evidence_map.get("by_connector"):
+            lines.extend(["", "### Source Evidence Map", ""])
+            for connector, count in source_evidence_map.get("by_connector", {}).items():
+                lines.append(f"- {connector}: {count}")
+        if source_evidence_map.get("event_timeline"):
+            lines.extend(["", "### Event Timeline", ""])
+            for item in source_evidence_map.get("event_timeline", [])[:6]:
+                lines.append(f"- {item.get('date','')} | {item.get('connector','')} | {item.get('title','')} | {item.get('location','')}")
         lines.extend(["", ""])
     return "\n".join(lines)
 

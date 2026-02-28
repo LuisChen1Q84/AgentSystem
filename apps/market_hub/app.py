@@ -18,6 +18,31 @@ from scripts.stock_market_hub import CFG_DEFAULT, load_cfg, pick_symbols, run_co
 from scripts.research_source_adapters import lookup_sources
 
 
+def _source_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+    by_connector: dict[str, int] = {}
+    timeline: list[dict[str, Any]] = []
+    for item in items:
+        connector = str(item.get("connector", "unknown")).strip() or "unknown"
+        by_connector[connector] = by_connector.get(connector, 0) + 1
+        event_date = str(item.get("filed_at", item.get("updated_at", ""))).strip()
+        label = str(item.get("title", "")).strip()
+        location = str(item.get("url", item.get("path", ""))).strip()
+        if label:
+            timeline.append(
+                {
+                    "connector": connector,
+                    "date": event_date,
+                    "title": label,
+                    "location": location,
+                }
+            )
+    timeline.sort(key=lambda x: (str(x.get("date", "")) == "", str(x.get("date", ""))), reverse=False)
+    return {
+        "by_connector": by_connector,
+        "event_timeline": timeline[:8],
+    }
+
+
 class MarketHubApp:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
@@ -46,7 +71,9 @@ class MarketHubApp:
             lookup_params["source_connectors"] = ["knowledge"] + (["sec"] if str(params.get("ticker", "")).strip() or str(params.get("company", "")).strip() else [])
         source_intel = lookup_sources(query, lookup_params)
         payload["source_intel"] = source_intel
+        payload["source_evidence_map"] = _source_summary(source_intel.get("items", []) if isinstance(source_intel.get("items", []), list) else [])
         if isinstance(payload.get("market_committee", {}), dict):
             payload["market_committee"]["source_connectors"] = source_intel.get("connectors", [])
             payload["market_committee"]["source_item_count"] = len(source_intel.get("items", []))
+            payload["market_committee"]["event_timeline"] = payload["source_evidence_map"].get("event_timeline", [])
         return payload
