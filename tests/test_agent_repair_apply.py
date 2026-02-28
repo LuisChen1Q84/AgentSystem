@@ -133,6 +133,35 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertTrue(plan["approval"]["required"])
             self.assertTrue(plan["approval"]["code"])
 
+            selective_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                max_actions=1,
+            )
+            self.assertTrue(selective_plan["selection"]["selective_mode"])
+            self.assertEqual(selective_plan["selection"]["max_actions"], 1)
+            self.assertEqual(selective_plan["selection"]["selected_action_count"], 1)
+            self.assertEqual(len(selective_plan["failure_review"]["repair_actions"]), 1)
+
+            no_op_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                min_priority_score=999,
+            )
+            self.assertTrue(no_op_plan["selection"]["selective_mode"])
+            self.assertEqual(no_op_plan["selection"]["selected_action_count"], 0)
+            self.assertEqual(no_op_plan["preview_diff"]["change_count"], 0)
+            self.assertFalse(no_op_plan["changes"]["profile_overrides_changed"])
+            self.assertFalse(no_op_plan["changes"]["strategy_overrides_changed"])
+
             files = write_repair_plan_files(plan, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())

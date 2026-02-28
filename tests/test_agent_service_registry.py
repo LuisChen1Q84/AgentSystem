@@ -322,12 +322,15 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 data_dir=str(root),
                 days=14,
                 limit=10,
+                max_actions=1,
                 apply=False,
                 profile_overrides_file=str(root / "profile_overrides.json"),
                 strategy_overrides_file=str(root / "strategy_overrides.json"),
                 backup_dir=str(root / "backups"),
                 out_dir=str(root / "out"),
             )
+            self.assertEqual(preview.get("report", {}).get("selection", {}).get("max_actions"), 1)
+            self.assertEqual(preview.get("report", {}).get("selection", {}).get("selected_action_count"), 1)
             approval_code = str(preview.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)
             denied = reg.execute(

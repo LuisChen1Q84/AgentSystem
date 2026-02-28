@@ -7,7 +7,7 @@ import datetime as dt
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from core.kernel.failure_review import build_failure_review
 from core.kernel.memory_store import load_memory
@@ -65,51 +65,80 @@ def _merge_unique(*groups: List[str]) -> List[str]:
     return out
 
 
-def _profile_payload(ts: str, existing: Dict[str, Any], policy_report: Dict[str, Any], failure_report: Dict[str, Any]) -> Dict[str, Any]:
+def _profile_payload(
+    ts: str,
+    existing: Dict[str, Any],
+    policy_report: Dict[str, Any],
+    failure_report: Dict[str, Any],
+    *,
+    selective_mode: bool = False,
+    selected_scopes: Set[str] | None = None,
+) -> Dict[str, Any]:
+    existing_updated_at = str(existing.get("updated_at", "")).strip()
     current_default = str(existing.get("default_profile", "")).strip()
     suggested_default = str(policy_report.get("summary", {}).get("suggested_default_profile", "")).strip()
-    default_profile = suggested_default or current_default or "strict"
+    active_scopes = set(selected_scopes or set())
+    default_profile = current_default if selective_mode else (suggested_default or current_default or "strict")
     task_kind_profiles = dict(existing.get("task_kind_profiles", {}) if isinstance(existing.get("task_kind_profiles", {}), dict) else {})
+    current_task_kind_profiles = dict(task_kind_profiles)
 
-    policy_tk = policy_report.get("task_kind_profiles", {}) if isinstance(policy_report.get("task_kind_profiles", {}), dict) else {}
-    for kind, profile in policy_tk.items():
-        clean_kind = str(kind).strip()
-        clean_profile = str(profile).strip()
-        if clean_kind and clean_profile:
-            task_kind_profiles[clean_kind] = clean_profile
+    if not selective_mode:
+        policy_tk = policy_report.get("task_kind_profiles", {}) if isinstance(policy_report.get("task_kind_profiles", {}), dict) else {}
+        for kind, profile in policy_tk.items():
+            clean_kind = str(kind).strip()
+            clean_profile = str(profile).strip()
+            if clean_kind and clean_profile:
+                task_kind_profiles[clean_kind] = clean_profile
 
     for action in failure_report.get("repair_actions", []):
         if not isinstance(action, dict):
             continue
         if str(action.get("scope", "")) != "task_kind":
             continue
+        if selective_mode and "task_kind" not in active_scopes:
+            continue
         target = str(action.get("target", "")).strip()
         if not target:
             continue
         task_kind_profiles[target] = "strict"
 
+    updated_at = ts if default_profile != current_default or task_kind_profiles != current_task_kind_profiles else existing_updated_at
     return {
-        "updated_at": ts,
+        "updated_at": updated_at,
         "default_profile": default_profile,
         "task_kind_profiles": dict(sorted(task_kind_profiles.items())),
     }
 
 
-def _strategy_payload(ts: str, existing: Dict[str, Any], policy_report: Dict[str, Any], failure_report: Dict[str, Any]) -> Dict[str, Any]:
+def _strategy_payload(
+    ts: str,
+    existing: Dict[str, Any],
+    policy_report: Dict[str, Any],
+    failure_report: Dict[str, Any],
+    *,
+    selective_mode: bool = False,
+    selected_scopes: Set[str] | None = None,
+) -> Dict[str, Any]:
+    existing_updated_at = str(existing.get("updated_at", "")).strip()
     current_global = list(existing.get("global_blocked_strategies", [])) if isinstance(existing.get("global_blocked_strategies", []), list) else []
     current_profile = dict(existing.get("profile_blocked_strategies", {}) if isinstance(existing.get("profile_blocked_strategies", {}), dict) else {})
     strict_existing = list(current_profile.get("strict", [])) if isinstance(current_profile.get("strict", []), list) else []
-    strict_policy = [str(x).strip() for x in policy_report.get("strict_block_candidates", []) if str(x).strip()]
+    active_scopes = set(selected_scopes or set())
+    strict_policy = [str(x).strip() for x in policy_report.get("strict_block_candidates", []) if str(x).strip()] if (not selective_mode or "policy" in active_scopes) else []
     strict_failure = [
         str(x.get("target", "")).strip()
         for x in failure_report.get("repair_actions", [])
-        if isinstance(x, dict) and str(x.get("scope", "")) == "strategy" and str(x.get("priority", "")) == "high"
+        if isinstance(x, dict) and str(x.get("scope", "")) == "strategy" and (not selective_mode or "strategy" in active_scopes)
     ]
     strict_blocks = _merge_unique(strict_existing, strict_policy, strict_failure)
     profile_map = dict(current_profile)
-    profile_map["strict"] = strict_blocks
+    if strict_blocks or "strict" in profile_map:
+        profile_map["strict"] = strict_blocks
+    elif "strict" in profile_map:
+        profile_map.pop("strict", None)
+    updated_at = ts if _merge_unique(current_global) != current_global or profile_map != current_profile else existing_updated_at
     return {
-        "updated_at": ts,
+        "updated_at": updated_at,
         "global_blocked_strategies": _merge_unique(current_global),
         "profile_blocked_strategies": {k: v for k, v in sorted(profile_map.items()) if isinstance(v, list)},
     }
@@ -211,10 +240,51 @@ def _latest_event_record(rows: List[Dict[str, Any]], event: str) -> Dict[str, An
     return {}
 
 
+def _recent_events(rows: List[Dict[str, Any]], limit: int = 10) -> List[Dict[str, Any]]:
+    trimmed: List[Dict[str, Any]] = []
+    for row in reversed(rows[-max(1, int(limit)) :]):
+        if not isinstance(row, dict):
+            continue
+        trimmed.append(
+            {
+                "ts": str(row.get("ts", "")),
+                "event": str(row.get("event", "")),
+                "snapshot_id": str(row.get("snapshot_id", "")),
+                "actor": str(row.get("actor", "")),
+            }
+        )
+    return trimmed
+
+
 def _changed_components(preview_diff: Dict[str, Any]) -> List[str]:
     profile_rows = preview_diff.get("profile_overrides", []) if isinstance(preview_diff.get("profile_overrides", []), list) else []
     strategy_rows = preview_diff.get("strategy_overrides", []) if isinstance(preview_diff.get("strategy_overrides", []), list) else []
     return [component for component, changed in (("profile", bool(profile_rows)), ("strategy", bool(strategy_rows))) if changed]
+
+
+def _filter_repair_actions(failure_report: Dict[str, Any], min_priority_score: int, max_actions: int) -> Dict[str, Any]:
+    actions = [item for item in failure_report.get("repair_actions", []) if isinstance(item, dict)]
+    threshold = max(0, int(min_priority_score))
+    limited = max(0, int(max_actions))
+    filtered = [item for item in actions if int(item.get("priority_score", 0) or 0) >= threshold]
+    if limited > 0:
+        filtered = filtered[:limited]
+    selected_ids = {(str(item.get("scope", "")), str(item.get("target", "")), str(item.get("action", ""))) for item in filtered}
+    skipped = [
+        item
+        for item in actions
+        if (str(item.get("scope", "")), str(item.get("target", "")), str(item.get("action", ""))) not in selected_ids
+    ]
+    out = dict(failure_report)
+    out["repair_actions"] = filtered
+    out["selection"] = {
+        "min_priority_score": threshold,
+        "max_actions": limited,
+        "selected_action_count": len(filtered),
+        "skipped_action_count": len(skipped),
+    }
+    out["skipped_repair_actions"] = skipped[:10]
+    return out
 
 
 def _record_repair_event(
@@ -346,6 +416,8 @@ def build_repair_apply_plan(
     profile_overrides_file: Path,
     strategy_overrides_file: Path,
     backup_dir: Path,
+    min_priority_score: int = 0,
+    max_actions: int = 0,
 ) -> Dict[str, Any]:
     ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     snapshot_id = _snapshot_id(ts)
@@ -354,13 +426,34 @@ def build_repair_apply_plan(
     memory = load_memory(data_dir / "memory.json")
 
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
+    selective_mode = int(min_priority_score or 0) > 0 or int(max_actions or 0) > 0
+    filtered_failure_report = _filter_repair_actions(failure_report, int(min_priority_score or 0), int(max_actions or 0)) if selective_mode else dict(failure_report)
+    selected_scopes = {
+        str(item.get("scope", "")).strip()
+        for item in filtered_failure_report.get("repair_actions", [])
+        if isinstance(item, dict) and str(item.get("scope", "")).strip()
+    }
     policy_report = tune_policy(run_rows=runs, evaluation_rows=evals, memory=memory, days=max(1, int(days)))
 
     current_profile = _load_json(profile_overrides_file, {"updated_at": "", "default_profile": "", "task_kind_profiles": {}})
     current_strategy = _load_json(strategy_overrides_file, {"updated_at": "", "global_blocked_strategies": [], "profile_blocked_strategies": {}})
 
-    proposed_profile = _profile_payload(ts, current_profile, policy_report, failure_report)
-    proposed_strategy = _strategy_payload(ts, current_strategy, policy_report, failure_report)
+    proposed_profile = _profile_payload(
+        ts,
+        current_profile,
+        policy_report,
+        filtered_failure_report,
+        selective_mode=selective_mode,
+        selected_scopes=selected_scopes,
+    )
+    proposed_strategy = _strategy_payload(
+        ts,
+        current_strategy,
+        policy_report,
+        filtered_failure_report,
+        selective_mode=selective_mode,
+        selected_scopes=selected_scopes,
+    )
     profile_diff = _diff_rows(current_profile, proposed_profile)
     strategy_diff = _diff_rows(current_strategy, proposed_strategy)
     changes = {
@@ -384,11 +477,20 @@ def build_repair_apply_plan(
             "days": max(1, int(days)),
             "limit": max(1, int(limit)),
             "failure_count": int(failure_report.get("summary", {}).get("failure_count", 0) or 0),
-            "repair_actions": len(failure_report.get("repair_actions", [])),
+            "repair_actions": len(filtered_failure_report.get("repair_actions", [])),
+            "repair_actions_total": len(failure_report.get("repair_actions", [])),
             "strict_block_candidates": len(policy_report.get("strict_block_candidates", [])),
         },
-        "failure_review": failure_report,
+        "failure_review": filtered_failure_report,
         "policy_tuning": policy_report,
+        "selection": {
+            "selective_mode": bool(selective_mode),
+            "min_priority_score": max(0, int(min_priority_score)),
+            "max_actions": max(0, int(max_actions)),
+            "selected_scopes": sorted(selected_scopes),
+            "selected_action_count": len(filtered_failure_report.get("repair_actions", [])),
+            "skipped_action_count": len(filtered_failure_report.get("skipped_repair_actions", [])),
+        },
         "current": {
             "profile_overrides": current_profile,
             "strategy_overrides": current_strategy,
@@ -559,6 +661,7 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
             "last_approved": _latest_event_record(journal_rows, "approved"),
             "last_applied": _latest_event_record(journal_rows, "applied"),
             "last_rolled_back": _latest_event_record(journal_rows, "rolled_back"),
+            "recent_events": _recent_events(journal_rows, limit=10),
         },
     }
 

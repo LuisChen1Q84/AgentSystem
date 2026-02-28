@@ -125,6 +125,8 @@ def _repair_apply_cmd(
     backup_dir: str,
     snapshot_id: str,
     plan_file: str,
+    min_priority_score: int,
+    max_actions: int,
     approve_code: str,
     force: bool,
 ) -> int:
@@ -140,6 +142,8 @@ def _repair_apply_cmd(
         backup_dir=backup_dir,
         snapshot_id=snapshot_id,
         plan_file=plan_file,
+        min_priority_score=min_priority_score,
+        max_actions=max_actions,
         approve_code=approve_code,
         force=force,
     )
@@ -158,6 +162,8 @@ def _repair_approve_cmd(
     backup_dir: str,
     snapshot_id: str,
     plan_file: str,
+    min_priority_score: int,
+    max_actions: int,
     approve_code: str,
     force: bool,
 ) -> int:
@@ -172,6 +178,8 @@ def _repair_approve_cmd(
         backup_dir=backup_dir,
         snapshot_id=snapshot_id,
         plan_file=plan_file,
+        min_priority_score=min_priority_score,
+        max_actions=max_actions,
         approve_code=approve_code,
         force=force,
     )
@@ -320,7 +328,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "failure-review [days], repair-apply [days], repair-approve [days], repair-list [limit], repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "failure-review [days], repair-apply [days] [min_score] [max_actions], repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -354,9 +362,12 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             _failure_review_cmd(reg, days=int(args[0]) if args else 14, limit=10, data_dir=data_dir, out_dir="")
             continue
         if cmd == "repair-apply":
+            days = int(args[0]) if len(args) > 0 else 14
+            min_priority_score = int(args[1]) if len(args) > 1 else 0
+            max_actions = int(args[2]) if len(args) > 2 else 0
             _repair_apply_cmd(
                 reg,
-                days=int(args[0]) if args else 14,
+                days=days,
                 limit=10,
                 apply=False,
                 data_dir=data_dir,
@@ -366,14 +377,19 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 backup_dir="",
                 snapshot_id="",
                 plan_file="",
+                min_priority_score=min_priority_score,
+                max_actions=max_actions,
                 approve_code="",
                 force=False,
             )
             continue
         if cmd == "repair-approve":
+            days = int(args[0]) if len(args) > 0 else 14
+            min_priority_score = int(args[1]) if len(args) > 1 else 0
+            max_actions = int(args[2]) if len(args) > 2 else 0
             _repair_approve_cmd(
                 reg,
-                days=int(args[0]) if args else 14,
+                days=days,
                 limit=10,
                 data_dir=data_dir,
                 out_dir="",
@@ -382,6 +398,8 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 backup_dir="",
                 snapshot_id="",
                 plan_file="",
+                min_priority_score=min_priority_score,
+                max_actions=max_actions,
                 approve_code="",
                 force=False,
             )
@@ -486,6 +504,8 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--backup-dir", default="")
     rapply.add_argument("--snapshot-id", default="")
     rapply.add_argument("--plan-file", default="")
+    rapply.add_argument("--min-priority-score", type=int, default=0)
+    rapply.add_argument("--max-actions", type=int, default=0)
     rapply.add_argument("--approve-code", default="")
     rapply.add_argument("--force", action="store_true")
 
@@ -498,6 +518,8 @@ def build_cli() -> argparse.ArgumentParser:
     rapprove.add_argument("--backup-dir", default="")
     rapprove.add_argument("--snapshot-id", default="")
     rapprove.add_argument("--plan-file", default="")
+    rapprove.add_argument("--min-priority-score", type=int, default=0)
+    rapprove.add_argument("--max-actions", type=int, default=0)
     rapprove.add_argument("--approve-code", default="")
     rapprove.add_argument("--force", action="store_true")
 
@@ -579,6 +601,8 @@ def main() -> int:
             backup_dir=str(args.backup_dir),
             snapshot_id=str(args.snapshot_id),
             plan_file=str(args.plan_file),
+            min_priority_score=int(args.min_priority_score),
+            max_actions=int(args.max_actions),
             approve_code=str(args.approve_code),
             force=bool(args.force),
         )
@@ -594,6 +618,8 @@ def main() -> int:
             backup_dir=str(args.backup_dir),
             snapshot_id=str(args.snapshot_id),
             plan_file=str(args.plan_file),
+            min_priority_score=int(args.min_priority_score),
+            max_actions=int(args.max_actions),
             approve_code=str(args.approve_code),
             force=bool(args.force),
         )

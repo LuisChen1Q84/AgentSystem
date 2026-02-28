@@ -90,6 +90,7 @@ class AgentDiagnosticsTest(unittest.TestCase):
                     [
                         json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "event": "approved", "ts": "2026-02-28 10:01:00"}, ensure_ascii=False),
                         json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "event": "applied", "ts": "2026-02-28 10:02:00"}, ensure_ascii=False),
+                        json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "event": "rolled_back", "ts": "2026-02-28 10:03:00", "actor": "repair-rollback"}, ensure_ascii=False),
                     ]
                 )
                 + "\n",
@@ -108,15 +109,20 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertEqual(report["object_coverage"]["run_object_count"], 1)
             self.assertEqual(report["risk_level_top"][0]["risk_level"], "low")
             self.assertIn("run_objects", report["sources"])
-            self.assertEqual(report["repair_governance"]["lifecycle"]["applied"], 1)
-            self.assertEqual(report["summary"]["repair_applied"], 1)
+            self.assertEqual(report["repair_governance"]["lifecycle"]["rolled_back"], 1)
+            self.assertEqual(report["summary"]["repair_applied"], 0)
             self.assertEqual(report["summary"]["repair_last_applied_at"], "2026-02-28 10:02:00")
+            self.assertEqual(report["summary"]["repair_last_rolled_back_at"], "2026-02-28 10:03:00")
             self.assertEqual(report["repair_governance"]["activity"]["last_applied"]["snapshot_id"], "repair_snapshot_20260228_100000")
+            self.assertEqual(report["repair_governance"]["activity"]["recent_events"][0]["event"], "rolled_back")
+            self.assertEqual(report["repair_governance"]["activity"]["recent_events"][0]["actor"], "repair-rollback")
 
             files = write_dashboard_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())
             self.assertTrue(Path(files["html"]).exists())
+            self.assertIn("Recent Governance Events", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("rolled_back", Path(files["html"]).read_text(encoding="utf-8"))
 
     def test_data_service_uses_app_facade(self):
         svc = DataService()

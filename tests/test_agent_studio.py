@@ -35,10 +35,14 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a43.backup_dir, "")
         self.assertEqual(a43.approve_code, "")
         self.assertEqual(a43.snapshot_id, "")
+        self.assertEqual(a43.min_priority_score, 0)
+        self.assertEqual(a43.max_actions, 0)
 
-        a431 = parser.parse_args(["repair-approve"])
+        a431 = parser.parse_args(["repair-approve", "--min-priority-score", "50", "--max-actions", "2"])
         self.assertEqual(a431.cmd, "repair-approve")
         self.assertEqual(a431.plan_file, "")
+        self.assertEqual(a431.min_priority_score, 50)
+        self.assertEqual(a431.max_actions, 2)
 
         a44 = parser.parse_args(["repair-list"])
         self.assertEqual(a44.cmd, "repair-list")
@@ -206,6 +210,8 @@ class AgentStudioTest(unittest.TestCase):
                     backup_dir=str(backup_dir),
                     snapshot_id="repair_snapshot_20260228_100000",
                     plan_file="",
+                    min_priority_score=0,
+                    max_actions=0,
                     approve_code="abc1234567",
                     force=False,
                 )
@@ -462,6 +468,8 @@ class AgentStudioTest(unittest.TestCase):
                     backup_dir="",
                     snapshot_id="",
                     plan_file="",
+                    min_priority_score=0,
+                    max_actions=0,
                     approve_code="",
                     force=False,
                 )
@@ -485,6 +493,8 @@ class AgentStudioTest(unittest.TestCase):
                     backup_dir="",
                     snapshot_id=snapshot_id,
                     plan_file="",
+                    min_priority_score=0,
+                    max_actions=0,
                     approve_code=approval_code,
                     force=False,
                 )
@@ -545,6 +555,8 @@ class AgentStudioTest(unittest.TestCase):
                     backup_dir="",
                     snapshot_id="",
                     plan_file="",
+                    min_priority_score=0,
+                    max_actions=0,
                     approve_code="",
                     force=False,
                 )
@@ -679,6 +691,8 @@ class AgentStudioTest(unittest.TestCase):
                     backup_dir=str(root / "backups"),
                     snapshot_id="",
                     plan_file="",
+                    min_priority_score=0,
+                    max_actions=0,
                     approve_code="",
                     force=False,
                 )
@@ -702,6 +716,8 @@ class AgentStudioTest(unittest.TestCase):
                     backup_dir=str(root / "backups"),
                     snapshot_id=snapshot_id,
                     plan_file="",
+                    min_priority_score=0,
+                    max_actions=0,
                     approve_code=approval_code,
                     force=False,
                 )

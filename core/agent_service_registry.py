@@ -165,6 +165,8 @@ class AgentServiceRegistry:
             backup_dir=str(kwargs.get("backup_dir", "")),
             snapshot_id=str(kwargs.get("snapshot_id", "")),
             plan_file=str(kwargs.get("plan_file", "")),
+            min_priority_score=max(0, int(kwargs.get("min_priority_score", 0))),
+            max_actions=max(0, int(kwargs.get("max_actions", 0))),
             approve_code=str(kwargs.get("approve_code", "")),
             force=bool(kwargs.get("force", False)),
         ).to_dict()
@@ -180,6 +182,8 @@ class AgentServiceRegistry:
             backup_dir=str(kwargs.get("backup_dir", "")),
             snapshot_id=str(kwargs.get("snapshot_id", "")),
             plan_file=str(kwargs.get("plan_file", "")),
+            min_priority_score=max(0, int(kwargs.get("min_priority_score", 0))),
+            max_actions=max(0, int(kwargs.get("max_actions", 0))),
             approve_code=str(kwargs.get("approve_code", "")),
             force=bool(kwargs.get("force", False)),
         ).to_dict()

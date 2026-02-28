@@ -47,6 +47,8 @@ class RepairApplyService:
         backup_dir: str = "",
         snapshot_id: str = "",
         plan_file: str = "",
+        min_priority_score: int = 0,
+        max_actions: int = 0,
         approve_code: str = "",
         force: bool = False,
     ):
@@ -70,6 +72,8 @@ class RepairApplyService:
                 profile_overrides_file=profile_path,
                 strategy_overrides_file=strategy_path,
                 backup_dir=actual_backup_dir,
+                min_priority_score=max(0, int(min_priority_score)),
+                max_actions=max(0, int(max_actions)),
             )
         files = write_repair_plan_files(plan, target_dir)
         approval_state = resolve_repair_approval(
@@ -117,6 +121,8 @@ class RepairApplyService:
                     "force": bool(force),
                     "snapshot_id": str(snapshot_id),
                     "plan_file": str(plan_file),
+                    "min_priority_score": max(0, int(min_priority_score)),
+                    "max_actions": max(0, int(max_actions)),
                 },
             )
         approval_receipt = approval_state.get("receipt", {}) if isinstance(approval_state.get("receipt", {}), dict) else {}
@@ -164,6 +170,8 @@ class RepairApplyService:
                 "force": bool(force),
                 "snapshot_id": str(snapshot_id),
                 "plan_file": str(plan_file),
+                "min_priority_score": max(0, int(min_priority_score)),
+                "max_actions": max(0, int(max_actions)),
             },
         )
 
@@ -184,6 +192,8 @@ class RepairApproveService:
         backup_dir: str = "",
         snapshot_id: str = "",
         plan_file: str = "",
+        min_priority_score: int = 0,
+        max_actions: int = 0,
         approve_code: str = "",
         force: bool = False,
     ):
@@ -203,6 +213,8 @@ class RepairApproveService:
                 profile_overrides_file=profile_path,
                 strategy_overrides_file=strategy_path,
                 backup_dir=actual_backup_dir,
+                min_priority_score=max(0, int(min_priority_score)),
+                max_actions=max(0, int(max_actions)),
             )
             plan_source = "generated"
         files = write_repair_plan_files(plan, target_dir)
@@ -250,6 +262,8 @@ class RepairApproveService:
                     "snapshot_id": str(snapshot_id),
                     "plan_file": str(plan_file),
                     "force": bool(force),
+                    "min_priority_score": max(0, int(min_priority_score)),
+                    "max_actions": max(0, int(max_actions)),
                 },
             )
         payload = annotate_payload(
@@ -284,6 +298,8 @@ class RepairApproveService:
                 "snapshot_id": str(snapshot_id),
                 "plan_file": str(plan_file),
                 "force": bool(force),
+                "min_priority_score": max(0, int(min_priority_score)),
+                "max_actions": max(0, int(max_actions)),
             },
         )
 
