@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from core.agent_service_registry import AgentServiceRegistry
 from scripts import agent_studio
@@ -36,6 +37,12 @@ class AgentStudioTest(unittest.TestCase):
         a4r = parser.parse_args(["research-report", "--text", "做支付SaaS市场规模研究"])
         self.assertEqual(a4r.cmd, "research-report")
         self.assertEqual(a4r.text, "做支付SaaS市场规模研究")
+
+        a4rd = parser.parse_args(["research-deck", "--text", "做支付SaaS竞争拆解deck"])
+        self.assertEqual(a4rd.cmd, "research-deck")
+
+        a4rl = parser.parse_args(["research-lookup", "--text", "Microsoft strategy"])
+        self.assertEqual(a4rl.cmd, "research-lookup")
 
         a41 = parser.parse_args(["governance", "--limit", "12"])
         self.assertEqual(a41.cmd, "governance")
@@ -243,6 +250,46 @@ class AgentStudioTest(unittest.TestCase):
             self.assertEqual(payload.get("playbook"), "market_sizing")
             self.assertIn("ppt_bridge", payload)
             self.assertIn("delivery_bundle", payload)
+
+    def test_research_deck_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._research_deck_cmd(
+                    reg,
+                    text="请做支付SaaS竞争拆解并输出管理层deck",
+                    params_json=json.dumps(
+                        {
+                            "playbook": "competitor_teardown",
+                            "company": "我方公司",
+                            "competitors": ["对手A", "对手B", "对手C"],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    data_dir=str(root / "agent_os"),
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertEqual(payload.get("mode"), "research-deck-generated")
+            self.assertIn("pptx_path", payload)
+
+    def test_research_lookup_cmd(self):
+        reg = AgentServiceRegistry(root=Path(tempfile.mkdtemp()))
+        buf = io.StringIO()
+        with patch("apps.research_hub.app.lookup_sources", return_value={"query": "OpenAlex market structure", "connectors": ["openalex"], "items": [{"title": "Paper A"}], "errors": []}):
+            with redirect_stdout(buf):
+                code = agent_studio._research_lookup_cmd(
+                    reg,
+                    text="OpenAlex market structure",
+                    params_json='{"source_connectors":["openalex"]}',
+                )
+        self.assertEqual(code, 0)
+        payload = json.loads(buf.getvalue())
+        self.assertTrue(payload.get("ok", False))
+        self.assertEqual(payload.get("mode"), "research-source-lookup")
 
     def test_repair_compare_cmd(self):
         with tempfile.TemporaryDirectory() as td:

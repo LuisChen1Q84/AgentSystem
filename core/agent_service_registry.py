@@ -99,6 +99,8 @@ class AgentServiceRegistry:
             "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
             "image.generate": ServiceSpec("image.generate", "creative", "Generate image assets through image hub", "medium"),
             "market.report": ServiceSpec("market.report", "domain", "Generate stock market strategy report", "high"),
+            "research.deck": ServiceSpec("research.deck", "domain", "Generate research report plus executive deck in one run", "medium"),
+            "research.lookup": ServiceSpec("research.lookup", "domain", "Lookup official research sources from OpenAlex and SEC", "medium"),
             "research.report": ServiceSpec("research.report", "domain", "Generate evidence-led research report with citations and PPT bridge", "medium"),
             "data.query": ServiceSpec("data.query", "data", "Query DataHub metrics from private store", "medium"),
         }
@@ -376,6 +378,20 @@ class AgentServiceRegistry:
         if not text:
             return error_response("research.report", "missing_text", code="missing_text").to_dict()
         return self.research.run(text, params).to_dict()
+
+    def _exec_research_deck(self, **kwargs: Any) -> Dict[str, Any]:
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        text = str(kwargs.get("text", "") or params.get("research_question", "")).strip()
+        if not text:
+            return error_response("research.deck", "missing_text", code="missing_text").to_dict()
+        return self.research.deck(text, params).to_dict()
+
+    def _exec_research_lookup(self, **kwargs: Any) -> Dict[str, Any]:
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        text = str(kwargs.get("text", "") or params.get("query", "")).strip()
+        if not text:
+            return error_response("research.lookup", "missing_text", code="missing_text").to_dict()
+        return self.research.lookup(text, params).to_dict()
 
     def _exec_data_query(self, **kwargs: Any) -> Dict[str, Any]:
         params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}

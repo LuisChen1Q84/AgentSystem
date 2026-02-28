@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from core.agent_service_registry import AgentServiceRegistry
 
@@ -36,6 +37,8 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("ppt.generate", names)
         self.assertIn("image.generate", names)
         self.assertIn("market.report", names)
+        self.assertIn("research.deck", names)
+        self.assertIn("research.lookup", names)
         self.assertIn("research.report", names)
         self.assertIn("data.query", names)
 
@@ -252,6 +255,33 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("ppt_bridge", out)
             self.assertIn("service_diagnostics", out)
             self.assertIn("delivery_bundle", out)
+
+    def test_execute_research_deck_and_lookup(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            with patch("apps.research_hub.app.lookup_sources", return_value={"query": "Microsoft strategy", "connectors": ["openalex"], "items": [{"title": "Paper A"}], "errors": []}):
+                lookup = reg.execute(
+                    "research.lookup",
+                    text="Microsoft strategy",
+                    params={"company": "Microsoft", "ticker": "MSFT", "source_connectors": ["openalex"]},
+                )
+            self.assertTrue(lookup.get("ok", False))
+            self.assertIn("service_diagnostics", lookup)
+
+            deck = reg.execute(
+                "research.deck",
+                text="请做支付SaaS竞争拆解并输出管理层deck",
+                params={
+                    "playbook": "competitor_teardown",
+                    "company": "我方公司",
+                    "competitors": ["对手A", "对手B", "对手C"],
+                    "out_dir": str(root / "research_out"),
+                },
+            )
+            self.assertTrue(deck.get("ok", False))
+            self.assertEqual(deck.get("mode"), "research-deck-generated")
+            self.assertIn("pptx_path", deck)
 
     def test_feedback_services(self):
         with tempfile.TemporaryDirectory() as td:

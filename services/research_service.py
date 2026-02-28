@@ -31,3 +31,19 @@ class ResearchService:
             payload=annotate_payload("research.report", payload, entrypoint="apps.research_hub"),
             meta={"entrypoint": "apps.research_hub"},
         )
+
+    def deck(self, text: str, params: Dict[str, Any]) -> ServiceEnvelope:
+        payload = self.app.run_deck(text, params)
+        return ok_response(
+            "research.deck",
+            payload=annotate_payload("research.deck", payload, entrypoint="apps.research_hub"),
+            meta={"entrypoint": "apps.research_hub"},
+        )
+
+    def lookup(self, text: str, params: Dict[str, Any]) -> ServiceEnvelope:
+        payload = self.app.lookup(text, params)
+        return ok_response(
+            "research.lookup",
+            payload=annotate_payload("research.lookup", payload, entrypoint="apps.research_hub"),
+            meta={"entrypoint": "apps.research_hub"},
+        )

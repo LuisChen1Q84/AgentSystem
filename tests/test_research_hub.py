@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.research_hub import run_request
+from scripts.research_hub import run_deck_request, run_request
 
 
 class ResearchHubTest(unittest.TestCase):
@@ -49,6 +49,46 @@ class ResearchHubTest(unittest.TestCase):
         self.assertTrue(out.get("ok", False))
         self.assertEqual(out.get("playbook"), "competitor_teardown")
         self.assertIn("dimensions", out.get("analysis_objects", {}))
+
+    def test_report_can_lookup_sources_and_merge_evidence(self):
+        from scripts import research_hub
+
+        original = research_hub.lookup_sources
+        research_hub.lookup_sources = lambda query, params: {
+            "query": query,
+            "connectors": ["openalex"],
+            "items": [{"id": "OA1", "connector": "openalex", "title": "Paper A", "type": "paper", "url": "https://openalex.org/W1"}],
+            "errors": [],
+        }
+        try:
+            out = run_request(
+                "请做支付SaaS市场规模研究",
+                {"playbook": "market_sizing", "lookup": True},
+                out_dir=Path(tempfile.mkdtemp()),
+            )
+        finally:
+            research_hub.lookup_sources = original
+        self.assertTrue(out.get("ok", False))
+        self.assertEqual(out.get("retrieved_sources", {}).get("connectors"), ["openalex"])
+        self.assertTrue(any(item.get("title") == "Paper A" for item in out.get("evidence_ledger", [])))
+
+    def test_run_deck_request_generates_report_and_deck(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = run_deck_request(
+                "请做支付SaaS竞争拆解并输出管理层deck",
+                {
+                    "playbook": "competitor_teardown",
+                    "company": "我方公司",
+                    "competitors": ["对手A", "对手B", "对手C"],
+                },
+                out_dir=Path(td),
+            )
+            self.assertTrue(out.get("ok", False))
+            self.assertEqual(out.get("mode"), "research-deck-generated")
+            self.assertIn("report", out)
+            self.assertIn("deck", out)
+            self.assertTrue(Path(out["pptx_path"]).exists())
+            self.assertIn("research_payload", out.get("deck_seed", {}))
 
 
 if __name__ == "__main__":

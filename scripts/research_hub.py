@@ -20,7 +20,9 @@ if str(ROOT) not in sys.path:
 
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
+from scripts.mckinsey_ppt_engine import run_request as run_ppt_request
 from scripts.research_hub_html_renderer import render_research_html
+from scripts.research_source_adapters import lookup_sources
 
 PLAYBOOKS_PATH = ROOT / "config" / "research_playbooks.json"
 METHODS_PATH = ROOT / "references" / "research_hub" / "methods.md"
@@ -180,6 +182,45 @@ def _evidence_ledger(req: Dict[str, Any], plan: List[Dict[str, Any]], lang: str)
         }
         for idx, item in enumerate(plan)
     ]
+
+
+def _merge_retrieved_sources(
+    evidence: List[Dict[str, Any]],
+    plan: List[Dict[str, Any]],
+    retrieved: Dict[str, Any],
+    lang: str,
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    rows = retrieved.get("items", []) if isinstance(retrieved.get("items", []), list) else []
+    if not rows:
+        return evidence, plan
+    next_idx = len(evidence) + 1
+    for item in rows:
+        title = str(item.get("title", "")).strip()
+        if not title:
+            continue
+        url = str(item.get("url", "")).strip()
+        if any(title == str(existing.get("title", "")).strip() and url == str(existing.get("url", "")).strip() for existing in evidence):
+            continue
+        evidence.append(
+            {
+                "id": str(item.get("id", f"S{next_idx}")).strip() or f"S{next_idx}",
+                "title": title,
+                "type": str(item.get("type", item.get("connector", "external"))).strip(),
+                "url": url,
+                "relevance": "medium",
+                "note": str(item.get("abstract", item.get("form", ""))).strip() or ("检索适配器返回，仍需核验原文" if lang == "zh" else "Returned by source adapter; validate original document"),
+            }
+        )
+        plan.append(
+            {
+                "name": title,
+                "type": str(item.get("connector", item.get("type", "external"))).strip(),
+                "purpose": "retrieved_evidence",
+                "priority": "medium",
+            }
+        )
+        next_idx += 1
+    return evidence, plan
 
 
 def _assumption_register(req: Dict[str, Any], playbook: str, lang: str) -> List[Dict[str, Any]]:
@@ -528,6 +569,99 @@ def _ppt_bridge(req: Dict[str, Any], playbook: str, sections: List[Dict[str, Any
     }
 
 
+def _deck_seed(payload: Dict[str, Any]) -> Dict[str, Any]:
+    req = payload.get("request", {}) if isinstance(payload.get("request", {}), dict) else {}
+    analysis = payload.get("analysis_objects", {}) if isinstance(payload.get("analysis_objects", {}), dict) else {}
+    claims = payload.get("claim_cards", []) if isinstance(payload.get("claim_cards", []), list) else []
+    assumptions = payload.get("assumption_register", []) if isinstance(payload.get("assumption_register", []), list) else []
+    review = payload.get("peer_review_findings", []) if isinstance(payload.get("peer_review_findings", []), list) else []
+    ppt_bridge = payload.get("ppt_bridge", {}) if isinstance(payload.get("ppt_bridge", {}), dict) else {}
+
+    metric_values: List[Dict[str, Any]] = []
+    tam = analysis.get("tam_sam_som", {}) if isinstance(analysis.get("tam_sam_som", {}), dict) else {}
+    for label in ("tam", "sam", "som"):
+        if str(tam.get(label, "")).strip():
+            metric_values.append({"label": label.upper(), "value": str(tam.get(label, "")).strip(), "context": "Market sizing"})
+
+    options = []
+    for item in claims[:3]:
+        options.append(
+            {
+                "name": str(item.get("claim", "")).strip()[:36],
+                "value": str(item.get("implication", "")).strip() or "Strategic implication",
+                "effort": "中等投入",
+                "risk": "需补证据" if any(str(x.get("risk", "")).strip().lower() == "high" for x in assumptions) else "可控风险",
+            }
+        )
+
+    benchmarks = []
+    for idx, section in enumerate(payload.get("report_sections", []) if isinstance(payload.get("report_sections", []), list) else []):
+        if idx >= 3:
+            break
+        benchmarks.append(
+            {
+                "capability": str(section.get("title", f"Section {idx + 1}")).strip(),
+                "current": "Current view",
+                "target": "Board-ready answer",
+                "gap": str(section.get("body", "")).strip()[:42],
+            }
+        )
+
+    roadmap = []
+    for idx, item in enumerate(review[:3], start=1):
+        roadmap.append(
+            {
+                "wave": f"Wave {idx}",
+                "timing": "0-30天" if idx == 1 else ("31-90天" if idx == 2 else "90天+"),
+                "focus": str(item.get("action", "")).strip(),
+                "owner": "Research owner",
+            }
+        )
+
+    risks = []
+    for item in assumptions[:3]:
+        risks.append(
+            {
+                "risk": str(item.get("name", "")).strip(),
+                "indicator": str(item.get("value", "")).strip(),
+                "mitigation": "补一手来源并做敏感性分析",
+                "owner": "Research lead",
+            }
+        )
+
+    decision_items = [
+        {
+            "ask": str(req.get("decision", "")).strip() or "Approve strategic direction",
+            "impact": "Move from analysis to decision",
+            "timing": "本周",
+        }
+    ]
+
+    return {
+        "topic": str(ppt_bridge.get("deck_title", req.get("title", "Research Readout"))).strip(),
+        "audience": str(req.get("audience", "管理层")).strip(),
+        "objective": str(req.get("objective", "支持战略决策")).strip(),
+        "page_count": int((ppt_bridge.get("ppt_params", {}) if isinstance(ppt_bridge.get("ppt_params", {}), dict) else {}).get("page_count", 6) or 6),
+        "theme": str(ppt_bridge.get("recommended_theme", "boardroom-signal")).strip(),
+        "decision_ask": str(req.get("decision", "")).strip(),
+        "industry": str(req.get("industry", "")).strip(),
+        "metric_values": metric_values,
+        "benchmarks": benchmarks,
+        "options": options,
+        "roadmap": roadmap,
+        "risks": risks,
+        "decision_items": decision_items,
+        "must_include": [str(item.get("title", "")).strip() for item in (payload.get("report_sections", []) if isinstance(payload.get("report_sections", []), list) else [])[:4]],
+        "research_payload": {
+            "playbook": payload.get("playbook", ""),
+            "claim_cards": claims,
+            "citation_block": payload.get("citation_block", []),
+            "peer_review_findings": review,
+            "assumption_register": assumptions,
+        },
+    }
+
+
 def _markdown_report(payload: Dict[str, Any]) -> str:
     req = payload["request"]
     lines = [
@@ -572,6 +706,10 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     req = _extract_request(text, values, lang, playbook)
     plan = _source_plan(req, playbook_meta if isinstance(playbook_meta, dict) else {}, lang)
     evidence = _evidence_ledger(req, plan, lang)
+    retrieved_sources = {"query": req["research_question"], "connectors": [], "items": [], "errors": []}
+    if bool(values.get("lookup", False)) or bool(values.get("fetch_sources", False)):
+        retrieved_sources = lookup_sources(req["research_question"], values)
+        evidence, plan = _merge_retrieved_sources(evidence, plan, retrieved_sources, lang)
     assumptions = _assumption_register(req, playbook, lang)
     body = _report_body(playbook, req, lang)
     sections = body["sections"]
@@ -612,6 +750,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "summary": f"Research Hub built an evidence-led {playbook} report for {req['title']}.",
         "request": req,
         "source_plan": plan,
+        "retrieved_sources": retrieved_sources,
         "evidence_ledger": evidence,
         "assumption_register": assumptions,
         "report_sections": sections,
@@ -642,6 +781,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "playbook": playbook,
         "request": req,
         "source_plan": plan,
+        "retrieved_sources": retrieved_sources,
         "evidence_ledger": evidence,
         "assumption_register": assumptions,
         "report_sections": sections,
@@ -670,11 +810,55 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     return result
 
 
+def run_deck_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) -> Dict[str, Any]:
+    out_root = out_dir or (ROOT / "日志" / "research_hub")
+    report_out_dir = out_root / "report"
+    deck_out_dir = out_root / "deck"
+    report = run_request(text, values, out_dir=report_out_dir)
+    deck_params = _deck_seed(report)
+    if isinstance(values.get("ppt_params", {}), dict):
+        deck_params.update(values.get("ppt_params", {}))
+    deck = run_ppt_request(str(deck_params.get("topic", text)).strip() or text, deck_params, out_dir=deck_out_dir)
+    summary = f"Research deck ready for {report.get('request', {}).get('title', text)} with linked report and executive deck."
+    result: Dict[str, Any] = {
+        "ok": bool(report.get("ok", False) and deck.get("ok", False)),
+        "mode": "research-deck-generated",
+        "summary": summary,
+        "playbook": report.get("playbook", ""),
+        "report": report,
+        "deck": deck,
+        "deck_seed": deck_params,
+        "ppt_bridge": report.get("ppt_bridge", {}),
+        "json_path": report.get("json_path", ""),
+        "md_path": report.get("md_path", ""),
+        "html_path": report.get("html_path", ""),
+        "ppt_json_path": deck.get("json_path", ""),
+        "ppt_html_path": deck.get("html_path", ""),
+        "pptx_path": deck.get("pptx_path", ""),
+        "deliver_assets": {
+            "items": list(report.get("deliver_assets", {}).get("items", [])) + list(deck.get("deliver_assets", {}).get("items", []))
+        },
+        "loop_closure": build_loop_closure(
+            skill="research-hub",
+            status="completed" if bool(report.get("ok", False) and deck.get("ok", False)) else "failed",
+            evidence={"playbook": report.get("playbook", ""), "report_assets": len(report.get("deliver_assets", {}).get("items", [])), "deck_assets": len(deck.get("deliver_assets", {}).get("items", []))},
+            next_actions=[
+                "Review the research report for evidence completeness.",
+                "Review the PPT HTML preview before opening the native PPTX.",
+                "Backfill any assumptions still marked high risk.",
+            ],
+        ),
+    }
+    result.update(build_output_objects("research.deck", result, entrypoint="scripts.research_hub"))
+    return result
+
+
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Research Hub")
     parser.add_argument("--text", required=True)
     parser.add_argument("--params-json", default="{}")
     parser.add_argument("--out-dir", default="")
+    parser.add_argument("--mode", choices=["report", "deck"], default="report")
     return parser
 
 
@@ -689,7 +873,7 @@ def main() -> int:
         return 1
 
     out_dir = Path(args.out_dir) if args.out_dir else None
-    out = run_request(args.text, values, out_dir)
+    out = run_deck_request(args.text, values, out_dir) if args.mode == "deck" else run_request(args.text, values, out_dir)
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
 

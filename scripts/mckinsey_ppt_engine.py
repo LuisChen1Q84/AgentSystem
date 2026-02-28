@@ -126,6 +126,10 @@ def _cheap_root_causes(lang: str) -> List[str]:
 
 
 def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, Any]:
+    research_payload = values.get("research_payload", {}) if isinstance(values.get("research_payload", {}), dict) else {}
+    research_claims = research_payload.get("claim_cards", []) if isinstance(research_payload.get("claim_cards", []), list) else []
+    research_review = research_payload.get("peer_review_findings", []) if isinstance(research_payload.get("peer_review_findings", []), list) else []
+    research_assumptions = research_payload.get("assumption_register", []) if isinstance(research_payload.get("assumption_register", []), list) else []
     topic = str(values.get("topic") or text or "Business strategy").strip()
     default_audience = "管理层" if lang == "zh" else "Management"
     default_objective = "支持管理层决策" if lang == "zh" else "Support decision making"
@@ -167,6 +171,9 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "roadmap": _as_dict_list(values.get("roadmap")),
         "risks": _as_dict_list(values.get("risks")),
         "decision_items": _as_dict_list(values.get("decision_items")),
+        "research_claims": research_claims,
+        "research_review": research_review,
+        "research_assumptions": research_assumptions,
     }
 
 
@@ -208,6 +215,18 @@ def _benchmark_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List
             }
             for idx, item in enumerate(rows[:3])
         ]
+    research_claims = req.get("research_claims", []) if isinstance(req.get("research_claims", []), list) else []
+    if research_claims:
+        return [
+            {
+                "capability": f"Claim {idx + 1}",
+                "current": str(item.get("claim", "")).strip()[:32],
+                "target": str(item.get("implication", "")).strip()[:32] or ("Decision answer" if lang == "en" else "决策答案"),
+                "gap": "Need proof density" if lang == "en" else "需补证据密度",
+                "gap_score": 54 - idx * 6,
+            }
+            for idx, item in enumerate(research_claims[:3])
+        ]
     defaults = evidence[:3] or (["能力 A", "能力 B", "能力 C"] if lang == "zh" else ["Capability A", "Capability B", "Capability C"])
     return [
         {
@@ -235,6 +254,20 @@ def _option_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Di
                 "risk_score": _clamp_pct(_numeric_token(item.get("risk", "")), default=38.0),
             }
             for idx, item in enumerate(rows[:3])
+        ]
+    research_claims = req.get("research_claims", []) if isinstance(req.get("research_claims", []), list) else []
+    if research_claims:
+        return [
+            {
+                "name": str(item.get("claim", f"Option {idx + 1}")).strip()[:32],
+                "value": str(item.get("implication", "")).strip() or ("Strategic move" if lang == "en" else "战略动作"),
+                "effort": "中等投入" if lang == "zh" else "Medium effort",
+                "risk": "需补一手来源" if lang == "zh" else "Backfill primary sources",
+                "value_score": 74 - idx * 8,
+                "effort_score": 52 + idx * 8,
+                "risk_score": 36 + idx * 10,
+            }
+            for idx, item in enumerate(research_claims[:3])
         ]
     defaults = ["方案 A", "方案 B", "方案 C"] if lang == "zh" else ["Option A", "Option B", "Option C"]
     return [
@@ -294,6 +327,18 @@ def _roadmap_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[D
             }
             for idx, item in enumerate(rows[:3])
         ]
+    research_review = req.get("research_review", []) if isinstance(req.get("research_review", []), list) else []
+    if research_review:
+        return [
+            {
+                "wave": f"Wave {idx + 1}",
+                "timing": "0-30天" if idx == 0 else ("31-90天" if idx == 1 else "90天+"),
+                "focus": str(item.get("action", "")).strip() or ("Resolve review finding" if lang == "en" else "解决审稿问题"),
+                "owner": "Research owner",
+                "progress_score": 24 + idx * 28,
+            }
+            for idx, item in enumerate(research_review[:3])
+        ]
     timings = ["0-30 天", "31-90 天", "季度扩展"] if lang == "zh" else ["0-30 days", "31-90 days", "Quarter scale"]
     return [
         {
@@ -319,6 +364,18 @@ def _risk_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict
                 "severity_score": _clamp_pct(_numeric_token(item.get("indicator", item.get("signal", ""))), default=62.0),
             }
             for idx, item in enumerate(rows[:3])
+        ]
+    research_assumptions = req.get("research_assumptions", []) if isinstance(req.get("research_assumptions", []), list) else []
+    if research_assumptions:
+        return [
+            {
+                "risk": str(item.get("name", f"Risk {idx + 1}")).strip(),
+                "indicator": str(item.get("value", "")).strip(),
+                "mitigation": "补一手来源并做敏感性分析" if lang == "zh" else "Backfill primary sources and add sensitivity analysis",
+                "owner": "Research lead",
+                "severity_score": 72 if str(item.get("risk", "")).strip().lower() == "high" else 52,
+            }
+            for idx, item in enumerate(research_assumptions[:3])
         ]
     return [
         {
