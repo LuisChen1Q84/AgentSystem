@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Set
 from core.kernel.failure_review import build_failure_review
 from core.kernel.memory_store import load_memory
 from core.kernel.policy_tuner import tune_policy
+from core.kernel.preset_drift import build_preset_drift_report
+from core.kernel.repair_presets import default_selector_effectiveness_file, default_selector_lifecycle_file
 
 ROOT = Path(__file__).resolve().parents[2]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
@@ -103,6 +105,11 @@ def _default_selector_presets_file() -> Path:
     return ROOT / "config/agent_repair_selector_presets.json"
 
 
+def _selector_companion_file(presets_file: Path, filename: str, fallback: Path) -> Path:
+    local_candidate = presets_file.parent / filename
+    return local_candidate if local_candidate.exists() else fallback
+
+
 def _load_selector_presets(path: Path) -> Dict[str, Dict[str, List[str]]]:
     raw = _load_json(path, {})
     presets: Dict[str, Dict[str, List[str]]] = {}
@@ -150,12 +157,137 @@ def _resolve_selector(
     }
 
 
+def _trim_failure_report(report: Dict[str, Any], limit: int) -> Dict[str, Any]:
+    capped = max(0, int(limit))
+    if capped <= 0:
+        return dict(report)
+    out = dict(report)
+    actions = [item for item in out.get("repair_actions", []) if isinstance(item, dict)]
+    skipped = [item for item in out.get("skipped_repair_actions", []) if isinstance(item, dict)]
+    out["repair_actions"] = actions[:capped]
+    out["skipped_repair_actions"] = actions[capped:] + skipped
+    selection = dict(out.get("selection", {})) if isinstance(out.get("selection", {}), dict) else {}
+    selection["selected_action_count"] = len(out["repair_actions"])
+    selection["skipped_action_count"] = len(out["skipped_repair_actions"])
+    out["selection"] = selection
+    return out
+
+
+def _rollout_plan(
+    *,
+    failure_report: Dict[str, Any],
+    drift_report: Dict[str, Any],
+    selector_preset: str,
+    rollout_mode: str,
+    canary_max_actions: int,
+) -> Dict[str, Any]:
+    requested = str(rollout_mode or "auto").strip().lower() or "auto"
+    if requested not in {"auto", "canary", "full"}:
+        requested = "auto"
+    action_count = len([item for item in failure_report.get("repair_actions", []) if isinstance(item, dict)])
+    preset_alert = {}
+    for row in drift_report.get("alerts", []) if isinstance(drift_report.get("alerts", []), list) else []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("preset_name", "")).strip() == str(selector_preset).strip():
+            preset_alert = row
+            break
+    high_drift = str(preset_alert.get("severity", "")).strip() in {"high", "critical"}
+    recommended = "full"
+    reasons: List[str] = []
+    if action_count > 1:
+        recommended = "canary"
+        reasons.append("multiple_repair_actions")
+    if high_drift:
+        recommended = "canary"
+        reasons.append(f"preset_drift:{preset_alert.get('severity', '')}")
+    if int(drift_report.get("summary", {}).get("critical_alerts", 0) or 0) > 0 and action_count > 0:
+        recommended = "canary"
+        reasons.append("critical_drift_in_window")
+    effective = recommended if requested == "auto" else requested
+    return {
+        "requested_mode": requested,
+        "recommended_mode": recommended,
+        "effective_mode": effective,
+        "canary_max_actions": max(1, int(canary_max_actions)),
+        "reasons": reasons,
+        "selected_action_count_before_rollout": action_count,
+    }
+
+
+def _selected_preset_inventory_item(drift_report: Dict[str, Any], preset_name: str) -> Dict[str, Any]:
+    inventory = drift_report.get("inventory", {}) if isinstance(drift_report.get("inventory", {}), dict) else {}
+    for item in inventory.get("items", []) if isinstance(inventory.get("items", []), list) else []:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("preset_name", "")).strip() == str(preset_name).strip():
+            return item
+    return {}
+
+
+def _safety_gate(
+    *,
+    drift_report: Dict[str, Any],
+    preset_item: Dict[str, Any],
+    rollout: Dict[str, Any],
+    disable_safety_gate: bool,
+) -> Dict[str, Any]:
+    if disable_safety_gate:
+        return {"enabled": False, "blocked": False, "reasons": [], "recommended_action": "disabled"}
+    reasons: List[str] = []
+    lifecycle = preset_item.get("lifecycle", {}) if isinstance(preset_item.get("lifecycle", {}), dict) else {}
+    lifecycle_status = str(lifecycle.get("status", "active")).strip() or "active"
+    if lifecycle_status in {"retired", "archived"}:
+        reasons.append(f"preset_lifecycle_{lifecycle_status}")
+    if lifecycle_status == "degraded" and str(rollout.get("effective_mode", "")).strip() == "full":
+        reasons.append("degraded_preset_requires_canary")
+    for row in drift_report.get("alerts", []) if isinstance(drift_report.get("alerts", []), list) else []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("preset_name", "")).strip() != str(preset_item.get("preset_name", "")).strip():
+            continue
+        if str(row.get("severity", "")).strip() == "critical":
+            reasons.append("critical_preset_drift")
+        break
+    blocked = bool(reasons)
+    return {
+        "enabled": True,
+        "blocked": blocked,
+        "reasons": reasons,
+        "recommended_action": "force_or_change_rollout" if blocked else "proceed",
+    }
+
+
+def _rollback_recommendation(
+    *,
+    snapshot_id: str,
+    preset_item: Dict[str, Any],
+    rollout: Dict[str, Any],
+    failure_report: Dict[str, Any],
+) -> Dict[str, Any]:
+    lifecycle = preset_item.get("lifecycle", {}) if isinstance(preset_item.get("lifecycle", {}), dict) else {}
+    lifecycle_status = str(lifecycle.get("status", "active")).strip() or "active"
+    reasons: List[str] = []
+    if lifecycle_status == "degraded" and str(rollout.get("effective_mode", "")).strip() == "full":
+        reasons.append("full rollout on degraded preset")
+    if len([item for item in failure_report.get("repair_actions", []) if isinstance(item, dict)]) >= 3:
+        reasons.append("high repair action volume")
+    recommended = bool(reasons)
+    return {
+        "recommended": recommended,
+        "reasons": reasons,
+        "command": f"python3 scripts/agent_studio.py repair-rollback --snapshot-id {snapshot_id}" if recommended and snapshot_id else "",
+    }
+
+
 def _resolve_auto_selector_preset(
     *,
     data_dir: Path,
     failure_report: Dict[str, Any],
     selector_preset: str,
     selector_presets_file: Path | None,
+    selector_effectiveness_file: Path | None = None,
+    selector_lifecycle_file: Path | None = None,
     min_effectiveness_score: int = 0,
     only_if_effective: bool = False,
     avoid_rolled_back: bool = False,
@@ -191,6 +323,8 @@ def _resolve_auto_selector_preset(
         data_dir=data_dir,
         failure_report=failure_report,
         presets_file=selector_presets_file,
+        effectiveness_file=selector_effectiveness_file,
+        lifecycle_file=selector_lifecycle_file,
         min_effectiveness_score=max(0, int(min_effectiveness_score)),
         only_if_effective=bool(only_if_effective),
         avoid_rolled_back=bool(avoid_rolled_back),
@@ -616,6 +750,9 @@ def build_repair_apply_plan(
     min_effectiveness_score: int = 0,
     only_if_effective: bool = False,
     avoid_rolled_back: bool = False,
+    rollout_mode: str = "auto",
+    canary_max_actions: int = 1,
+    disable_safety_gate: bool = False,
     scopes: List[str] | None = None,
     strategies: List[str] | None = None,
     task_kinds: List[str] | None = None,
@@ -627,14 +764,20 @@ def build_repair_apply_plan(
     snapshot_id = _snapshot_id(ts)
     runs = _load_jsonl(data_dir / "agent_runs.jsonl")
     evals = _load_jsonl(data_dir / "agent_evaluations.jsonl")
+    feedback_rows = _load_jsonl(data_dir / "feedback.jsonl")
     memory = load_memory(data_dir / "memory.json")
+    actual_selector_presets_file = Path(selector_presets_file) if selector_presets_file else _default_selector_presets_file()
+    actual_effectiveness_file = _selector_companion_file(actual_selector_presets_file, "selector_effectiveness.json", default_selector_effectiveness_file())
+    actual_lifecycle_file = _selector_companion_file(actual_selector_presets_file, "selector_lifecycle.json", default_selector_lifecycle_file())
 
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
     auto_selector = _resolve_auto_selector_preset(
         data_dir=data_dir,
         failure_report=failure_report,
         selector_preset=selector_preset,
-        selector_presets_file=selector_presets_file,
+        selector_presets_file=actual_selector_presets_file,
+        selector_effectiveness_file=actual_effectiveness_file,
+        selector_lifecycle_file=actual_lifecycle_file,
         min_effectiveness_score=max(0, int(min_effectiveness_score)),
         only_if_effective=bool(only_if_effective),
         avoid_rolled_back=bool(avoid_rolled_back),
@@ -646,7 +789,7 @@ def build_repair_apply_plan(
     )
     selector, selector_meta = _resolve_selector(
         selector_preset=resolved_preset_name,
-        selector_presets_file=selector_presets_file,
+        selector_presets_file=actual_selector_presets_file,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -665,12 +808,42 @@ def build_repair_apply_plan(
         if selective_mode
         else dict(failure_report)
     )
+    drift_report = build_preset_drift_report(
+        data_dir=data_dir,
+        presets_file=actual_selector_presets_file,
+        effectiveness_file=actual_effectiveness_file,
+        lifecycle_file=actual_lifecycle_file,
+    )
+    rollout = _rollout_plan(
+        failure_report=filtered_failure_report,
+        drift_report=drift_report,
+        selector_preset=str(selector_meta.get("preset", "")),
+        rollout_mode=str(rollout_mode),
+        canary_max_actions=max(1, int(canary_max_actions)),
+    )
+    if str(rollout.get("effective_mode", "")).strip() == "canary":
+        filtered_failure_report = _trim_failure_report(filtered_failure_report, int(rollout.get("canary_max_actions", 1) or 1))
     selected_scopes = {
         str(item.get("scope", "")).strip()
         for item in filtered_failure_report.get("repair_actions", [])
         if isinstance(item, dict) and str(item.get("scope", "")).strip()
     }
-    policy_report = tune_policy(run_rows=runs, evaluation_rows=evals, memory=memory, days=max(1, int(days)))
+    selected_preset_item = _selected_preset_inventory_item(drift_report, str(selector_meta.get("preset", "")))
+    safety_gate = _safety_gate(
+        drift_report=drift_report,
+        preset_item=selected_preset_item,
+        rollout=rollout,
+        disable_safety_gate=bool(disable_safety_gate),
+    )
+    policy_report = tune_policy(
+        run_rows=runs,
+        evaluation_rows=evals,
+        feedback_rows=feedback_rows,
+        memory=memory,
+        preset_inventory=drift_report.get("inventory", {}).get("items", []),
+        drift_report=drift_report,
+        days=max(1, int(days)),
+    )
 
     current_profile = _load_json(profile_overrides_file, {"updated_at": "", "default_profile": "", "task_kind_profiles": {}})
     current_strategy = _load_json(strategy_overrides_file, {"updated_at": "", "global_blocked_strategies": [], "profile_blocked_strategies": {}})
@@ -717,9 +890,14 @@ def build_repair_apply_plan(
             "repair_actions": len(filtered_failure_report.get("repair_actions", [])),
             "repair_actions_total": len(failure_report.get("repair_actions", [])),
             "strict_block_candidates": len(policy_report.get("strict_block_candidates", [])),
+            "critical_drift_alerts": int(drift_report.get("summary", {}).get("critical_alerts", 0) or 0),
         },
         "failure_review": filtered_failure_report,
         "policy_tuning": policy_report,
+        "preset_drift": {
+            "summary": drift_report.get("summary", {}),
+            "alerts": list(drift_report.get("alerts", []))[:5],
+        },
         "selection": {
             "selective_mode": bool(selective_mode),
             "min_priority_score": max(0, int(min_priority_score)),
@@ -740,7 +918,16 @@ def build_repair_apply_plan(
             "selected_scopes": sorted(selected_scopes),
             "selected_action_count": len(filtered_failure_report.get("repair_actions", [])),
             "skipped_action_count": len(filtered_failure_report.get("skipped_repair_actions", [])),
+            "selected_preset_lifecycle": str(selected_preset_item.get("lifecycle", {}).get("status", "active")) if isinstance(selected_preset_item.get("lifecycle", {}), dict) else "active",
         },
+        "rollout": rollout,
+        "safety_gate": safety_gate,
+        "rollback_recommendation": _rollback_recommendation(
+            snapshot_id=snapshot_id,
+            preset_item=selected_preset_item,
+            rollout=rollout,
+            failure_report=filtered_failure_report,
+        ),
         "current": {
             "profile_overrides": current_profile,
             "strategy_overrides": current_strategy,
@@ -1036,6 +1223,9 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
     selection = plan.get("selection", {}) if isinstance(plan.get("selection", {}), dict) else {}
     selector = selection.get("selector", {}) if isinstance(selection.get("selector", {}), dict) else {}
     choice_card = selection.get("selector_auto_choice_card", {}) if isinstance(selection.get("selector_auto_choice_card", {}), dict) else {}
+    rollout = plan.get("rollout", {}) if isinstance(plan.get("rollout", {}), dict) else {}
+    safety_gate = plan.get("safety_gate", {}) if isinstance(plan.get("safety_gate", {}), dict) else {}
+    rollback = plan.get("rollback_recommendation", {}) if isinstance(plan.get("rollback_recommendation", {}), dict) else {}
     auto_selector_lines = [
         "## Auto Selector",
         "",
@@ -1076,6 +1266,7 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- selector_auto_only_if_effective: {selection.get('selector_auto_only_if_effective', False)}",
         f"- selector_auto_avoid_rolled_back: {selection.get('selector_auto_avoid_rolled_back', False)}",
         f"- selector_auto_reason: {selection.get('selector_auto_reason', '')}",
+        f"- selected_preset_lifecycle: {selection.get('selected_preset_lifecycle', 'active')}",
         f"- selector_scopes: {','.join(selector.get('scopes', []))}",
         f"- selector_strategies: {','.join(selector.get('strategies', []))}",
         f"- selector_task_kinds: {','.join(selector.get('task_kinds', []))}",
@@ -1084,6 +1275,27 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- exclude_task_kinds: {','.join(selector.get('exclude_task_kinds', []))}",
         "",
         *auto_selector_lines,
+        "## Rollout",
+        "",
+        f"- requested_mode: {rollout.get('requested_mode', '')}",
+        f"- recommended_mode: {rollout.get('recommended_mode', '')}",
+        f"- effective_mode: {rollout.get('effective_mode', '')}",
+        f"- canary_max_actions: {rollout.get('canary_max_actions', 0)}",
+        f"- reasons: {','.join(rollout.get('reasons', []))}",
+        "",
+        "## Safety Gate",
+        "",
+        f"- enabled: {safety_gate.get('enabled', False)}",
+        f"- blocked: {safety_gate.get('blocked', False)}",
+        f"- reasons: {','.join(safety_gate.get('reasons', []))}",
+        f"- recommended_action: {safety_gate.get('recommended_action', '')}",
+        "",
+        "## Rollback Recommendation",
+        "",
+        f"- recommended: {rollback.get('recommended', False)}",
+        f"- reasons: {','.join(rollback.get('reasons', []))}",
+        f"- command: {rollback.get('command', '')}",
+        "",
         "## Changes",
         "",
         f"- profile_overrides_changed: {plan.get('changes', {}).get('profile_overrides_changed', False)}",

@@ -1140,6 +1140,9 @@ run_agent_repair_apply() {
   local min_effectiveness_score=""
   local only_if_effective_flag=0
   local avoid_rolled_back_flag=0
+  local rollout_mode=""
+  local canary_max_actions=""
+  local disable_safety_gate_flag=0
   local scopes=""
   local strategies=""
   local task_kinds=""
@@ -1215,6 +1218,18 @@ run_agent_repair_apply() {
         ;;
       --avoid-rolled-back)
         avoid_rolled_back_flag=1
+        shift || true
+        ;;
+      --rollout-mode)
+        rollout_mode="${2:-}"
+        shift 2 || true
+        ;;
+      --canary-max-actions)
+        canary_max_actions="${2:-}"
+        shift 2 || true
+        ;;
+      --disable-safety-gate)
+        disable_safety_gate_flag=1
         shift || true
         ;;
       --scopes)
@@ -1312,6 +1327,15 @@ run_agent_repair_apply() {
   if [ "${avoid_rolled_back_flag}" -eq 1 ]; then
     cmd+=(--avoid-rolled-back)
   fi
+  if [ -n "${rollout_mode}" ]; then
+    cmd+=(--rollout-mode "${rollout_mode}")
+  fi
+  if [ -n "${canary_max_actions}" ]; then
+    cmd+=(--canary-max-actions "${canary_max_actions}")
+  fi
+  if [ "${disable_safety_gate_flag}" -eq 1 ]; then
+    cmd+=(--disable-safety-gate)
+  fi
   if [ -n "${scopes}" ]; then
     cmd+=(--scopes "${scopes}")
   fi
@@ -1361,6 +1385,9 @@ run_agent_repair_approve() {
   local min_effectiveness_score=""
   local only_if_effective_flag=0
   local avoid_rolled_back_flag=0
+  local rollout_mode=""
+  local canary_max_actions=""
+  local disable_safety_gate_flag=0
   local scopes=""
   local strategies=""
   local task_kinds=""
@@ -1435,6 +1462,18 @@ run_agent_repair_approve() {
         ;;
       --avoid-rolled-back)
         avoid_rolled_back_flag=1
+        shift || true
+        ;;
+      --rollout-mode)
+        rollout_mode="${2:-}"
+        shift 2 || true
+        ;;
+      --canary-max-actions)
+        canary_max_actions="${2:-}"
+        shift 2 || true
+        ;;
+      --disable-safety-gate)
+        disable_safety_gate_flag=1
         shift || true
         ;;
       --scopes)
@@ -1524,6 +1563,15 @@ run_agent_repair_approve() {
   fi
   if [ "${avoid_rolled_back_flag}" -eq 1 ]; then
     cmd+=(--avoid-rolled-back)
+  fi
+  if [ -n "${rollout_mode}" ]; then
+    cmd+=(--rollout-mode "${rollout_mode}")
+  fi
+  if [ -n "${canary_max_actions}" ]; then
+    cmd+=(--canary-max-actions "${canary_max_actions}")
+  fi
+  if [ "${disable_safety_gate_flag}" -eq 1 ]; then
+    cmd+=(--disable-safety-gate)
   fi
   if [ -n "${scopes}" ]; then
     cmd+=(--scopes "${scopes}")
@@ -1616,10 +1664,13 @@ run_agent_repair_presets() {
   local limit=""
   local out_dir=""
   local presets_file=""
+  local effectiveness_file=""
+  local lifecycle_file=""
   local top_n=""
   local mode=""
   local allow_update_flag=0
   local include_review_only_flag=0
+  local apply_lifecycle_flag=0
   local extra=()
   local cmd=()
   while [ "$#" -gt 0 ]; do
@@ -1644,6 +1695,14 @@ run_agent_repair_presets() {
         presets_file="${2:-}"
         shift 2 || true
         ;;
+      --effectiveness-file)
+        effectiveness_file="${2:-}"
+        shift 2 || true
+        ;;
+      --lifecycle-file)
+        lifecycle_file="${2:-}"
+        shift 2 || true
+        ;;
       --top-n)
         top_n="${2:-}"
         shift 2 || true
@@ -1658,6 +1717,10 @@ run_agent_repair_presets() {
         ;;
       --include-review-only)
         include_review_only_flag=1
+        shift || true
+        ;;
+      --apply-lifecycle)
+        apply_lifecycle_flag=1
         shift || true
         ;;
       *)
@@ -1686,6 +1749,12 @@ run_agent_repair_presets() {
   if [ -n "${presets_file}" ]; then
     cmd+=(--presets-file "${presets_file}")
   fi
+  if [ -n "${effectiveness_file}" ]; then
+    cmd+=(--effectiveness-file "${effectiveness_file}")
+  fi
+  if [ -n "${lifecycle_file}" ]; then
+    cmd+=(--lifecycle-file "${lifecycle_file}")
+  fi
   if [ -n "${top_n}" ]; then
     cmd+=(--top-n "${top_n}")
   fi
@@ -1694,6 +1763,9 @@ run_agent_repair_presets() {
   fi
   if [ "${include_review_only_flag}" -eq 1 ]; then
     cmd+=(--include-review-only)
+  fi
+  if [ "${apply_lifecycle_flag}" -eq 1 ]; then
+    cmd+=(--apply-lifecycle)
   fi
   if [ "${#extra[@]}" -gt 0 ]; then
     cmd+=("${extra[@]}")
@@ -1873,6 +1945,9 @@ run_agent_policy() {
   automation_log "INFO" "agent-policy" "start"
   local data_dir=""
   local memory_file=""
+  local presets_file=""
+  local effectiveness_file=""
+  local lifecycle_file=""
   local days=""
   local extra=()
   local cmd=()
@@ -1884,6 +1959,18 @@ run_agent_policy() {
         ;;
       --memory-file)
         memory_file="${2:-}"
+        shift 2 || true
+        ;;
+      --presets-file)
+        presets_file="${2:-}"
+        shift 2 || true
+        ;;
+      --effectiveness-file)
+        effectiveness_file="${2:-}"
+        shift 2 || true
+        ;;
+      --lifecycle-file)
+        lifecycle_file="${2:-}"
         shift 2 || true
         ;;
       --days)
@@ -1907,11 +1994,73 @@ run_agent_policy() {
   if [ -n "${memory_file}" ]; then
     cmd+=(--memory-file "${memory_file}")
   fi
+  if [ -n "${presets_file}" ]; then
+    cmd+=(--presets-file "${presets_file}")
+  fi
+  if [ -n "${effectiveness_file}" ]; then
+    cmd+=(--effectiveness-file "${effectiveness_file}")
+  fi
+  if [ -n "${lifecycle_file}" ]; then
+    cmd+=(--lifecycle-file "${lifecycle_file}")
+  fi
   if [ "${#extra[@]}" -gt 0 ]; then
     cmd+=("${extra[@]}")
   fi
   "${cmd[@]}" || return "${E_SKILL}"
   automation_log "INFO" "agent-policy" "done"
+}
+
+run_agent_governance() {
+  automation_log "INFO" "agent-governance" "start"
+  local data_dir=""
+  local days=""
+  local limit=""
+  local out_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir)
+        data_dir="${2:-}"
+        shift 2 || true
+        ;;
+      --days)
+        days="${2:-}"
+        shift 2 || true
+        ;;
+      --limit)
+        limit="${2:-}"
+        shift 2 || true
+        ;;
+      --out-dir)
+        out_dir="${2:-}"
+        shift 2 || true
+        ;;
+      *)
+        extra+=("$1")
+        shift || true
+        ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then
+    cmd+=(--data-dir "${data_dir}")
+  fi
+  cmd+=(governance)
+  if [ -n "${days}" ]; then
+    cmd+=(--days "${days}")
+  fi
+  if [ -n "${limit}" ]; then
+    cmd+=(--limit "${limit}")
+  fi
+  if [ -n "${out_dir}" ]; then
+    cmd+=(--out-dir "${out_dir}")
+  fi
+  if [ "${#extra[@]}" -gt 0 ]; then
+    cmd+=("${extra[@]}")
+  fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-governance" "done"
 }
 
 run_agent_pack() {
@@ -2121,14 +2270,15 @@ Usage:
   scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
   scripts/agentsys.sh agent-failure-review [--days N --limit N --data-dir <path> --out-dir <path>]
-  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery|auto --selector-presets-file <path> --min-effectiveness-score <n> --only-if-effective --avoid-rolled-back --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
-  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery|auto --selector-presets-file <path> --min-effectiveness-score <n> --only-if-effective --avoid-rolled-back --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery|auto --selector-presets-file <path> --min-effectiveness-score <n> --only-if-effective --avoid-rolled-back --rollout-mode auto|canary|full --canary-max-actions <n> --disable-safety-gate --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery|auto --selector-presets-file <path> --min-effectiveness-score <n> --only-if-effective --avoid-rolled-back --rollout-mode auto|canary|full --canary-max-actions <n> --disable-safety-gate --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-list [--limit N --data-dir <path> --backup-dir <path> --out-dir <path>]
-  scripts/agentsys.sh agent-repair-presets [--mode list|recommend|save --days N --limit N --top-n N --presets-file <path> --allow-update --include-review-only --data-dir <path> --out-dir <path>]
+  scripts/agentsys.sh agent-repair-presets [--mode list|recommend|save|drift|lifecycle --days N --limit N --top-n N --presets-file <path> --effectiveness-file <path> --lifecycle-file <path> --allow-update --include-review-only --apply-lifecycle --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-compare [--snapshot-id <id> --base-snapshot-id <id> --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --only both|profile|strategy --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-run-inspect --run-id <run_id> [--data-dir <path> --out-dir <path>]
-  scripts/agentsys.sh agent-policy [--days N --memory-file <path> --data-dir <path>]
+  scripts/agentsys.sh agent-policy [--days N --memory-file <path> --presets-file <path> --effectiveness-file <path> --lifecycle-file <path> --data-dir <path>]
+  scripts/agentsys.sh agent-governance [--days N --limit N --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-pack [list|enable|disable] [--name <pack>] [--cfg <path>]
   scripts/agentsys.sh agent-slo-guard [--enforce --cfg <path>]
   scripts/agentsys.sh agent-golden [--strict --tasks <path>]
@@ -2136,7 +2286,7 @@ Usage:
   scripts/agentsys.sh agent-feedback [add|stats|pending] [args...]
   scripts/agentsys.sh agent-learn [--apply --cfg <path>]
   scripts/agentsys.sh skill-contract-lint [--strict --cfg <path>]
-  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|failure-review|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
+  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|governance|failure-review|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
@@ -2246,6 +2396,7 @@ case "${cmd}" in
   agent-repair-rollback) shift; run_agent_repair_rollback "$@" ;;
   agent-run-inspect) shift; run_agent_run_inspect "$@" ;;
   agent-policy) shift; run_agent_policy "$@" ;;
+  agent-governance) shift; run_agent_governance "$@" ;;
   agent-pack) shift; run_agent_pack "${1:-list}" "${@:2}" ;;
   agent-slo-guard) shift; run_agent_slo_guard "$@" ;;
   agent-golden) shift; run_agent_golden "$@" ;;

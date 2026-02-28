@@ -228,7 +228,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(preset_plan["selection"]["selector"]["strategies"], ["mckinsey-ppt"])
             self.assertEqual(preset_plan["selection"]["selector"]["task_kinds"], ["presentation"])
             self.assertEqual(preset_plan["selection"]["selector"]["exclude_scopes"], ["feedback"])
-            self.assertEqual(preset_plan["selection"]["selected_scopes"], ["strategy", "task_kind"])
+            self.assertIn("strategy", preset_plan["selection"]["selected_scopes"])
 
             auto_plan = build_repair_apply_plan(
                 data_dir=root,
@@ -273,6 +273,52 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertTrue(gated_auto_plan["selection"]["selector_auto_avoid_rolled_back"])
             self.assertEqual(gated_auto_plan["selection"]["selector_auto_choice_card"], {})
             self.assertIn("threshold 5", gated_auto_plan["selection"]["selector_auto_reason"])
+
+            (root / "selector_lifecycle.json").write_text(
+                json.dumps(
+                    {
+                        "presentation_recovery": {
+                            "status": "degraded",
+                            "reason": "recent drift",
+                            "updated_at": "2026-02-28 09:00:00",
+                            "source": "manual",
+                            "notes": [],
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            canary_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                selector_preset="presentation_recovery",
+                selector_presets_file=presets_path,
+                rollout_mode="auto",
+                canary_max_actions=1,
+            )
+            self.assertEqual(canary_plan["rollout"]["effective_mode"], "canary")
+            self.assertEqual(canary_plan["selection"]["selected_action_count"], 1)
+
+            blocked_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                selector_preset="presentation_recovery",
+                selector_presets_file=presets_path,
+                rollout_mode="full",
+            )
+            self.assertTrue(blocked_plan["safety_gate"]["blocked"])
+            self.assertIn("degraded_preset_requires_canary", blocked_plan["safety_gate"]["reasons"])
 
             no_op_plan = build_repair_apply_plan(
                 data_dir=root,

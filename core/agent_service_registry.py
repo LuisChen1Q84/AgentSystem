@@ -16,6 +16,7 @@ from services.data_service import DataService
 from services.diagnostics_service import DiagnosticsService
 from services.failure_review_service import FailureReviewService
 from services.feedback_service import FeedbackService
+from services.governance_console_service import GovernanceConsoleService
 from services.image_service import ImageService
 from services.market_service import MarketService
 from services.mcp_service import MCPService
@@ -35,6 +36,7 @@ class AgentServiceRegistry:
         self.runtime = AgentRuntimeService(root=self.root)
         self.observe = ObservabilityService(root=self.root)
         self.feedback = FeedbackService(root=self.root)
+        self.governance = GovernanceConsoleService(root=self.root)
         self.diagnostics = DiagnosticsService(root=self.root)
         self.failure_review = FailureReviewService(root=self.root)
         self.recommend = RecommendationService(root=self.root)
@@ -59,6 +61,7 @@ class AgentServiceRegistry:
             "agent.recommend": ServiceSpec("agent.recommend", "optimization", "Recommend profile by task kind", "low"),
             "agent.slo": ServiceSpec("agent.slo", "governance", "Evaluate SLO guard", "low"),
             "agent.policy.tune": ServiceSpec("agent.policy.tune", "governance", "Tune agent policy from recent runs", "low"),
+            "agent.governance.console": ServiceSpec("agent.governance.console", "governance", "Build unified governance console across policy, drift, and failures", "low"),
             "agent.run.inspect": ServiceSpec("agent.run.inspect", "observability", "Inspect one agent run with strategy diagnostics", "low"),
             "agent.feedback.add": ServiceSpec("agent.feedback.add", "feedback", "Append feedback for a run", "low"),
             "agent.feedback.stats": ServiceSpec("agent.feedback.stats", "feedback", "Summarize collected feedback", "low"),
@@ -111,6 +114,17 @@ class AgentServiceRegistry:
             data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
             days=max(1, int(kwargs.get("days", 14))),
             memory_file=str(kwargs.get("memory_file", "")),
+            presets_file=str(kwargs.get("presets_file", "")),
+            effectiveness_file=str(kwargs.get("effectiveness_file", "")),
+            lifecycle_file=str(kwargs.get("lifecycle_file", "")),
+        ).to_dict()
+
+    def _exec_agent_governance_console(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.governance.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            limit=max(1, int(kwargs.get("limit", 10))),
+            out_dir=str(kwargs.get("out_dir", "")),
         ).to_dict()
 
     def _exec_agent_run_inspect(self, **kwargs: Any) -> Dict[str, Any]:
@@ -175,6 +189,9 @@ class AgentServiceRegistry:
             min_effectiveness_score=max(0, int(kwargs.get("min_effectiveness_score", 0))),
             only_if_effective=bool(kwargs.get("only_if_effective", False)),
             avoid_rolled_back=bool(kwargs.get("avoid_rolled_back", False)),
+            rollout_mode=str(kwargs.get("rollout_mode", "auto")),
+            canary_max_actions=max(1, int(kwargs.get("canary_max_actions", 1))),
+            disable_safety_gate=bool(kwargs.get("disable_safety_gate", False)),
             scopes=kwargs.get("scopes", ""),
             strategies=kwargs.get("strategies", ""),
             task_kinds=kwargs.get("task_kinds", ""),
@@ -203,6 +220,9 @@ class AgentServiceRegistry:
             min_effectiveness_score=max(0, int(kwargs.get("min_effectiveness_score", 0))),
             only_if_effective=bool(kwargs.get("only_if_effective", False)),
             avoid_rolled_back=bool(kwargs.get("avoid_rolled_back", False)),
+            rollout_mode=str(kwargs.get("rollout_mode", "auto")),
+            canary_max_actions=max(1, int(kwargs.get("canary_max_actions", 1))),
+            disable_safety_gate=bool(kwargs.get("disable_safety_gate", False)),
             scopes=kwargs.get("scopes", ""),
             strategies=kwargs.get("strategies", ""),
             task_kinds=kwargs.get("task_kinds", ""),
@@ -247,9 +267,12 @@ class AgentServiceRegistry:
             limit=max(1, int(kwargs.get("limit", 10))),
             out_dir=str(kwargs.get("out_dir", "")),
             presets_file=str(kwargs.get("presets_file", "")),
+            effectiveness_file=str(kwargs.get("effectiveness_file", "")),
+            lifecycle_file=str(kwargs.get("lifecycle_file", "")),
             top_n=max(1, int(kwargs.get("top_n", 3))),
             allow_update=bool(kwargs.get("allow_update", True)),
             include_review_only=bool(kwargs.get("include_review_only", False)),
+            apply_lifecycle=bool(kwargs.get("apply_lifecycle", False)),
         ).to_dict()
 
     def _exec_mcp_run(self, **kwargs: Any) -> Dict[str, Any]:

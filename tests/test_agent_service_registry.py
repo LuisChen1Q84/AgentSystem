@@ -16,6 +16,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.feedback.pending", names)
         self.assertIn("agent.diagnostics", names)
         self.assertIn("agent.failures.review", names)
+        self.assertIn("agent.governance.console", names)
         self.assertIn("agent.policy.tune", names)
         self.assertIn("agent.repairs.apply", names)
         self.assertIn("agent.repairs.approve", names)
@@ -138,6 +139,56 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("service_diagnostics", out)
             self.assertIn("delivery_protocol", out)
 
+    def test_execute_agent_governance_console(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": False,
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 10,
+                        "selected_strategy": "mckinsey-ppt",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "success": False,
+                        "quality_score": 0.25,
+                        "manual_takeover": True,
+                        "ts": "2026-02-28 10:00:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "selector_presets.json").write_text(
+                json.dumps({"presentation_recovery": {"scopes": ["strategy"], "strategies": ["mckinsey-ppt"], "task_kinds": ["presentation"]}}, ensure_ascii=False)
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "selector_lifecycle.json").write_text(
+                json.dumps({"presentation_recovery": {"status": "degraded", "updated_at": "2026-02-28 09:00:00"}}, ensure_ascii=False)
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            out = reg.execute("agent.governance.console", data_dir=str(root), days=14, limit=10, out_dir=str(root / "out"))
+            self.assertTrue(out.get("ok", False))
+            self.assertIn("report", out)
+            self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_protocol", out)
+
     def test_execute_agent_policy_tune(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -180,6 +231,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             out = reg.execute("agent.policy.tune", data_dir=str(root), days=14)
             self.assertTrue(out.get("ok", False))
             self.assertIn("report", out)
+            self.assertIn("preset_drift", out)
             self.assertIn("service_diagnostics", out)
             self.assertIn("delivery_protocol", out)
 

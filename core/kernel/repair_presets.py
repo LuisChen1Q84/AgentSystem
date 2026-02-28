@@ -158,6 +158,10 @@ def default_selector_effectiveness_file() -> Path:
     return ROOT / "config/agent_repair_selector_effectiveness.json"
 
 
+def default_selector_lifecycle_file() -> Path:
+    return ROOT / "config/agent_repair_selector_lifecycle.json"
+
+
 def load_selector_effectiveness(path: Path) -> Dict[str, Dict[str, Any]]:
     raw = _load_json(path, {})
     out: Dict[str, Dict[str, Any]] = {}
@@ -169,8 +173,42 @@ def load_selector_effectiveness(path: Path) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def load_selector_lifecycle(path: Path) -> Dict[str, Dict[str, Any]]:
+    raw = _load_json(path, {})
+    out: Dict[str, Dict[str, Any]] = {}
+    for key, payload in raw.items():
+        name = str(key).strip()
+        if not name or not isinstance(payload, dict):
+            continue
+        out[name] = {
+            "status": str(payload.get("status", "active")).strip() or "active",
+            "reason": str(payload.get("reason", "")).strip(),
+            "updated_at": str(payload.get("updated_at", "")).strip(),
+            "source": str(payload.get("source", "")).strip(),
+            "notes": list(payload.get("notes", [])) if isinstance(payload.get("notes", []), list) else [],
+        }
+    return out
+
+
 def write_selector_effectiveness(path: Path, stats: Dict[str, Dict[str, Any]]) -> None:
     normalized = {str(name): dict(payload) for name, payload in stats.items() if str(name).strip()}
+    ordered = dict(sorted(normalized.items(), key=lambda item: item[0]))
+    _write_json(path, ordered)
+
+
+def write_selector_lifecycle(path: Path, lifecycle: Dict[str, Dict[str, Any]]) -> None:
+    normalized: Dict[str, Dict[str, Any]] = {}
+    for name, payload in lifecycle.items():
+        clean = str(name).strip()
+        if not clean or not isinstance(payload, dict):
+            continue
+        normalized[clean] = {
+            "status": str(payload.get("status", "active")).strip() or "active",
+            "reason": str(payload.get("reason", "")).strip(),
+            "updated_at": str(payload.get("updated_at", "")).strip(),
+            "source": str(payload.get("source", "")).strip(),
+            "notes": list(payload.get("notes", [])) if isinstance(payload.get("notes", []), list) else [],
+        }
     ordered = dict(sorted(normalized.items(), key=lambda item: item[0]))
     _write_json(path, ordered)
 
@@ -637,11 +675,14 @@ def build_repair_preset_inventory(
     data_dir: Path,
     presets_file: Path | None = None,
     effectiveness_file: Path | None = None,
+    lifecycle_file: Path | None = None,
 ) -> Dict[str, Any]:
     actual_presets_file = Path(presets_file) if presets_file else default_selector_presets_file()
     actual_effectiveness_file = Path(effectiveness_file) if effectiveness_file else default_selector_effectiveness_file()
+    actual_lifecycle_file = Path(lifecycle_file) if lifecycle_file else default_selector_lifecycle_file()
     presets = load_selector_presets(actual_presets_file)
     persisted = load_selector_effectiveness(actual_effectiveness_file)
+    lifecycle_state = load_selector_lifecycle(actual_lifecycle_file)
     try:
         from core.kernel.repair_apply import list_repair_snapshots
     except Exception:
@@ -674,6 +715,7 @@ def build_repair_preset_inventory(
             - lifecycle_counts["rolled_back"] * 8
         )
         persisted_row = persisted.get(name, {}) if isinstance(persisted.get(name, {}), dict) else {}
+        lifecycle_row = lifecycle_state.get(name, {}) if isinstance(lifecycle_state.get(name, {}), dict) else {}
         usage_count = len(matching_rows)
         success_rate = round(
             lifecycle_counts["applied"] / max(1, lifecycle_counts["applied"] + lifecycle_counts["rolled_back"]),
@@ -705,6 +747,13 @@ def build_repair_preset_inventory(
                 "effectiveness_score": effectiveness_score,
                 "manual_bonus": int(persisted_row.get("manual_bonus", 0) or 0),
                 "notes": list(persisted_row.get("notes", [])) if isinstance(persisted_row.get("notes", []), list) else [],
+                "lifecycle": {
+                    "status": str(lifecycle_row.get("status", "active")).strip() or "active",
+                    "reason": str(lifecycle_row.get("reason", "")).strip(),
+                    "updated_at": str(lifecycle_row.get("updated_at", "")).strip(),
+                    "source": str(lifecycle_row.get("source", "")).strip(),
+                    "notes": list(lifecycle_row.get("notes", [])) if isinstance(lifecycle_row.get("notes", []), list) else [],
+                },
             }
         )
     items.sort(
@@ -719,8 +768,15 @@ def build_repair_preset_inventory(
     return {
         "presets_file": str(actual_presets_file),
         "effectiveness_file": str(actual_effectiveness_file),
+        "lifecycle_file": str(actual_lifecycle_file),
         "count": len(items),
         "items": items,
+        "lifecycle_summary": {
+            "active": sum(1 for item in items if str(item.get("lifecycle", {}).get("status", "active")) == "active"),
+            "degraded": sum(1 for item in items if str(item.get("lifecycle", {}).get("status", "active")) == "degraded"),
+            "retired": sum(1 for item in items if str(item.get("lifecycle", {}).get("status", "active")) == "retired"),
+            "archived": sum(1 for item in items if str(item.get("lifecycle", {}).get("status", "active")) == "archived"),
+        },
         "dimensions": {
             "strategy_top": _dimension_summary(items, "strategy", top_n=5),
             "task_kind_top": _dimension_summary(items, "task_kind", top_n=5),
@@ -735,6 +791,7 @@ def recommend_selector_preset_for_failure_report(
     failure_report: Dict[str, Any],
     presets_file: Path | None = None,
     effectiveness_file: Path | None = None,
+    lifecycle_file: Path | None = None,
     min_effectiveness_score: int = 0,
     only_if_effective: bool = False,
     avoid_rolled_back: bool = False,
@@ -743,11 +800,16 @@ def recommend_selector_preset_for_failure_report(
         data_dir=data_dir,
         presets_file=presets_file,
         effectiveness_file=effectiveness_file,
+        lifecycle_file=lifecycle_file,
     )
     actions = [item for item in failure_report.get("repair_actions", []) if isinstance(item, dict)]
     candidates: List[Dict[str, Any]] = []
     for item in inventory.get("items", []):
         if not isinstance(item, dict):
+            continue
+        lifecycle = item.get("lifecycle", {}) if isinstance(item.get("lifecycle", {}), dict) else {}
+        lifecycle_status = str(lifecycle.get("status", "active")).strip() or "active"
+        if lifecycle_status in {"retired", "archived"}:
             continue
         if bool(avoid_rolled_back) and str(item.get("last_lifecycle", "")).strip() == "rolled_back":
             continue
@@ -759,12 +821,14 @@ def recommend_selector_preset_for_failure_report(
         specificity = _selector_specificity(selector)
         effectiveness_score = int(item.get("effectiveness_score", 0) or 0)
         match_bonus = len(matched) * 3
-        total_score = action_score + effectiveness_score + (len(matched) * 3) + specificity
+        lifecycle_penalty = -6 if lifecycle_status == "degraded" else 0
+        total_score = action_score + effectiveness_score + (len(matched) * 3) + specificity + lifecycle_penalty
         observed = item.get("observed_outcomes", {}) if isinstance(item.get("observed_outcomes", {}), dict) else {}
         components = item.get("effectiveness_components", {}) if isinstance(item.get("effectiveness_components", {}), dict) else {}
         explanation = (
             f"matched_actions={len(matched)}, action_score={action_score}, "
             f"effectiveness={effectiveness_score}, specificity={specificity}, "
+            f"lifecycle={lifecycle_status}, "
             f"recent_quality_delta={observed.get('recent_avg_quality_delta', 0.0)}, "
             f"recent_success_delta={observed.get('recent_avg_success_delta', 0.0)}"
         )
@@ -791,11 +855,13 @@ def recommend_selector_preset_for_failure_report(
                     "effectiveness_score": effectiveness_score,
                     "match_bonus": match_bonus,
                     "specificity_bonus": specificity,
+                    "lifecycle_penalty": lifecycle_penalty,
                     "total_score": total_score,
                 },
                 "effectiveness_details": {
                     "usage_count": int(item.get("usage_count", 0) or 0),
                     "last_lifecycle": str(item.get("last_lifecycle", "")),
+                    "lifecycle_status": lifecycle_status,
                     "success_rate": float(item.get("success_rate", 0.0) or 0.0),
                     "governance_score": int(item.get("governance_score", 0) or 0),
                     "observed_outcomes": observed,
@@ -845,9 +911,16 @@ def build_repair_preset_report(
     days: int = 14,
     limit: int = 10,
     presets_file: Path | None = None,
+    effectiveness_file: Path | None = None,
+    lifecycle_file: Path | None = None,
 ) -> Dict[str, Any]:
     actual_presets_file = Path(presets_file) if presets_file else default_selector_presets_file()
-    inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=actual_presets_file)
+    inventory = build_repair_preset_inventory(
+        data_dir=data_dir,
+        presets_file=actual_presets_file,
+        effectiveness_file=effectiveness_file,
+        lifecycle_file=lifecycle_file,
+    )
     current = {str(item.get("preset_name", "")): dict(item.get("selector", {})) for item in inventory.get("items", []) if isinstance(item, dict)}
     effectiveness_map = {str(item.get("preset_name", "")): item for item in inventory.get("items", []) if isinstance(item, dict)}
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
@@ -896,11 +969,16 @@ def build_repair_preset_report(
             "limit": max(1, int(limit)),
             "existing_preset_count": len(current),
             "ranked_preset_count": len(inventory.get("items", [])),
+            "active_preset_count": int(inventory.get("lifecycle_summary", {}).get("active", 0) or 0),
+            "degraded_preset_count": int(inventory.get("lifecycle_summary", {}).get("degraded", 0) or 0),
+            "retired_preset_count": int(inventory.get("lifecycle_summary", {}).get("retired", 0) or 0),
             "repair_action_count": len(failure_report.get("repair_actions", [])),
             "suggestion_count": len(suggestions),
             "auto_save_safe_count": sum(1 for item in suggestions if bool(item.get("auto_save_safe", False))),
         },
         "presets_file": str(actual_presets_file),
+        "effectiveness_file": str(inventory.get("effectiveness_file", "")),
+        "lifecycle_file": str(inventory.get("lifecycle_file", "")),
         "preset_inventory": inventory.get("items", []),
         "current_presets": current,
         "failure_review_summary": failure_report.get("summary", {}),
@@ -918,6 +996,9 @@ def render_repair_preset_report_md(report: Dict[str, Any]) -> str:
         f"- presets_file: {report.get('presets_file', '')}",
         f"- existing_preset_count: {summary.get('existing_preset_count', 0)}",
         f"- ranked_preset_count: {summary.get('ranked_preset_count', 0)}",
+        f"- active_preset_count: {summary.get('active_preset_count', 0)}",
+        f"- degraded_preset_count: {summary.get('degraded_preset_count', 0)}",
+        f"- retired_preset_count: {summary.get('retired_preset_count', 0)}",
         f"- repair_action_count: {summary.get('repair_action_count', 0)}",
         f"- suggestion_count: {summary.get('suggestion_count', 0)}",
         f"- auto_save_safe_count: {summary.get('auto_save_safe_count', 0)}",
@@ -932,7 +1013,7 @@ def render_repair_preset_report_md(report: Dict[str, Any]) -> str:
         if not isinstance(item, dict):
             continue
         lines.append(
-            f"- [#{item.get('effectiveness_rank', 0)}|score={item.get('effectiveness_score', 0)}] {item.get('preset_name', '')} | uses={item.get('usage_count', 0)} | last={item.get('last_lifecycle', '')} | success_rate={item.get('success_rate', 0.0)} | quality_delta={item.get('observed_outcomes', {}).get('quality_delta', 0.0)} | trend_quality_delta={item.get('observed_outcomes', {}).get('recent_avg_quality_delta', 0.0)}"
+            f"- [#{item.get('effectiveness_rank', 0)}|score={item.get('effectiveness_score', 0)}] {item.get('preset_name', '')} | status={item.get('lifecycle', {}).get('status', 'active')} | uses={item.get('usage_count', 0)} | last={item.get('last_lifecycle', '')} | success_rate={item.get('success_rate', 0.0)} | quality_delta={item.get('observed_outcomes', {}).get('quality_delta', 0.0)} | trend_quality_delta={item.get('observed_outcomes', {}).get('recent_avg_quality_delta', 0.0)}"
         )
     lines += [
         "",
@@ -975,13 +1056,26 @@ def write_repair_preset_report_files(report: Dict[str, Any], out_dir: Path) -> D
     return {"json": str(json_path), "md": str(md_path)}
 
 
-def list_repair_presets(*, data_dir: Path, presets_file: Path | None = None) -> Dict[str, Any]:
-    inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=presets_file)
+def list_repair_presets(
+    *,
+    data_dir: Path,
+    presets_file: Path | None = None,
+    effectiveness_file: Path | None = None,
+    lifecycle_file: Path | None = None,
+) -> Dict[str, Any]:
+    inventory = build_repair_preset_inventory(
+        data_dir=data_dir,
+        presets_file=presets_file,
+        effectiveness_file=effectiveness_file,
+        lifecycle_file=lifecycle_file,
+    )
     return {
         "presets_file": str(inventory.get("presets_file", "")),
         "effectiveness_file": str(inventory.get("effectiveness_file", "")),
+        "lifecycle_file": str(inventory.get("lifecycle_file", "")),
         "count": int(inventory.get("count", 0) or 0),
         "items": list(inventory.get("items", [])),
+        "lifecycle_summary": dict(inventory.get("lifecycle_summary", {})) if isinstance(inventory.get("lifecycle_summary", {}), dict) else {},
         "dimensions": dict(inventory.get("dimensions", {})) if isinstance(inventory.get("dimensions", {}), dict) else {},
     }
 
@@ -991,13 +1085,16 @@ def save_repair_preset_report(
     *,
     presets_file: Path,
     effectiveness_file: Path | None = None,
+    lifecycle_file: Path | None = None,
     top_n: int = 3,
     allow_update: bool = True,
     include_review_only: bool = False,
 ) -> Dict[str, Any]:
     current = load_selector_presets(presets_file)
     actual_effectiveness_file = Path(effectiveness_file) if effectiveness_file else default_selector_effectiveness_file()
+    actual_lifecycle_file = Path(lifecycle_file) if lifecycle_file else default_selector_lifecycle_file()
     effectiveness = load_selector_effectiveness(actual_effectiveness_file)
+    lifecycle_state = load_selector_lifecycle(actual_lifecycle_file)
     suggestions = report.get("suggestions", []) if isinstance(report.get("suggestions", []), list) else []
     saved: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
@@ -1009,6 +1106,10 @@ def save_repair_preset_report(
         name = str(item.get("preset_name", "")).strip()
         selector = _normalize_selector(item.get("selector", {}) if isinstance(item.get("selector", {}), dict) else {})
         status = str(item.get("existing_status", "")).strip()
+        lifecycle_status = str(lifecycle_state.get(name, {}).get("status", "active")).strip() or "active"
+        if lifecycle_status in {"retired", "archived"}:
+            skipped.append({"preset_name": name, "reason": f"lifecycle_{lifecycle_status}"})
+            continue
         if not bool(item.get("auto_save_safe", False)):
             if include_review_only and str(item.get("save_action", "")).strip() == "review_only":
                 pass
@@ -1038,6 +1139,7 @@ def save_repair_preset_report(
     return {
         "presets_file": str(presets_file),
         "effectiveness_file": str(actual_effectiveness_file),
+        "lifecycle_file": str(actual_lifecycle_file),
         "saved": saved,
         "saved_count": len(saved),
         "skipped": skipped,

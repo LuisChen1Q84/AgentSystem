@@ -100,6 +100,19 @@ def _diagnostics_cmd(reg: AgentServiceRegistry, days: int, data_dir: str, out_di
     return 0
 
 
+def _governance_cmd(reg: AgentServiceRegistry, days: int, limit: int, data_dir: str, out_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.governance.console",
+            days=days,
+            limit=limit,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+        )
+    )
+    return 0
+
+
 def _failure_review_cmd(reg: AgentServiceRegistry, days: int, limit: int, data_dir: str, out_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -132,14 +145,17 @@ def _repair_apply_cmd(
     min_effectiveness_score: int,
     only_if_effective: bool,
     avoid_rolled_back: bool,
-    scopes: str,
-    strategies: str,
-    task_kinds: str,
-    exclude_scopes: str,
-    exclude_strategies: str,
-    exclude_task_kinds: str,
-    approve_code: str,
-    force: bool,
+    rollout_mode: str = "auto",
+    canary_max_actions: int = 1,
+    disable_safety_gate: bool = False,
+    scopes: str = "",
+    strategies: str = "",
+    task_kinds: str = "",
+    exclude_scopes: str = "",
+    exclude_strategies: str = "",
+    exclude_task_kinds: str = "",
+    approve_code: str = "",
+    force: bool = False,
 ) -> int:
     out = reg.execute(
         "agent.repairs.apply",
@@ -160,6 +176,9 @@ def _repair_apply_cmd(
         min_effectiveness_score=min_effectiveness_score,
         only_if_effective=only_if_effective,
         avoid_rolled_back=avoid_rolled_back,
+        rollout_mode=rollout_mode,
+        canary_max_actions=canary_max_actions,
+        disable_safety_gate=disable_safety_gate,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -191,14 +210,17 @@ def _repair_approve_cmd(
     min_effectiveness_score: int,
     only_if_effective: bool,
     avoid_rolled_back: bool,
-    scopes: str,
-    strategies: str,
-    task_kinds: str,
-    exclude_scopes: str,
-    exclude_strategies: str,
-    exclude_task_kinds: str,
-    approve_code: str,
-    force: bool,
+    rollout_mode: str = "auto",
+    canary_max_actions: int = 1,
+    disable_safety_gate: bool = False,
+    scopes: str = "",
+    strategies: str = "",
+    task_kinds: str = "",
+    exclude_scopes: str = "",
+    exclude_strategies: str = "",
+    exclude_task_kinds: str = "",
+    approve_code: str = "",
+    force: bool = False,
 ) -> int:
     out = reg.execute(
         "agent.repairs.approve",
@@ -218,6 +240,9 @@ def _repair_approve_cmd(
         min_effectiveness_score=min_effectiveness_score,
         only_if_effective=only_if_effective,
         avoid_rolled_back=avoid_rolled_back,
+        rollout_mode=rollout_mode,
+        canary_max_actions=canary_max_actions,
+        disable_safety_gate=disable_safety_gate,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -251,9 +276,12 @@ def _repair_presets_cmd(
     data_dir: str,
     out_dir: str,
     presets_file: str,
-    top_n: int,
-    allow_update: bool,
-    include_review_only: bool,
+    effectiveness_file: str = "",
+    lifecycle_file: str = "",
+    top_n: int = 3,
+    allow_update: bool = True,
+    include_review_only: bool = False,
+    apply_lifecycle: bool = False,
 ) -> int:
     out = reg.execute(
         "agent.repairs.presets",
@@ -263,9 +291,12 @@ def _repair_presets_cmd(
         data_dir=data_dir or str(ROOT / "日志/agent_os"),
         out_dir=out_dir,
         presets_file=presets_file,
+        effectiveness_file=effectiveness_file,
+        lifecycle_file=lifecycle_file,
         top_n=top_n,
         allow_update=allow_update,
         include_review_only=include_review_only,
+        apply_lifecycle=apply_lifecycle,
     )
     _print_json(out)
     return 0 if bool(out.get("ok", False)) else 1
@@ -328,13 +359,24 @@ def _slo_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
     return 0
 
 
-def _policy_cmd(reg: AgentServiceRegistry, days: int, data_dir: str, memory_file: str) -> int:
+def _policy_cmd(
+    reg: AgentServiceRegistry,
+    days: int,
+    data_dir: str,
+    memory_file: str,
+    presets_file: str = "",
+    effectiveness_file: str = "",
+    lifecycle_file: str = "",
+) -> int:
     _print_json(
         reg.execute(
             "agent.policy.tune",
             data_dir=data_dir or str(ROOT / "日志/agent_os"),
             days=days,
             memory_file=memory_file,
+            presets_file=presets_file,
+            effectiveness_file=effectiveness_file,
+            lifecycle_file=lifecycle_file,
         )
     )
     return 0
@@ -400,8 +442,8 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "failure-review [days], repair-apply [days] [min_score] [max_actions], repair-approve [days] [min_score] [max_actions], "
-        "repair-list [limit], repair-presets [list|recommend|save] [days] [limit] [top_n], repair-compare [snapshot_id] [base_snapshot_id], "
+        "governance [days] [limit], failure-review [days], repair-apply [days] [min_score] [max_actions], repair-approve [days] [min_score] [max_actions], "
+        "repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], repair-compare [snapshot_id] [base_snapshot_id], "
         "repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
@@ -432,6 +474,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
         if cmd == "diagnostics":
             _diagnostics_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="")
             continue
+        if cmd == "governance":
+            _governance_cmd(reg, days=int(args[0]) if args else 14, limit=int(args[1]) if len(args) > 1 else 10, data_dir=data_dir, out_dir="")
+            continue
         if cmd == "failure-review":
             _failure_review_cmd(reg, days=int(args[0]) if args else 14, limit=10, data_dir=data_dir, out_dir="")
             continue
@@ -458,6 +503,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 min_effectiveness_score=0,
                 only_if_effective=False,
                 avoid_rolled_back=False,
+                rollout_mode="auto",
+                canary_max_actions=1,
+                disable_safety_gate=False,
                 scopes="",
                 strategies="",
                 task_kinds="",
@@ -490,6 +538,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 min_effectiveness_score=0,
                 only_if_effective=False,
                 avoid_rolled_back=False,
+                rollout_mode="auto",
+                canary_max_actions=1,
+                disable_safety_gate=False,
                 scopes="",
                 strategies="",
                 task_kinds="",
@@ -512,9 +563,12 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 data_dir=data_dir,
                 out_dir="",
                 presets_file="",
+                effectiveness_file="",
+                lifecycle_file="",
                 top_n=int(args[3]) if len(args) > 3 else 3,
                 allow_update=True,
                 include_review_only=False,
+                apply_lifecycle=False,
             )
             continue
         if cmd == "repair-compare":
@@ -544,7 +598,7 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             _run_inspect_cmd(reg, run_id=str(args[0]), data_dir=data_dir, out_dir="")
             continue
         if cmd == "policy":
-            _policy_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, memory_file="")
+            _policy_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, memory_file="", presets_file="", effectiveness_file="", lifecycle_file="")
             continue
         if cmd == "pending":
             _pending_cmd(reg, limit=int(args[0]) if args else 10, task_kind="", profile="", data_dir=data_dir)
@@ -599,6 +653,11 @@ def build_cli() -> argparse.ArgumentParser:
     diag.add_argument("--days", type=int, default=14)
     diag.add_argument("--out-dir", default="")
 
+    gov = sp.add_parser("governance")
+    gov.add_argument("--days", type=int, default=14)
+    gov.add_argument("--limit", type=int, default=10)
+    gov.add_argument("--out-dir", default="")
+
     frev = sp.add_parser("failure-review")
     frev.add_argument("--days", type=int, default=14)
     frev.add_argument("--limit", type=int, default=10)
@@ -621,6 +680,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--min-effectiveness-score", type=int, default=0)
     rapply.add_argument("--only-if-effective", action="store_true")
     rapply.add_argument("--avoid-rolled-back", action="store_true")
+    rapply.add_argument("--rollout-mode", choices=["auto", "canary", "full"], default="auto")
+    rapply.add_argument("--canary-max-actions", type=int, default=1)
+    rapply.add_argument("--disable-safety-gate", action="store_true")
     rapply.add_argument("--scopes", default="")
     rapply.add_argument("--strategies", default="")
     rapply.add_argument("--task-kinds", default="")
@@ -646,6 +708,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapprove.add_argument("--min-effectiveness-score", type=int, default=0)
     rapprove.add_argument("--only-if-effective", action="store_true")
     rapprove.add_argument("--avoid-rolled-back", action="store_true")
+    rapprove.add_argument("--rollout-mode", choices=["auto", "canary", "full"], default="auto")
+    rapprove.add_argument("--canary-max-actions", type=int, default=1)
+    rapprove.add_argument("--disable-safety-gate", action="store_true")
     rapprove.add_argument("--scopes", default="")
     rapprove.add_argument("--strategies", default="")
     rapprove.add_argument("--task-kinds", default="")
@@ -661,14 +726,17 @@ def build_cli() -> argparse.ArgumentParser:
     rlist.add_argument("--backup-dir", default="")
 
     rpresets = sp.add_parser("repair-presets")
-    rpresets.add_argument("--mode", choices=["list", "recommend", "save"], default="recommend")
+    rpresets.add_argument("--mode", choices=["list", "recommend", "save", "drift", "lifecycle"], default="recommend")
     rpresets.add_argument("--days", type=int, default=14)
     rpresets.add_argument("--limit", type=int, default=10)
     rpresets.add_argument("--out-dir", default="")
     rpresets.add_argument("--presets-file", default="")
+    rpresets.add_argument("--effectiveness-file", default="")
+    rpresets.add_argument("--lifecycle-file", default="")
     rpresets.add_argument("--top-n", type=int, default=3)
     rpresets.add_argument("--allow-update", action="store_true")
     rpresets.add_argument("--include-review-only", action="store_true")
+    rpresets.add_argument("--apply-lifecycle", action="store_true")
 
     rcompare = sp.add_parser("repair-compare")
     rcompare.add_argument("--snapshot-id", default="")
@@ -691,6 +759,9 @@ def build_cli() -> argparse.ArgumentParser:
     pol = sp.add_parser("policy")
     pol.add_argument("--days", type=int, default=14)
     pol.add_argument("--memory-file", default="")
+    pol.add_argument("--presets-file", default="")
+    pol.add_argument("--effectiveness-file", default="")
+    pol.add_argument("--lifecycle-file", default="")
 
     pend = sp.add_parser("pending")
     pend.add_argument("--limit", type=int, default=10)
@@ -728,6 +799,8 @@ def main() -> int:
         return _recommend_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "diagnostics":
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "governance":
+        return _governance_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "failure-review":
         return _failure_review_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "repair-apply":
@@ -750,6 +823,9 @@ def main() -> int:
             min_effectiveness_score=int(args.min_effectiveness_score),
             only_if_effective=bool(args.only_if_effective),
             avoid_rolled_back=bool(args.avoid_rolled_back),
+            rollout_mode=str(args.rollout_mode),
+            canary_max_actions=int(args.canary_max_actions),
+            disable_safety_gate=bool(args.disable_safety_gate),
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),
@@ -778,6 +854,9 @@ def main() -> int:
             min_effectiveness_score=int(args.min_effectiveness_score),
             only_if_effective=bool(args.only_if_effective),
             avoid_rolled_back=bool(args.avoid_rolled_back),
+            rollout_mode=str(args.rollout_mode),
+            canary_max_actions=int(args.canary_max_actions),
+            disable_safety_gate=bool(args.disable_safety_gate),
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),
@@ -798,9 +877,12 @@ def main() -> int:
             data_dir=data_dir,
             out_dir=str(args.out_dir),
             presets_file=str(args.presets_file),
+            effectiveness_file=str(args.effectiveness_file),
+            lifecycle_file=str(args.lifecycle_file),
             top_n=int(args.top_n),
             allow_update=bool(args.allow_update),
             include_review_only=bool(args.include_review_only),
+            apply_lifecycle=bool(args.apply_lifecycle),
         )
     if args.cmd == "repair-compare":
         return _repair_compare_cmd(
@@ -825,7 +907,15 @@ def main() -> int:
     if args.cmd == "slo":
         return _slo_cmd(reg, data_dir=data_dir)
     if args.cmd == "policy":
-        return _policy_cmd(reg, days=int(args.days), data_dir=data_dir, memory_file=str(args.memory_file))
+        return _policy_cmd(
+            reg,
+            days=int(args.days),
+            data_dir=data_dir,
+            memory_file=str(args.memory_file),
+            presets_file=str(args.presets_file),
+            effectiveness_file=str(args.effectiveness_file),
+            lifecycle_file=str(args.lifecycle_file),
+        )
     if args.cmd == "pending":
         return _pending_cmd(reg, limit=int(args.limit), task_kind=str(args.task_kind), profile=str(args.profile), data_dir=data_dir)
     if args.cmd == "feedback-add":

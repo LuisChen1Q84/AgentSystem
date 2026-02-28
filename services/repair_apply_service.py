@@ -63,6 +63,9 @@ class RepairApplyService:
         min_effectiveness_score: int = 0,
         only_if_effective: bool = False,
         avoid_rolled_back: bool = False,
+        rollout_mode: str = "auto",
+        canary_max_actions: int = 1,
+        disable_safety_gate: bool = False,
         scopes: str | list[str] = "",
         strategies: str | list[str] = "",
         task_kinds: str | list[str] = "",
@@ -99,6 +102,9 @@ class RepairApplyService:
                 min_effectiveness_score=max(0, int(min_effectiveness_score)),
                 only_if_effective=bool(only_if_effective),
                 avoid_rolled_back=bool(avoid_rolled_back),
+                rollout_mode=str(rollout_mode),
+                canary_max_actions=max(1, int(canary_max_actions)),
+                disable_safety_gate=bool(disable_safety_gate),
                 scopes=_csv_values(scopes),
                 strategies=_csv_values(strategies),
                 task_kinds=_csv_values(task_kinds),
@@ -107,6 +113,37 @@ class RepairApplyService:
                 exclude_task_kinds=_csv_values(exclude_task_kinds),
             )
         files = write_repair_plan_files(plan, target_dir)
+        safety_gate = plan.get("safety_gate", {}) if isinstance(plan.get("safety_gate", {}), dict) else {}
+        if apply and bool(safety_gate.get("blocked", False)) and not bool(force):
+            payload = annotate_payload(
+                "agent.repairs.apply",
+                {
+                    "summary": "Repair apply blocked by safety gate",
+                    "ok": False,
+                    "error": "safety_gate_blocked",
+                    "error_code": "safety_gate_blocked",
+                    "report": plan,
+                    "applied": False,
+                    "plan_source": plan_source,
+                    "safety_gate": safety_gate,
+                    "deliver_assets": {
+                        "items": [
+                            {"path": files["json"]},
+                            {"path": files["md"]},
+                            {"path": files["snapshot_json"]},
+                            {"path": files["snapshot_md"]},
+                        ]
+                    },
+                },
+                entrypoint="core.kernel.repair_apply",
+            )
+            return error_response(
+                "agent.repairs.apply",
+                "safety_gate_blocked",
+                code="safety_gate_blocked",
+                payload=payload,
+                meta={"data_dir": str(base), "out_dir": str(target_dir), "backup_dir": str(actual_backup_dir), "force": bool(force)},
+            )
         approval_state = resolve_repair_approval(
             plan=plan,
             backup_dir=actual_backup_dir,
@@ -159,6 +196,9 @@ class RepairApplyService:
                     "min_effectiveness_score": max(0, int(min_effectiveness_score)),
                     "only_if_effective": bool(only_if_effective),
                     "avoid_rolled_back": bool(avoid_rolled_back),
+                    "rollout_mode": str(rollout_mode),
+                    "canary_max_actions": max(1, int(canary_max_actions)),
+                    "disable_safety_gate": bool(disable_safety_gate),
                     "scopes": _csv_values(scopes),
                     "strategies": _csv_values(strategies),
                     "task_kinds": _csv_values(task_kinds),
@@ -219,6 +259,9 @@ class RepairApplyService:
                 "min_effectiveness_score": max(0, int(min_effectiveness_score)),
                 "only_if_effective": bool(only_if_effective),
                 "avoid_rolled_back": bool(avoid_rolled_back),
+                "rollout_mode": str(rollout_mode),
+                "canary_max_actions": max(1, int(canary_max_actions)),
+                "disable_safety_gate": bool(disable_safety_gate),
                 "scopes": _csv_values(scopes),
                 "strategies": _csv_values(strategies),
                 "task_kinds": _csv_values(task_kinds),
@@ -252,6 +295,9 @@ class RepairApproveService:
         min_effectiveness_score: int = 0,
         only_if_effective: bool = False,
         avoid_rolled_back: bool = False,
+        rollout_mode: str = "auto",
+        canary_max_actions: int = 1,
+        disable_safety_gate: bool = False,
         scopes: str | list[str] = "",
         strategies: str | list[str] = "",
         task_kinds: str | list[str] = "",
@@ -284,6 +330,9 @@ class RepairApproveService:
                 min_effectiveness_score=max(0, int(min_effectiveness_score)),
                 only_if_effective=bool(only_if_effective),
                 avoid_rolled_back=bool(avoid_rolled_back),
+                rollout_mode=str(rollout_mode),
+                canary_max_actions=max(1, int(canary_max_actions)),
+                disable_safety_gate=bool(disable_safety_gate),
                 scopes=_csv_values(scopes),
                 strategies=_csv_values(strategies),
                 task_kinds=_csv_values(task_kinds),
@@ -391,6 +440,9 @@ class RepairApproveService:
                 "min_effectiveness_score": max(0, int(min_effectiveness_score)),
                 "only_if_effective": bool(only_if_effective),
                 "avoid_rolled_back": bool(avoid_rolled_back),
+                "rollout_mode": str(rollout_mode),
+                "canary_max_actions": max(1, int(canary_max_actions)),
+                "disable_safety_gate": bool(disable_safety_gate),
                 "scopes": _csv_values(scopes),
                 "strategies": _csv_values(strategies),
                 "task_kinds": _csv_values(task_kinds),

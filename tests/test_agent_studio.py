@@ -27,6 +27,10 @@ class AgentStudioTest(unittest.TestCase):
         a4 = parser.parse_args(["diagnostics"])
         self.assertEqual(a4.cmd, "diagnostics")
 
+        a41 = parser.parse_args(["governance", "--limit", "12"])
+        self.assertEqual(a41.cmd, "governance")
+        self.assertEqual(a41.limit, 12)
+
         a42 = parser.parse_args(["failure-review"])
         self.assertEqual(a42.cmd, "failure-review")
 
@@ -41,6 +45,11 @@ class AgentStudioTest(unittest.TestCase):
                 "5",
                 "--only-if-effective",
                 "--avoid-rolled-back",
+                "--rollout-mode",
+                "canary",
+                "--canary-max-actions",
+                "2",
+                "--disable-safety-gate",
                 "--scopes",
                 "strategy,task_kind",
                 "--strategies",
@@ -62,6 +71,9 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a43.min_effectiveness_score, 5)
         self.assertTrue(a43.only_if_effective)
         self.assertTrue(a43.avoid_rolled_back)
+        self.assertEqual(a43.rollout_mode, "canary")
+        self.assertEqual(a43.canary_max_actions, 2)
+        self.assertTrue(a43.disable_safety_gate)
         self.assertEqual(a43.scopes, "strategy,task_kind")
         self.assertEqual(a43.strategies, "mckinsey-ppt")
         self.assertEqual(a43.task_kinds, "presentation")
@@ -80,6 +92,8 @@ class AgentStudioTest(unittest.TestCase):
                 "50",
                 "--max-actions",
                 "2",
+                "--rollout-mode",
+                "full",
                 "--exclude-strategies",
                 "mcp-generalist",
             ]
@@ -92,6 +106,7 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a431.min_effectiveness_score, 7)
         self.assertTrue(a431.only_if_effective)
         self.assertTrue(a431.avoid_rolled_back)
+        self.assertEqual(a431.rollout_mode, "full")
         self.assertEqual(a431.scopes, "")
         self.assertEqual(a431.exclude_strategies, "mcp-generalist")
 
@@ -99,11 +114,12 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a44.cmd, "repair-list")
         self.assertEqual(a44.limit, 20)
 
-        a441 = parser.parse_args(["repair-presets", "--mode", "save", "--top-n", "2", "--allow-update"])
+        a441 = parser.parse_args(["repair-presets", "--mode", "lifecycle", "--top-n", "2", "--apply-lifecycle", "--lifecycle-file", "/tmp/lifecycle.json"])
         self.assertEqual(a441.cmd, "repair-presets")
-        self.assertEqual(a441.mode, "save")
+        self.assertEqual(a441.mode, "lifecycle")
         self.assertEqual(a441.top_n, 2)
-        self.assertTrue(a441.allow_update)
+        self.assertTrue(a441.apply_lifecycle)
+        self.assertEqual(a441.lifecycle_file, "/tmp/lifecycle.json")
 
         a45 = parser.parse_args(["repair-compare", "--snapshot-id", "snap2", "--base-snapshot-id", "snap1"])
         self.assertEqual(a45.cmd, "repair-compare")
@@ -121,6 +137,8 @@ class AgentStudioTest(unittest.TestCase):
 
         a5 = parser.parse_args(["policy"])
         self.assertEqual(a5.cmd, "policy")
+        a51 = parser.parse_args(["policy", "--lifecycle-file", "/tmp/lifecycle.json"])
+        self.assertEqual(a51.lifecycle_file, "/tmp/lifecycle.json")
 
     def test_repair_list_cmd(self):
         with tempfile.TemporaryDirectory() as td:

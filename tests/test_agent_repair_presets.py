@@ -210,6 +210,7 @@ class AgentRepairPresetsTest(unittest.TestCase):
             self.assertEqual(item["preset_name"], "presentation_recovery")
             self.assertEqual(item["usage_count"], 1)
             self.assertEqual(item["last_lifecycle"], "applied")
+            self.assertEqual(item["lifecycle"]["status"], "active")
             self.assertGreater(item["effectiveness_score"], 0)
             self.assertEqual(item["observed_outcomes"]["baseline_runs"], 1)
             self.assertEqual(item["observed_outcomes"]["followup_runs"], 1)
@@ -219,6 +220,7 @@ class AgentRepairPresetsTest(unittest.TestCase):
             self.assertGreater(item["observed_outcomes"]["recent_avg_quality_delta"], 0)
             self.assertGreater(item["observed_outcomes"]["positive_window_ratio"], 0)
             self.assertGreater(item["effectiveness_components"]["trend_quality_bonus"], 0)
+            self.assertEqual(listed["lifecycle_summary"]["active"], 1)
             self.assertEqual(listed["dimensions"]["strategy_top"][0]["name"], "mckinsey-ppt")
             self.assertEqual(listed["dimensions"]["task_kind_top"][0]["name"], "presentation")
 
