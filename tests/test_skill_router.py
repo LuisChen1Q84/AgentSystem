@@ -38,12 +38,27 @@ class SkillRouterTest(unittest.TestCase):
         route = route_text("帮我做一个低多边形风格人物图", rules)
         self.assertEqual(route["skill"], "image-creator-hub")
 
+    def test_route_research_hub(self):
+        rules = parse_route_doc()
+        route = route_text("请做支付SaaS市场规模和竞争拆解研报", rules)
+        self.assertEqual(route["skill"], "research-hub")
+
     def test_execute_mckinsey_ppt_route(self):
         with patch.object(skill_router, "route_text_enhanced", return_value={"skill": "mckinsey-ppt"}):
             out = skill_router.execute_route("做一份咨询风格PPT", "{}")
         self.assertEqual(out["execute"]["type"], "mckinsey-ppt")
         self.assertTrue(out["result"]["ok"])
         self.assertIn("deliver_assets", out["result"])
+
+    def test_execute_research_route(self):
+        with patch.object(skill_router, "route_text_enhanced", return_value={"skill": "research-hub"}):
+            out = skill_router.execute_route(
+                "做一份支付SaaS市场规模研报",
+                '{"playbook":"market_sizing","sources":[{"title":"行业报告A","type":"industry_report","url":"https://example.com"}]}',
+            )
+        self.assertEqual(out["execute"]["type"], "research-hub")
+        self.assertTrue(out["result"]["ok"])
+        self.assertEqual(out["result"]["playbook"], "market_sizing")
 
     def test_execute_clarify_fallback_to_autonomous(self):
         with patch.object(skill_router, "route_text_enhanced", return_value={"skill": "clarify"}):

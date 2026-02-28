@@ -36,6 +36,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("ppt.generate", names)
         self.assertIn("image.generate", names)
         self.assertIn("market.report", names)
+        self.assertIn("research.report", names)
         self.assertIn("data.query", names)
 
     def test_state_sync_preferences_object_view_and_replay(self):
@@ -228,6 +229,29 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("evidence_object", out)
             self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
+
+    def test_execute_research_report(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            out = reg.execute(
+                "research.report",
+                text="请做中国支付SaaS市场的TAM/SAM/SOM测算",
+                params={
+                    "playbook": "market_sizing",
+                    "product": "支付SaaS",
+                    "geography": "中国",
+                    "sources": [{"title": "行业报告A", "type": "industry_report", "url": "https://example.com/report"}],
+                    "out_dir": str(root / "research_out"),
+                },
+            )
+            self.assertTrue(out.get("ok", False))
+            self.assertEqual(out.get("playbook"), "market_sizing")
+            self.assertIn("tam_sam_som", out.get("analysis_objects", {}))
+            self.assertIn("citation_block", out)
+            self.assertIn("ppt_bridge", out)
+            self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_bundle", out)
 
     def test_feedback_services(self):
         with tempfile.TemporaryDirectory() as td:

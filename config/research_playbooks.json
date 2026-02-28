@@ -1,0 +1,76 @@
+{
+  "playbooks": {
+    "market_sizing": {
+      "label": "Top-Down & Bottom-Up Market Sizing",
+      "category": "market",
+      "preferred_sources": ["industry reports", "regulatory data", "company filings", "pricing pages"],
+      "required_outputs": ["tam", "sam", "som", "assumption_register", "risk_to_assumptions"]
+    },
+    "competitor_teardown": {
+      "label": "MECE Competitor Teardown",
+      "category": "competition",
+      "preferred_sources": ["company websites", "product docs", "pricing pages", "customer reviews"],
+      "required_outputs": ["comparison_matrix", "vulnerabilities", "strategic_maneuvers"]
+    },
+    "profit_pool_value_chain": {
+      "label": "Profit Pool & Value Chain Mapping",
+      "category": "industry",
+      "preferred_sources": ["industry reports", "annual reports", "channel checks", "expert interviews"],
+      "required_outputs": ["value_chain", "profit_pool", "entry_recommendation"]
+    },
+    "five_forces_disruption": {
+      "label": "Porter's Five Forces + Disruption Matrix",
+      "category": "industry",
+      "preferred_sources": ["industry reports", "macro research", "technology trend reports", "regulations"],
+      "required_outputs": ["five_forces", "disruption_matrix", "incumbent_response"]
+    },
+    "jtbd_segmentation": {
+      "label": "Jobs-to-be-Done Segmentation",
+      "category": "customer",
+      "preferred_sources": ["customer interviews", "community forums", "reviews", "support logs"],
+      "required_outputs": ["jobs", "frictions", "feature_ideas"]
+    },
+    "economic_moat": {
+      "label": "Economic Moat Evaluator",
+      "category": "competition",
+      "preferred_sources": ["annual reports", "investor presentations", "industry structure analysis", "customer behavior data"],
+      "required_outputs": ["moat_scores", "breach_memo", "defensive_risk"]
+    },
+    "scenario_wargame": {
+      "label": "Scenario Planning / Wargaming",
+      "category": "strategy",
+      "preferred_sources": ["macro indicators", "internal KPIs", "competitor moves", "pricing benchmarks"],
+      "required_outputs": ["scenarios", "triggers", "contingency_playbooks"]
+    },
+    "blue_ocean_errc": {
+      "label": "Blue Ocean / White Space Finder",
+      "category": "strategy",
+      "preferred_sources": ["customer complaints", "feature comparisons", "industry norms", "adjacent market signals"],
+      "required_outputs": ["errc_grid", "white_space_hypothesis", "pilot_idea"]
+    },
+    "pricing_strategy": {
+      "label": "Pricing Strategy & WTP Optimizer",
+      "category": "strategy",
+      "preferred_sources": ["pricing pages", "customer interviews", "finance model", "usage telemetry"],
+      "required_outputs": ["pricing_models", "pros_cons", "recommended_tiers"]
+    },
+    "gtm_wedge": {
+      "label": "Go-To-Market Wedge Strategy",
+      "category": "gtm",
+      "preferred_sources": ["niche communities", "channel maps", "customer pain points", "incumbent blind spots"],
+      "required_outputs": ["wedge_segment", "hook", "90_day_plan"]
+    },
+    "pestle_risk": {
+      "label": "PESTLE Macro Analysis",
+      "category": "risk",
+      "preferred_sources": ["macro research", "regulations", "tax policy", "labor market data"],
+      "required_outputs": ["pestle_summary", "black_swan_risks", "board_watchouts"]
+    },
+    "ceo_text_deck": {
+      "label": "Day One Executive Summary Deck",
+      "category": "executive",
+      "preferred_sources": ["research synthesis", "financial implications", "competitor economics", "operating constraints"],
+      "required_outputs": ["five_slide_text_deck", "pivotal_tradeoff", "ppt_bridge"]
+    }
+  }
+}

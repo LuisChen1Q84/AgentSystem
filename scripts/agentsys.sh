@@ -2468,7 +2468,7 @@ Usage:
   scripts/agentsys.sh agent-feedback [add|stats|pending] [args...]
   scripts/agentsys.sh agent-learn [--apply --cfg <path>]
   scripts/agentsys.sh skill-contract-lint [--strict --cfg <path>]
-  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|governance|failure-review|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
+  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|research-report|governance|failure-review|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]

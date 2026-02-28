@@ -1,0 +1,698 @@
+#!/usr/bin/env python3
+"""Research Hub: evidence-led research report engine with playbook support."""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, List
+
+ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
+
+import sys
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from core.registry.delivery_protocol import build_output_objects
+from core.skill_intelligence import build_loop_closure, compose_prompt_v2
+from scripts.research_hub_html_renderer import render_research_html
+
+PLAYBOOKS_PATH = ROOT / "config" / "research_playbooks.json"
+METHODS_PATH = ROOT / "references" / "research_hub" / "methods.md"
+
+
+def _language(text: str) -> str:
+    for ch in text:
+        if "\u4e00" <= ch <= "\u9fff":
+            return "zh"
+    return "en"
+
+
+def _as_list(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [part.strip() for part in value.replace("，", ",").split(",") if part.strip()]
+    return []
+
+
+def _as_dict_list(value: Any) -> List[Dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    rows: List[Dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            rows.append(dict(item))
+        elif isinstance(item, str) and item.strip():
+            rows.append({"title": item.strip()})
+    return rows
+
+
+def _load_playbooks() -> Dict[str, Any]:
+    if not PLAYBOOKS_PATH.exists():
+        return {"playbooks": {}}
+    try:
+        data = json.loads(PLAYBOOKS_PATH.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {"playbooks": {}}
+
+
+def _reference_points() -> List[str]:
+    if not METHODS_PATH.exists():
+        return []
+    out: List[str] = []
+    for line in METHODS_PATH.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            out.append(stripped[2:].strip())
+    return out
+
+
+def _infer_playbook(text: str, values: Dict[str, Any]) -> str:
+    explicit = str(values.get("playbook", "")).strip()
+    if explicit:
+        return explicit
+    hay = f"{text} {json.dumps(values, ensure_ascii=False)}".lower()
+    rules = [
+        ("market_sizing", ["tam", "sam", "som", "market size", "市场规模"]),
+        ("competitor_teardown", ["competitor", "竞争", "对手", "teardown"]),
+        ("profit_pool_value_chain", ["profit pool", "value chain", "利润池", "价值链"]),
+        ("five_forces_disruption", ["porter", "five forces", "五力", "disruption"]),
+        ("jtbd_segmentation", ["jtbd", "jobs to be done", "job-to-be-done"]),
+        ("economic_moat", ["moat", "护城河"]),
+        ("scenario_wargame", ["scenario", "wargame", "base case", "bull case", "bear case"]),
+        ("blue_ocean_errc", ["blue ocean", "errc", "white space", "蓝海"]),
+        ("pricing_strategy", ["pricing", "ltv", "cac", "定价"]),
+        ("gtm_wedge", ["gtm", "wedge", "go-to-market", "beachhead"]),
+        ("pestle_risk", ["pestle", "regulatory", "宏观", "风险"]),
+        ("ceo_text_deck", ["text deck", "ceo deck", "5-slide", "董事会", "read-out"]),
+    ]
+    for playbook, keywords in rules:
+        if any(keyword in hay for keyword in keywords):
+            return playbook
+    return "competitor_teardown"
+
+
+def _extract_request(text: str, values: Dict[str, Any], lang: str, playbook: str) -> Dict[str, Any]:
+    title = str(values.get("title") or text or "Research report").strip()
+    company = str(values.get("company", "")).strip()
+    product = str(values.get("product", "")).strip()
+    geography = str(values.get("geography", values.get("region", "中国" if lang == "zh" else "global"))).strip()
+    industry = str(values.get("industry", "行业研究" if lang == "zh" else "industry research")).strip()
+    audience = str(values.get("audience", "管理层" if lang == "zh" else "Management")).strip()
+    objective = str(values.get("objective", "支持战略决策" if lang == "zh" else "Support strategic decision")).strip()
+    decision = str(values.get("decision", values.get("decision_ask", "明确下一步优先事项" if lang == "zh" else "Clarify the next strategic move"))).strip()
+    return {
+        "title": title,
+        "research_question": str(values.get("research_question", title)).strip(),
+        "company": company,
+        "product": product,
+        "geography": geography,
+        "industry": industry,
+        "audience": audience,
+        "objective": objective,
+        "decision": decision,
+        "playbook": playbook,
+        "competitors": _as_list(values.get("competitors")),
+        "features": _as_list(values.get("features", values.get("industry_features"))),
+        "budget_resources": str(values.get("budget_resources", values.get("budget", ""))).strip(),
+        "sources": _as_dict_list(values.get("sources")),
+        "known_facts": _as_list(values.get("known_facts")),
+    }
+
+
+def _source_plan(req: Dict[str, Any], playbook_meta: Dict[str, Any], lang: str) -> List[Dict[str, Any]]:
+    explicit = req.get("sources", []) if isinstance(req.get("sources", []), list) else []
+    if explicit:
+        return [
+            {
+                "name": str(item.get("name", item.get("title", f"Source {idx + 1}"))).strip(),
+                "type": str(item.get("type", "external")).strip(),
+                "purpose": str(item.get("purpose", "evidence")).strip(),
+                "priority": str(item.get("priority", "high")).strip(),
+            }
+            for idx, item in enumerate(explicit)
+        ]
+    preferred = playbook_meta.get("preferred_sources", []) if isinstance(playbook_meta.get("preferred_sources", []), list) else []
+    return [
+        {
+            "name": source,
+            "type": "planned",
+            "purpose": "support claims",
+            "priority": "high" if idx < 2 else "medium",
+        }
+        for idx, source in enumerate(preferred[:4])
+    ]
+
+
+def _evidence_ledger(req: Dict[str, Any], plan: List[Dict[str, Any]], lang: str) -> List[Dict[str, Any]]:
+    explicit = req.get("sources", []) if isinstance(req.get("sources", []), list) else []
+    if explicit:
+        rows = []
+        for idx, item in enumerate(explicit, start=1):
+            rows.append(
+                {
+                    "id": f"S{idx}",
+                    "title": str(item.get("title", item.get("name", f"Source {idx}"))).strip(),
+                    "type": str(item.get("type", "external")).strip(),
+                    "url": str(item.get("url", "")).strip(),
+                    "relevance": str(item.get("relevance", "high")).strip(),
+                    "note": str(item.get("note", item.get("summary", ""))).strip() or ("需核验原文" if lang == "zh" else "Validate original source"),
+                }
+            )
+        return rows
+    return [
+        {
+            "id": f"S{idx + 1}",
+            "title": str(item.get("name", f"Source {idx + 1}")),
+            "type": str(item.get("type", "planned")),
+            "url": "",
+            "relevance": str(item.get("priority", "medium")),
+            "note": "待补一手证据或明确假设" if lang == "zh" else "Backfill primary evidence or state assumption explicitly",
+        }
+        for idx, item in enumerate(plan)
+    ]
+
+
+def _assumption_register(req: Dict[str, Any], playbook: str, lang: str) -> List[Dict[str, Any]]:
+    if playbook == "market_sizing":
+        return [
+            {"name": "pricing", "value": "基于公开报价与平均折扣" if lang == "zh" else "Based on list price and implied discount", "risk": "high"},
+            {"name": "adoption_rate", "value": "以行业渗透率和可服务客群校准" if lang == "zh" else "Calibrated with penetration and serviceable users", "risk": "high"},
+            {"name": "population_base", "value": "用可服务企业/用户总量而非总人口" if lang == "zh" else "Use serviceable accounts, not total population", "risk": "medium"},
+        ]
+    if playbook in {"competitor_teardown", "economic_moat"}:
+        return [
+            {"name": "cost_structure", "value": "仅能做方向性估算" if lang == "zh" else "Directional estimate only", "risk": "high"},
+            {"name": "margin_pool", "value": "以公开财报和行业均值推断" if lang == "zh" else "Inferred from filings and industry averages", "risk": "medium"},
+        ]
+    if playbook in {"scenario_wargame", "pestle_risk"}:
+        return [
+            {"name": "macro_base_case", "value": "假设未发生极端政策与流动性冲击" if lang == "zh" else "Assume no extreme policy or liquidity shock", "risk": "medium"},
+            {"name": "competitor_reaction_time", "value": "对手在 1-2 个季度内反制" if lang == "zh" else "Competitors respond within 1-2 quarters", "risk": "high"},
+        ]
+    return [
+        {"name": "evidence_completeness", "value": "当前报告允许部分假设驱动，但需显式标注" if lang == "zh" else "Partial assumption-led analysis is allowed but must be explicit", "risk": "medium"},
+        {"name": "decision_horizon", "value": "以 12-24 个月决策窗口为主" if lang == "zh" else "Primary decision window is 12-24 months", "risk": "low"},
+    ]
+
+
+def _top_source_ref(evidence: List[Dict[str, Any]]) -> str:
+    return evidence[0]["id"] if evidence else "S1"
+
+
+def _report_body(playbook: str, req: Dict[str, Any], lang: str) -> Dict[str, Any]:
+    company = req.get("company") or ("目标公司" if lang == "zh" else "the company")
+    industry = req.get("industry") or ("相关行业" if lang == "zh" else "the industry")
+    geography = req.get("geography") or ("目标区域" if lang == "zh" else "target geography")
+    product = req.get("product") or ("该产品/服务" if lang == "zh" else "the product/service")
+    competitors = req.get("competitors", []) if isinstance(req.get("competitors", []), list) else []
+    comp_names = competitors[:3] or (["Competitor A", "Competitor B", "Competitor C"] if lang == "en" else ["对手A", "对手B", "对手C"])
+    features = req.get("features", []) if isinstance(req.get("features", []), list) else []
+
+    if playbook == "market_sizing":
+        tam = "50-80 亿元" if lang == "zh" else "USD 0.7B-1.1B"
+        sam = "18-28 亿元" if lang == "zh" else "USD 0.25B-0.40B"
+        som = "2-4 亿元" if lang == "zh" else "USD 30M-55M"
+        return {
+            "sections": [
+                {"title": "Sizing Logic", "body": f"Use top-down demand constraints and bottom-up account economics to size {product} in {geography}."},
+                {"title": "TAM / SAM / SOM", "body": f"TAM={tam}; SAM={sam}; SOM={som}."},
+                {"title": "Risk to Assumptions", "body": "Pricing realization, adoption slope, and serviceable account counts are the main swing factors."},
+            ],
+            "claims": [
+                {"claim": f"{product} has a meaningful but not unlimited market in {geography}.", "implication": "Enter with a sharp wedge rather than a broad launch."},
+                {"claim": "Bottom-up sizing is tighter than top-down sizing.", "implication": "Account-level conversion assumptions should drive the operating plan."},
+                {"claim": "SOM is primarily constrained by sales capacity and trust, not demand awareness.", "implication": "Execution design matters more than generic branding."},
+            ],
+            "analysis_objects": {
+                "tam_sam_som": {"tam": tam, "sam": sam, "som": som},
+                "top_down": ["population or account base", "penetration", "realized pricing"],
+                "bottom_up": ["addressable accounts", "win rate", "annual contract value"],
+            },
+        }
+    if playbook == "competitor_teardown":
+        return {
+            "sections": [
+                {"title": "MECE Comparison", "body": f"Compare {company} against {', '.join(comp_names)} across value proposition, economics, GTM, moats, and vulnerabilities."},
+                {"title": "Economics & Moats", "body": "The likely gap is not raw product breadth but distribution quality, switching friction, and operating leverage."},
+                {"title": "Strategic Maneuvers", "body": "Exploit under-served segments, simplify the offer, and attack slow incumbent response loops."},
+            ],
+            "claims": [
+                {"claim": f"{company or product} can win even if competitors are larger.", "implication": "Position on sharper segment focus and faster operating cadence."},
+                {"claim": "Estimated incumbent margins may hide support and implementation drag.", "implication": "Attack where their economics are least flexible."},
+                {"claim": "Competitor vulnerabilities are usually channel-bound or complexity-bound.", "implication": "Choose maneuvers that convert their scale into inertia."},
+            ],
+            "analysis_objects": {
+                "dimensions": [
+                    "Core Value Proposition",
+                    "Estimated Cost Structure & Margins",
+                    "Go-to-Market Strategy",
+                    "Technological/Operational Moats",
+                    "Key Vulnerabilities",
+                ],
+                "competitors": comp_names,
+                "maneuvers": [
+                    "Own one under-served subsegment",
+                    "Package a lower-friction offer",
+                    "Exploit slower enterprise implementation cycles",
+                ],
+            },
+        }
+    if playbook == "profit_pool_value_chain":
+        return {
+            "sections": [
+                {"title": "Value Chain", "body": f"Map {industry} from raw inputs to end-user monetization, highlighting which nodes own distribution, IP, and customer access."},
+                {"title": "Profit Pools", "body": "Highest-margin nodes typically coincide with scarce trust, regulated access, or software-enabled control points."},
+                {"title": "Entry Position", "body": f"A new entrant with {req.get('budget_resources') or 'limited scale'} should enter where value capture is high but incumbent rigidity is visible."},
+            ],
+            "claims": [
+                {"claim": "Profit pools are rarely evenly distributed across a value chain.", "implication": "Choose position based on value capture, not just market size."},
+                {"claim": "Control points with regulatory or customer lock-in deserve premium attention.", "implication": "Distribution and trust layers often matter more than raw throughput."},
+            ],
+            "analysis_objects": {
+                "value_chain": ["inputs", "processing", "distribution", "software/control layer", "end-user monetization"],
+                "profit_pool": ["low margin at commodity layers", "higher margin at control layers"],
+            },
+        }
+    if playbook == "five_forces_disruption":
+        return {
+            "sections": [
+                {"title": "Five Forces", "body": f"Assess force intensity for {industry} with explicit threat levels rather than generic descriptions."},
+                {"title": "Disruption Matrix", "body": "Pair force shifts with macro or technology disruptions that can change bargaining power."},
+                {"title": "Business Model Response", "body": "Recommend which parts of the model should be de-risked before disruption becomes visible in P&L."},
+            ],
+            "claims": [
+                {"claim": "The most dangerous force is the one that compounds with new technology or regulation.", "implication": "Watch the interaction, not the static force score."},
+                {"claim": "Incumbents usually fail by defending yesterday's margin pool.", "implication": "Restructure before the disruption is obvious."},
+            ],
+            "analysis_objects": {
+                "forces": [
+                    {"force": "Supplier Power", "threat": "Medium"},
+                    {"force": "Buyer Power", "threat": "High"},
+                    {"force": "Substitutes", "threat": "High"},
+                    {"force": "New Entrants", "threat": "Medium"},
+                    {"force": "Rivalry", "threat": "Existential"},
+                ],
+                "disruptions": ["automation", "AI-native workflows", "regulatory tightening"],
+            },
+        }
+    if playbook == "jtbd_segmentation":
+        return {
+            "sections": [
+                {"title": "Primary Jobs", "body": f"Define what customers are hiring {product} to do, independent of demographics."},
+                {"title": "Functional / Emotional / Social Layers", "body": "Separate core task completion from emotional reassurance and social signaling."},
+                {"title": "Feature Hypothesis", "body": "The best product feature removes the most painful recurring friction in the current journey."},
+            ],
+            "claims": [
+                {"claim": "Traditional personas often obscure the real job the customer is trying to complete.", "implication": "Design the offer around progress sought, not identity labels."},
+                {"claim": "Emotional and social jobs are often stronger than teams admit.", "implication": "Messaging and onboarding matter as much as feature depth."},
+            ],
+            "analysis_objects": {"jobs": ["save time", "reduce risk", "gain status", "unlock insight"]},
+        }
+    if playbook == "economic_moat":
+        return {
+            "sections": [
+                {"title": "Moat Scores", "body": f"Grade {company or product} across network effects, intangibles, cost advantage, switching costs, and efficient scale."},
+                {"title": "Breach Path", "body": "An activist-investor lens clarifies how a funded challenger can attack the strongest moat."},
+                {"title": "Defensive Implication", "body": "A moat is only durable if the company keeps reinvesting where challenger economics are least favorable."},
+            ],
+            "claims": [
+                {"claim": "Most moats are narrower in practice than in investor narratives.", "implication": "Test each moat against a credible breach plan."},
+                {"claim": "Switching costs and efficient scale often matter more than brand language.", "implication": "Operational moat evidence should outrank abstract messaging."},
+            ],
+            "analysis_objects": {
+                "moats": [
+                    {"name": "Network Effects", "score": 6},
+                    {"name": "Intangible Assets", "score": 7},
+                    {"name": "Cost Advantage", "score": 5},
+                    {"name": "Switching Costs", "score": 8},
+                    {"name": "Efficient Scale", "score": 6},
+                ]
+            },
+        }
+    if playbook == "scenario_wargame":
+        return {
+            "sections": [
+                {"title": "Scenarios", "body": "Lay out base, bull, and bear cases with explicit triggers rather than narrative optimism."},
+                {"title": "Trigger Board", "body": "Operationalize scenarios through trigger metrics the team can monitor monthly or weekly."},
+                {"title": "Contingency Playbooks", "body": "Each scenario should have a three-step response that the operating team can execute without rewriting the strategy."},
+            ],
+            "claims": [
+                {"claim": "A scenario is only useful if its triggers are observable.", "implication": "Tie planning to measurable conditions, not prose."},
+                {"claim": "Bear-case preparation often improves base-case resilience.", "implication": "Contingencies should shape present choices, not sit in appendices."},
+            ],
+            "analysis_objects": {
+                "scenarios": [
+                    {"name": "Base", "trigger": "current conversion stable", "playbook": ["protect core segment", "tighten cadence", "preserve flexibility"]},
+                    {"name": "Bull", "trigger": "rapid adoption and budget expansion", "playbook": ["expand channel", "accelerate hiring", "lock in share"]},
+                    {"name": "Bear", "trigger": "recession or price war", "playbook": ["protect cash", "defend best segment", "simplify portfolio"]},
+                ]
+            },
+        }
+    if playbook == "blue_ocean_errc":
+        baseline = features[:4] or (["speed", "breadth", "support", "customization"] if lang == "en" else ["速度", "覆盖", "服务", "定制"])
+        return {
+            "sections": [
+                {"title": "ERRC Grid", "body": "Separate what to eliminate, reduce, raise, and create relative to industry norms."},
+                {"title": "White Space", "body": "Focus on factors incumbents accept by habit rather than because customers truly value them."},
+                {"title": "Pilot Recommendation", "body": "The right blue-ocean move is usually a narrow pilot, not a full-market repositioning."},
+            ],
+            "claims": [
+                {"claim": "Industries often over-invest in inherited features with declining marginal value.", "implication": "The cleanest wedge may come from removing complexity."},
+                {"claim": "White space appears when customer friction is decoupled from industry competition factors.", "implication": "Compete on non-obvious value factors."},
+            ],
+            "analysis_objects": {"baseline_features": baseline},
+        }
+    if playbook == "pricing_strategy":
+        return {
+            "sections": [
+                {"title": "Pricing Models", "body": f"Compare value-based, usage-based, and tiered models for {product}."},
+                {"title": "CAC / LTV / Cash Flow Trade-offs", "body": "The right model balances conversion friction, expansion potential, and revenue predictability."},
+                {"title": "Recommended Tiers", "body": "Define feature gating so upgrade pressure reflects customer maturity, not arbitrary packaging."},
+            ],
+            "claims": [
+                {"claim": "Pricing architecture shapes growth economics as much as price level.", "implication": "Choose the model before choosing the number."},
+                {"claim": "Feature gating should mirror willingness-to-pay cliffs.", "implication": "Tiering is an operating model decision, not just a packaging exercise."},
+            ],
+            "analysis_objects": {
+                "models": ["value-based", "usage-based", "tiered SaaS"],
+                "tiers": ["starter", "growth", "enterprise"],
+            },
+        }
+    if playbook == "gtm_wedge":
+        return {
+            "sections": [
+                {"title": "Wedge Segment", "body": f"Identify the narrow segment in {industry} that incumbents under-serve and where a challenger can dominate first."},
+                {"title": "Hook & Distribution", "body": "The wedge should combine a painful problem with low-cost, high-trust distribution channels."},
+                {"title": "90-Day Plan", "body": "Sequence acquisition, proof creation, and expansion from the beachhead."},
+            ],
+            "claims": [
+                {"claim": "A challenger wins by monopolizing a narrow segment before broadening.", "implication": "Choose a segment with intensity, not just size."},
+                {"claim": "Low-cost distribution works when the message and segment are unusually precise.", "implication": "Precision beats reach at the start."},
+            ],
+            "analysis_objects": {
+                "channels": ["community partnerships", "founder-led outbound", "referral loops"],
+                "phases": ["hook", "proof", "expand"],
+            },
+        }
+    if playbook == "pestle_risk":
+        return {
+            "sections": [
+                {"title": "PESTLE Summary", "body": f"Focus on economic and legal factors for launching in {geography}, with explicit hidden barriers to entry."},
+                {"title": "Black Swan Risks", "body": "Surface rare but high-impact regulatory or macro risks that founders often ignore."},
+                {"title": "Board Watchouts", "body": "Convert macro complexity into a dense board-ready risk view."},
+            ],
+            "claims": [
+                {"claim": "Legal and economic drag often matter before product-market fit becomes visible.", "implication": "Entry timing and structure are strategic choices, not admin details."},
+                {"claim": "Black swans are most dangerous when the team lacks monitoring triggers.", "implication": "Turn overlooked risks into board watch items."},
+            ],
+            "analysis_objects": {
+                "pestle": ["political", "economic", "social", "technology", "legal", "environment"],
+                "black_swans": ["licensing regime shift", "cross-border settlement disruption"],
+            },
+        }
+    return {
+        "sections": [
+            {"title": "Executive TL;DR", "body": "Start with the bottom line and the hard choice leadership needs to make."},
+            {"title": "Market Reality", "body": "Summarize the core economics, competitive dynamics, and why action is required."},
+            {"title": "Strategic Alternatives", "body": "Frame a small number of options and make the uncomfortable recommendation explicit."},
+        ],
+        "claims": [
+            {"claim": "The right CEO deck turns analysis into a forced choice.", "implication": "A slide deck should compress the trade-off, not restate the research."},
+            {"claim": "Management teams act faster when the recommendation names what not to do.", "implication": "The deck should crystallize the uncomfortable decision."},
+        ],
+        "analysis_objects": {
+            "slides": [
+                "The Executive TL;DR",
+                "The Burning Platform",
+                "The Market Reality",
+                "Strategic Alternatives",
+                "The Uncomfortable Recommendation",
+            ]
+        },
+    }
+
+
+def _claim_cards(claims: List[Dict[str, Any]], evidence: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    ref = _top_source_ref(evidence)
+    out: List[Dict[str, Any]] = []
+    for item in claims:
+        out.append(
+            {
+                "claim": str(item.get("claim", "")).strip(),
+                "implication": str(item.get("implication", "")).strip(),
+                "evidence_ref": ref,
+            }
+        )
+    return out
+
+
+def _peer_review_findings(playbook: str, evidence: List[Dict[str, Any]], assumptions: List[Dict[str, Any]], lang: str) -> List[Dict[str, Any]]:
+    findings = [
+        {
+            "severity": "medium",
+            "finding": "核心判断仍有一部分基于假设而非一手数据支撑" if lang == "zh" else "Some pivotal claims still rely on assumptions rather than primary data",
+            "action": "补一手来源或显式降级为假设判断" if lang == "zh" else "Backfill a primary source or downgrade to an assumption-led statement",
+        }
+    ]
+    if playbook == "market_sizing":
+        findings.append(
+            {
+                "severity": "high",
+                "finding": "TAM/SAM/SOM 对价格兑现和渗透率极其敏感" if lang == "zh" else "TAM/SAM/SOM is highly sensitive to pricing realization and penetration",
+                "action": "做乐观/基准/保守三档敏感性分析" if lang == "zh" else "Run optimistic/base/conservative sensitivity bands",
+            }
+        )
+    if any(str(item.get("risk", "")).strip() == "high" for item in assumptions):
+        findings.append(
+            {
+                "severity": "medium",
+                "finding": "高风险假设比例较高" if lang == "zh" else "A high share of assumptions are marked high risk",
+                "action": "优先验证高风险假设后再冻结建议" if lang == "zh" else "Validate high-risk assumptions before freezing recommendations",
+            }
+        )
+    if not evidence:
+        findings.append(
+            {
+                "severity": "high",
+                "finding": "没有可追溯证据账本" if lang == "zh" else "No traceable evidence ledger was provided",
+                "action": "先建立 source plan 和证据索引" if lang == "zh" else "Build a source plan and evidence index first",
+            }
+        )
+    return findings
+
+
+def _citations(evidence: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "id": item.get("id", f"S{idx + 1}"),
+            "title": item.get("title", f"Source {idx + 1}"),
+            "url": item.get("url", ""),
+        }
+        for idx, item in enumerate(evidence)
+    ]
+
+
+def _ppt_bridge(req: Dict[str, Any], playbook: str, sections: List[Dict[str, Any]]) -> Dict[str, Any]:
+    deck_title = f"{req['title']} | Executive Readout"
+    if playbook == "ceo_text_deck":
+        slide_titles = [
+            "The Executive TL;DR",
+            "The Burning Platform",
+            "The Market Reality",
+            "Strategic Alternatives",
+            "The Uncomfortable Recommendation",
+        ]
+    else:
+        slide_titles = [item.get("title", f"Section {idx + 1}") for idx, item in enumerate(sections[:5])]
+    return {
+        "deck_title": deck_title,
+        "recommended_theme": "ivory-ledger" if playbook in {"market_sizing", "pestle_risk", "economic_moat"} else "boardroom-signal",
+        "slide_titles": slide_titles,
+        "slide_bodies": [item.get("body", "") for item in sections[:5]],
+        "ppt_params": {
+            "objective": req.get("objective", ""),
+            "audience": req.get("audience", ""),
+            "page_count": max(5, min(8, len(slide_titles))),
+            "decision_ask": req.get("decision", ""),
+        },
+    }
+
+
+def _markdown_report(payload: Dict[str, Any]) -> str:
+    req = payload["request"]
+    lines = [
+        f"# Research Hub Report | {req['title']}",
+        "",
+        f"- playbook: {payload['playbook']}",
+        f"- audience: {req['audience']}",
+        f"- objective: {req['objective']}",
+        f"- decision: {req['decision']}",
+        "",
+        "## Research Question",
+        "",
+        req["research_question"],
+        "",
+        "## Source Plan",
+        "",
+    ]
+    lines.extend(f"- {item['name']} | {item['type']} | {item['priority']}" for item in payload["source_plan"])
+    lines.extend(["", "## Assumption Register", ""])
+    lines.extend(f"- {item['name']}: {item['value']} | risk={item['risk']}" for item in payload["assumption_register"])
+    lines.extend(["", "## Core Sections", ""])
+    for item in payload["report_sections"]:
+        lines.extend([f"### {item['title']}", "", item["body"], ""])
+    lines.extend(["## Claim Cards", ""])
+    lines.extend(f"- {item['claim']} | implication: {item['implication']} | evidence: {item['evidence_ref']}" for item in payload["claim_cards"])
+    lines.extend(["", "## Peer Review Findings", ""])
+    lines.extend(f"- {item['severity']}: {item['finding']} | action: {item['action']}" for item in payload["peer_review_findings"])
+    lines.extend(["", "## Citations", ""])
+    lines.extend(f"- [{item['id']}] {item['title']}" for item in payload["citation_block"])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) -> Dict[str, Any]:
+    lang = _language(text)
+    playbooks = _load_playbooks()
+    playbook = _infer_playbook(text, values)
+    playbook_meta = (
+        playbooks.get("playbooks", {}).get(playbook, {})
+        if isinstance(playbooks.get("playbooks", {}), dict)
+        else {}
+    )
+    req = _extract_request(text, values, lang, playbook)
+    plan = _source_plan(req, playbook_meta if isinstance(playbook_meta, dict) else {}, lang)
+    evidence = _evidence_ledger(req, plan, lang)
+    assumptions = _assumption_register(req, playbook, lang)
+    body = _report_body(playbook, req, lang)
+    sections = body["sections"]
+    claims = _claim_cards(body["claims"], evidence)
+    citations = _citations(evidence)
+    review = _peer_review_findings(playbook, evidence, assumptions, lang)
+    ppt_bridge = _ppt_bridge(req, playbook, sections)
+    methods = _reference_points()
+
+    prompt_packet = compose_prompt_v2(
+        objective=f"Produce evidence-led research report via {playbook}",
+        language=lang,
+        context=req,
+        references=[*methods[:5], *[str(x.get('title', '')) for x in evidence[:4]]],
+        constraints=[
+            "Separate evidence from assumptions",
+            "Every major claim must map to one evidence reference or a marked assumption",
+            "Keep output decision-oriented rather than descriptive",
+            "Include peer review findings and citations",
+        ],
+        output_contract=[
+            "Return structured report sections",
+            "Return evidence ledger and assumption register",
+            "Return claim cards and citation block",
+            "Return ppt bridge for executive deck conversion",
+        ],
+        negative_constraints=[
+            "No unsupported consultant-style jargon",
+            "No hidden optimism in market sizing or margin assumptions",
+            "No recommendation without explicit evidence or assumption basis",
+        ],
+    )
+
+    payload: Dict[str, Any] = {
+        "as_of": dt.date.today().isoformat(),
+        "language": lang,
+        "playbook": playbook,
+        "summary": f"Research Hub built an evidence-led {playbook} report for {req['title']}.",
+        "request": req,
+        "source_plan": plan,
+        "evidence_ledger": evidence,
+        "assumption_register": assumptions,
+        "report_sections": sections,
+        "analysis_objects": body["analysis_objects"],
+        "claim_cards": claims,
+        "citation_block": citations,
+        "peer_review_findings": review,
+        "ppt_bridge": ppt_bridge,
+        "prompt_packet": prompt_packet,
+        "reference_digest": {"methods": methods[:6]},
+    }
+
+    out_root = out_dir or (ROOT / "日志" / "research_hub")
+    out_root.mkdir(parents=True, exist_ok=True)
+    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_json = out_root / f"research_report_{ts}.json"
+    out_md = out_root / f"research_report_{ts}.md"
+    out_html = out_root / f"research_report_{ts}.html"
+
+    out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_md.write_text(_markdown_report(payload), encoding="utf-8")
+    render_research_html(payload, out_html)
+
+    result: Dict[str, Any] = {
+        "ok": True,
+        "mode": "research-report-generated",
+        "summary": payload["summary"],
+        "playbook": playbook,
+        "request": req,
+        "source_plan": plan,
+        "evidence_ledger": evidence,
+        "assumption_register": assumptions,
+        "report_sections": sections,
+        "analysis_objects": body["analysis_objects"],
+        "claim_cards": claims,
+        "citation_block": citations,
+        "peer_review_findings": review,
+        "ppt_bridge": ppt_bridge,
+        "json_path": str(out_json),
+        "md_path": str(out_md),
+        "html_path": str(out_html),
+        "deliver_assets": {"items": [{"path": str(out_json)}, {"path": str(out_md)}, {"path": str(out_html)}]},
+        "prompt_packet": prompt_packet,
+        "loop_closure": build_loop_closure(
+            skill="research-hub",
+            status="completed",
+            evidence={"playbook": playbook, "section_count": len(sections), "citation_count": len(citations)},
+            next_actions=[
+                "Backfill primary sources for high-risk assumptions.",
+                "Run peer review before publishing externally.",
+                "Feed ppt_bridge into the McKinsey PPT engine if an executive deck is required.",
+            ],
+        ),
+    }
+    result.update(build_output_objects("research.report", result, entrypoint="scripts.research_hub"))
+    return result
+
+
+def build_cli() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Research Hub")
+    parser.add_argument("--text", required=True)
+    parser.add_argument("--params-json", default="{}")
+    parser.add_argument("--out-dir", default="")
+    return parser
+
+
+def main() -> int:
+    args = build_cli().parse_args()
+    try:
+        values = json.loads(args.params_json or "{}")
+        if not isinstance(values, dict):
+            raise ValueError("params-json must be object")
+    except Exception as exc:
+        print(json.dumps({"ok": False, "error": f"invalid params-json: {exc}"}, ensure_ascii=False, indent=2))
+        return 1
+
+    out_dir = Path(args.out_dir) if args.out_dir else None
+    out = run_request(args.text, values, out_dir)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

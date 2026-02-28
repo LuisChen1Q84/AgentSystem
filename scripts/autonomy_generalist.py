@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
 
 from apps.creative_studio.app import CreativeStudioApp
 from apps.market_hub.app import MarketHubApp
+from apps.research_hub.app import ResearchHubApp
 from apps.tooling_hub.app import ToolingHubApp
 from core.kernel.memory_store import load_memory, memory_rate, memory_snapshot, save_memory, update_strategy
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
@@ -37,8 +38,40 @@ ATTEMPTS_JSONL = "autonomy_attempts.jsonl"
 SUPPORTED_SKILLS = {
     "image-creator-hub": "image",
     "mckinsey-ppt": "ppt",
+    "research-hub": "research",
     "stock-market-hub": "stock",
     "digest": "digest",
+}
+RESEARCH_WORDS = {
+    "tam",
+    "sam",
+    "som",
+    "market sizing",
+    "competitor teardown",
+    "profit pool",
+    "value chain",
+    "five forces",
+    "jtbd",
+    "jobs to be done",
+    "economic moat",
+    "scenario planning",
+    "wargame",
+    "blue ocean",
+    "pricing strategy",
+    "gtm",
+    "pestle",
+    "research report",
+    "市场规模",
+    "竞争拆解",
+    "利润池",
+    "价值链",
+    "五力",
+    "护城河",
+    "情景推演",
+    "蓝海",
+    "定价策略",
+    "研报",
+    "研究报告",
 }
 
 
@@ -106,6 +139,7 @@ def _strategy_priority(strategy: str) -> int:
     order = {
         "mcp-generalist": 10,
         "digest": 20,
+        "research-hub": 25,
         "mckinsey-ppt": 30,
         "image-creator-hub": 40,
         "stock-market-hub": 50,
@@ -126,6 +160,13 @@ def _skill_score(text: str, skill: SkillMeta) -> Tuple[float, Dict[str, Any]]:
 
     score = round(trigger_score + overlap_score, 4)
     return score, {"trigger_hits": hits, "token_overlap": overlap}
+
+
+def _research_score(text: str) -> Tuple[float, Dict[str, Any]]:
+    low = text.lower()
+    hits = [word for word in RESEARCH_WORDS if word in low]
+    score = min(1.2, 0.18 * len(hits))
+    return round(score, 4), {"trigger_hits": hits[:8], "token_overlap": len(hits)}
 
 
 def _plan_candidates(
@@ -168,6 +209,24 @@ def _plan_candidates(
                     "skill_score": base,
                     "memory_rate": round(mem, 4),
                     **details,
+                },
+            }
+        )
+
+    research_base, research_details = _research_score(text)
+    if research_base >= min_skill_score:
+        mem = memory_rate(memory, "research-hub", prior=prior)
+        final = round(research_base * base_weight + mem * memory_weight, 4)
+        rows.append(
+            {
+                "strategy": "research-hub",
+                "executor": "research",
+                "score": final,
+                "priority": _strategy_priority("research-hub"),
+                "score_detail": {
+                    "skill_score": research_base,
+                    "memory_rate": round(mem, 4),
+                    **research_details,
                 },
             }
         )
@@ -216,6 +275,7 @@ def _exec_digest(text: str) -> Dict[str, Any]:
 def _exec_strategy(executor: str, text: str, params: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
     creative_app = CreativeStudioApp(root=ROOT)
     market_app = MarketHubApp(root=ROOT)
+    research_app = ResearchHubApp(root=ROOT)
     tooling_app = ToolingHubApp(root=ROOT)
     if executor == "image":
         out = creative_app.generate_image(text, params)
@@ -226,6 +286,9 @@ def _exec_strategy(executor: str, text: str, params: Dict[str, Any], cfg: Dict[s
     if executor == "stock":
         out = market_app.run_report(text, params)
         return {"ok": True, "mode": "stock", "result": out}
+    if executor == "research":
+        out = research_app.run_report(text, params)
+        return {"ok": bool(out.get("ok", False)), "mode": "research", "result": out}
     if executor == "digest":
         out = _exec_digest(text)
         return {"ok": bool(out.get("ok", False)), "mode": "digest", "result": out}

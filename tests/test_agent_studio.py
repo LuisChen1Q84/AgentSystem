@@ -33,6 +33,10 @@ class AgentStudioTest(unittest.TestCase):
         a4 = parser.parse_args(["diagnostics"])
         self.assertEqual(a4.cmd, "diagnostics")
 
+        a4r = parser.parse_args(["research-report", "--text", "做支付SaaS市场规模研究"])
+        self.assertEqual(a4r.cmd, "research-report")
+        self.assertEqual(a4r.text, "做支付SaaS市场规模研究")
+
         a41 = parser.parse_args(["governance", "--limit", "12"])
         self.assertEqual(a41.cmd, "governance")
         self.assertEqual(a41.limit, 12)
@@ -212,6 +216,33 @@ class AgentStudioTest(unittest.TestCase):
             self.assertIn("run_object", payload)
             self.assertEqual(payload.get("report", {}).get("count"), 1)
             self.assertEqual(payload.get("report", {}).get("rows", [])[0].get("lifecycle"), "applied")
+
+    def test_research_report_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._research_report_cmd(
+                    reg,
+                    text="请做支付SaaS市场规模研究",
+                    params_json=json.dumps(
+                        {
+                            "playbook": "market_sizing",
+                            "product": "支付SaaS",
+                            "geography": "中国",
+                            "sources": [{"title": "行业报告A", "type": "industry_report", "url": "https://example.com/report"}],
+                        },
+                        ensure_ascii=False,
+                    ),
+                    data_dir=str(root / "agent_os"),
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertEqual(payload.get("playbook"), "market_sizing")
+            self.assertIn("ppt_bridge", payload)
+            self.assertIn("delivery_bundle", payload)
 
     def test_repair_compare_cmd(self):
         with tempfile.TemporaryDirectory() as td:

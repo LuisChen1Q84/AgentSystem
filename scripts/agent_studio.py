@@ -136,6 +136,19 @@ def _failure_review_cmd(reg: AgentServiceRegistry, days: int, limit: int, data_d
     return 0
 
 
+def _research_report_cmd(reg: AgentServiceRegistry, text: str, params_json: str, data_dir: str) -> int:
+    try:
+        params = _parse_params_json(params_json)
+    except Exception as e:
+        _print_json({"ok": False, "error": f"invalid params-json: {e}"})
+        return 2
+    if data_dir.strip():
+        params.setdefault("out_dir", str(Path(data_dir) / "research_hub"))
+    out = reg.execute("research.report", text=text, params=params)
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
 def _repair_observe_cmd(reg: AgentServiceRegistry, limit: int, data_dir: str, out_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -523,6 +536,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
+        "research-report <text>, "
         "governance [days] [limit], failure-review [days], repair-observe [limit], repair-apply [days] [min_score] [max_actions], "
         "repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], "
         "repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, object-view <run_id>, "
@@ -561,6 +575,13 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "diagnostics":
             _diagnostics_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="")
+            continue
+        if cmd == "research-report":
+            text = " ".join(args).strip()
+            if not text:
+                print("usage: research-report <task text>")
+                continue
+            _research_report_cmd(reg, text=text, params_json="{}", data_dir=data_dir)
             continue
         if cmd == "governance":
             _governance_cmd(reg, days=int(args[0]) if args else 14, limit=int(args[1]) if len(args) > 1 else 10, data_dir=data_dir, out_dir="")
@@ -765,6 +786,10 @@ def build_cli() -> argparse.ArgumentParser:
     diag.add_argument("--days", type=int, default=14)
     diag.add_argument("--out-dir", default="")
 
+    research = sp.add_parser("research-report")
+    research.add_argument("--text", required=True)
+    research.add_argument("--params-json", default="{}")
+
     gov = sp.add_parser("governance")
     gov.add_argument("--days", type=int, default=14)
     gov.add_argument("--limit", type=int, default=10)
@@ -939,6 +964,8 @@ def main() -> int:
         return _state_stats_cmd(reg, data_dir=data_dir)
     if args.cmd == "diagnostics":
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "research-report":
+        return _research_report_cmd(reg, text=str(args.text), params_json=str(args.params_json), data_dir=data_dir)
     if args.cmd == "governance":
         return _governance_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "failure-review":

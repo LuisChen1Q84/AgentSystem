@@ -49,6 +49,22 @@ class AutonomyGeneralistTest(unittest.TestCase):
                 ["mcp-generalist"],
             )
 
+    def test_research_strategy_is_planned_for_research_tasks(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            root = Path(td)
+            out = run_request(
+                "请做中国支付SaaS市场的TAM/SAM/SOM测算和竞争拆解",
+                {
+                    "memory_file": str(root / "memory.json"),
+                    "log_dir": str(root / "autonomy_logs"),
+                    "out_dir": str(root / "research_out"),
+                },
+            )
+            self.assertTrue(out["ok"])
+            strategies = [row["strategy"] for row in out.get("candidates", [])]
+            self.assertIn("research-hub", strategies)
+            self.assertEqual(out.get("selected", {}).get("strategy"), "research-hub")
+
 
 if __name__ == "__main__":
     unittest.main()

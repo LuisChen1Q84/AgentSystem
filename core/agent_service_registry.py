@@ -27,6 +27,7 @@ from services.policy_service import PolicyService
 from services.preference_learning_service import PreferenceLearningService
 from services.ppt_service import PPTService
 from services.recommendation_service import RecommendationService
+from services.research_service import ResearchService
 from services.repair_apply_service import RepairApplyService, RepairApproveService, RepairCompareService, RepairListService, RepairRollbackService
 from services.repair_observe_service import RepairObserveService
 from services.repair_preset_service import RepairPresetService
@@ -65,6 +66,7 @@ class AgentServiceRegistry:
         self.ppt = PPTService(root=self.root)
         self.image = ImageService(root=self.root)
         self.market = MarketService(root=self.root)
+        self.research = ResearchService(root=self.root)
         self.data = DataService(root=self.root)
 
         self._services: Dict[str, ServiceSpec] = {
@@ -97,6 +99,7 @@ class AgentServiceRegistry:
             "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
             "image.generate": ServiceSpec("image.generate", "creative", "Generate image assets through image hub", "medium"),
             "market.report": ServiceSpec("market.report", "domain", "Generate stock market strategy report", "high"),
+            "research.report": ServiceSpec("research.report", "domain", "Generate evidence-led research report with citations and PPT bridge", "medium"),
             "data.query": ServiceSpec("data.query", "data", "Query DataHub metrics from private store", "medium"),
         }
 
@@ -366,6 +369,13 @@ class AgentServiceRegistry:
         if not text and not str(params.get("query", "")).strip():
             return error_response("market.report", "missing_text", code="missing_text").to_dict()
         return self.market.run(text, params).to_dict()
+
+    def _exec_research_report(self, **kwargs: Any) -> Dict[str, Any]:
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        text = str(kwargs.get("text", "") or params.get("research_question", "")).strip()
+        if not text:
+            return error_response("research.report", "missing_text", code="missing_text").to_dict()
+        return self.research.run(text, params).to_dict()
 
     def _exec_data_query(self, **kwargs: Any) -> Dict[str, Any]:
         params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}

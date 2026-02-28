@@ -24,6 +24,7 @@ try:
     from scripts.mcp_connector import Registry, Runtime, parse_params
     from scripts.image_creator_hub import load_cfg as load_image_hub_cfg
     from scripts.image_creator_hub import run_request as run_image_hub_request
+    from scripts.research_hub import run_request as run_research_hub_request
     from scripts.stock_market_hub import run_report as run_stock_hub_report
     from scripts.stock_market_hub import load_cfg as load_stock_hub_cfg
     from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
@@ -37,6 +38,7 @@ except ModuleNotFoundError:  # direct script execution
     from mcp_connector import Registry, Runtime, parse_params
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
     from image_creator_hub import run_request as run_image_hub_request  # type: ignore
+    from research_hub import run_request as run_research_hub_request  # type: ignore
     from stock_market_hub import run_report as run_stock_hub_report  # type: ignore
     from stock_market_hub import load_cfg as load_stock_hub_cfg  # type: ignore
     from stock_market_hub import pick_symbols as pick_stock_symbols  # type: ignore
@@ -97,6 +99,36 @@ IMAGE_WORDS = {
     "knolling",
     "表情包转3d",
     "裸眼3d",
+}
+RESEARCH_WORDS = {
+    "tam",
+    "sam",
+    "som",
+    "market sizing",
+    "competitor teardown",
+    "profit pool",
+    "value chain",
+    "five forces",
+    "jtbd",
+    "jobs to be done",
+    "economic moat",
+    "scenario",
+    "wargame",
+    "blue ocean",
+    "pricing strategy",
+    "gtm",
+    "pestle",
+    "研报",
+    "研究报告",
+    "市场规模",
+    "竞争拆解",
+    "利润池",
+    "价值链",
+    "五力",
+    "护城河",
+    "情景推演",
+    "蓝海",
+    "定价策略",
 }
 
 
@@ -169,6 +201,15 @@ def route_text(text: str, rules: List[Dict[str, Any]]) -> Dict[str, Any]:
             "description": "多子代理图像生成中枢",
             "keywords": [w for w in IMAGE_WORDS if w in low],
             "score": 88,
+        }
+
+    if any(w in low for w in RESEARCH_WORDS):
+        return {
+            "section": "研究分析类",
+            "skill": "research-hub",
+            "description": "证据驱动的研究报告与战略分析中枢",
+            "keywords": [w for w in RESEARCH_WORDS if w in low],
+            "score": 89,
         }
 
     plan_hits = [w for w in PLAN_WORDS if w in low]
@@ -416,6 +457,33 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
                     status="completed",
                     evidence={"assets": len(result.get("deliver_assets", {}).get("items", []))},
                     next_actions=["先在 HTML 预览中确认版式与逻辑，再进入 PPTX 精修"],
+                ),
+            }
+        except Exception as e:
+            TRACER.record_execution(trace_id, skill, False, str(e), duration_ms=int((time.time() - exec_start) * 1000))
+            raise
+
+    if skill == "research-hub":
+        exec_start = time.time()
+        try:
+            result = run_research_hub_request(text, user_params)
+            TRACER.record_execution(trace_id, skill, True, duration_ms=int((time.time() - exec_start) * 1000))
+            return {
+                "route": route,
+                "execute": {"type": "research-hub", "engine": "research_hub"},
+                "result": result,
+                "meta": {
+                    "mode": "evidence-led-research",
+                    "next_actions": [
+                        "补齐一手来源后再对外发布",
+                        "如需管理层汇报，可将 ppt_bridge 接到 mckinsey-ppt",
+                    ],
+                },
+                "loop_closure": build_loop_closure(
+                    skill=skill,
+                    status="completed" if result.get("ok") else "failed",
+                    evidence={"playbook": result.get("playbook", ""), "assets": len(result.get("deliver_assets", {}).get("items", []))},
+                    next_actions=["对高风险假设做二次核验，再进入外部分享或PPT输出"],
                 ),
             }
         except Exception as e:
