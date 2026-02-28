@@ -20,6 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.context_profile import apply_context_defaults, build_context_profile, context_brief
+from core.kernel.candidate_protocol import rank_candidates, selection_rationale
 from core.kernel.memory_router import build_memory_route
 from core.kernel.reflective_checkpoint import ppt_checkpoint
 from core.registry.delivery_protocol import build_output_objects
@@ -224,11 +225,7 @@ def _ppt_candidates(req: Dict[str, Any], context_meta: Dict[str, Any], lang: str
             "score": 72.0 + (12.0 if "investor" in audience or "finance" in audience else 0.0) + (4.0 if len(req.get("benchmarks", [])) >= 2 else 0.0),
         },
     ]
-    ranked = sorted(candidates, key=lambda item: (-float(item.get("score", 0.0)), str(item.get("candidate_id", ""))))
-    for idx, item in enumerate(ranked, start=1):
-        item["rank"] = idx
-        item["score"] = round(float(item.get("score", 0.0)), 2)
-    return ranked
+    return rank_candidates(candidates)
 
 
 def _metric_value_rows(req: Dict[str, Any], lang: str) -> List[Dict[str, str]]:
@@ -1694,6 +1691,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     req = _extract_values(text, resolved_values, lang)
     candidate_set = _ppt_candidates(req, context_meta, lang)
     selected_candidate = dict(candidate_set[0]) if candidate_set else {}
+    candidate_selection = selection_rationale(candidate_set, selected_candidate)
     if selected_candidate and not bool(req.get("theme_explicit", False)):
         req["theme"] = str(selected_candidate.get("theme", req.get("theme", "boardroom-signal"))).strip()
     layout_catalog = _load_layout_catalog()
@@ -1714,6 +1712,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             "context_profile": context_meta,
             "memory_fusion": memory_route.get("fusion", {}),
             "selected_candidate": selected_candidate,
+            "candidate_selection": candidate_selection,
         },
         references=[
             "SCQA",
@@ -1762,12 +1761,14 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "quality_review": quality_review,
         "candidate_set": candidate_set,
         "selected_candidate": selected_candidate,
+        "candidate_selection": candidate_selection,
         "design_handoff": design_handoff,
         "slides": slides,
         "prompt_packet": prompt_packet,
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
         "memory_route": memory_route,
+        "candidate_protocol": {"schema": "v1", "selection_rationale": candidate_selection},
     }
 
     out_root = out_dir or (ROOT / "日志" / "mckinsey_ppt")
@@ -1796,6 +1797,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "reference_digest": payload["reference_digest"],
         "candidate_set": candidate_set,
         "selected_candidate": selected_candidate,
+        "candidate_selection": candidate_selection,
         "design_handoff": design_handoff,
         "slides": slides,
         "export_manifest": payload["export_manifest"],
@@ -1816,6 +1818,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
         "memory_route": memory_route,
+        "candidate_protocol": {"schema": "v1", "selection_rationale": candidate_selection},
         "reflective_checkpoint": {},
         "loop_closure": build_loop_closure(
             skill="mckinsey-ppt",

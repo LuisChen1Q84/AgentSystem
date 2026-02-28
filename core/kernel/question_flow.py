@@ -184,6 +184,7 @@ def persist_pending_question_set(
     question_set: Dict[str, Any],
     params: Dict[str, Any],
     pause_reason: str,
+    session_id: str = "",
 ) -> Dict[str, Any]:
     question_set_id = f"qs_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
     resume_token = f"resume_{uuid.uuid4().hex}"
@@ -193,6 +194,7 @@ def persist_pending_question_set(
         "status": "pending",
         "ts": now_ts(),
         "run_id": run_id,
+        "session_id": session_id,
         "text": text,
         "task_kind": task_kind,
         "profile": profile,
@@ -248,6 +250,7 @@ def record_answer_packet(
     pending = load_pending_question_set(data_dir=data_dir, question_set_id=question_set_id)
     packet = {
         "question_set_id": question_set_id,
+        "session_id": str(pending.get("session_id", "")).strip(),
         "resume_token": str(pending.get("resume_token", "")).strip(),
         "ts": now_ts(),
         "answered_at": now_ts(),

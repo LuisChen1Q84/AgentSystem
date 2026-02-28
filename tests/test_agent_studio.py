@@ -49,6 +49,15 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(arr.cmd, "run-resume")
         self.assertEqual(arr.question_set_id, "qs_1")
 
+        asl = parser.parse_args(["session-list", "--limit", "6", "--status", "needs_input"])
+        self.assertEqual(asl.cmd, "session-list")
+        self.assertEqual(asl.limit, 6)
+        self.assertEqual(asl.status, "needs_input")
+
+        asv = parser.parse_args(["session-view", "--session-id", "session_1"])
+        self.assertEqual(asv.cmd, "session-view")
+        self.assertEqual(asv.session_id, "session_1")
+
         awb = parser.parse_args(["workbench", "--context-dir", "/tmp/ctx", "--days", "7", "--limit", "6"])
         self.assertEqual(awb.cmd, "workbench")
         self.assertEqual(awb.context_dir, "/tmp/ctx")
@@ -322,6 +331,7 @@ class AgentStudioTest(unittest.TestCase):
             )
             question_set_id = paused.get("question_set_id", "")
             self.assertTrue(question_set_id)
+            self.assertTrue(str(paused.get("session_id", "")).startswith("session_"))
 
             buf = io.StringIO()
             with redirect_stdout(buf):
@@ -352,6 +362,23 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertEqual(payload.get("source_question_set_id"), question_set_id)
+            session_id = str(payload.get("session_id", ""))
+            self.assertTrue(session_id.startswith("session_"))
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._session_list_cmd(reg, data_dir=str(root / "agent"), limit=10, status="all")
+            self.assertEqual(code, 0)
+            session_payload = json.loads(buf.getvalue())
+            self.assertTrue(session_payload.get("ok", False))
+            self.assertEqual(session_payload.get("report", {}).get("summary", {}).get("count"), 1)
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._session_view_cmd(reg, data_dir=str(root / "agent"), session_id=session_id)
+            self.assertEqual(code, 0)
+            session_view_payload = json.loads(buf.getvalue())
+            self.assertEqual(session_view_payload.get("report", {}).get("session_id"), session_id)
 
             buf = io.StringIO()
             with redirect_stdout(buf):
@@ -360,6 +387,8 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertEqual(payload.get("report", {}).get("summary", {}).get("project_name"), "Board Pack")
+            self.assertEqual(payload.get("report", {}).get("summary", {}).get("open_sessions"), 0)
+            self.assertTrue(payload.get("report", {}).get("quick_actions"))
 
     def test_research_report_cmd(self):
         with tempfile.TemporaryDirectory() as td:

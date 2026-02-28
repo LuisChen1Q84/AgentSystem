@@ -48,6 +48,7 @@ class QuestionFlowTest(unittest.TestCase):
                 question_set={"needed": True, "question_count": 2, "readiness_score": 50},
                 params={"profile": "strict"},
                 pause_reason="context_requires_questions",
+                session_id="session_1",
             )
             report = list_pending_question_sets(data_dir=data_dir, limit=10, status="pending")
             self.assertEqual(report["summary"]["pending"], 1)
@@ -60,6 +61,7 @@ class QuestionFlowTest(unittest.TestCase):
                 note="给董事会看",
             )
             self.assertEqual(packet["answers"]["page_budget"], "10")
+            self.assertEqual(packet["session_id"], "session_1")
 
             answered = list_pending_question_sets(data_dir=data_dir, limit=10, status="answered")
             self.assertEqual(answered["summary"]["answered"], 1)

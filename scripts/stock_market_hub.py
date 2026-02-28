@@ -24,6 +24,7 @@ ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from core.kernel.context_profile import context_brief
+from core.kernel.candidate_protocol import rank_candidates, selection_rationale
 from core.kernel.memory_router import build_memory_route
 from core.kernel.reflective_checkpoint import market_checkpoint
 from core.registry.delivery_protocol import build_output_objects
@@ -284,11 +285,7 @@ def _decision_candidates(committee: Dict[str, Any], source_gate: Dict[str, Any],
             "reason": "Preserve capital until coverage, freshness, and connector conflicts are repaired.",
         },
     ]
-    ranked = sorted(candidates, key=lambda item: (-float(item.get("score", 0.0)), str(item.get("candidate_id", ""))))
-    for idx, item in enumerate(ranked, start=1):
-        item["rank"] = idx
-        item["score"] = round(float(item.get("score", 0.0)), 2)
-    return ranked
+    return rank_candidates(candidates)
 
 
 def _apply_selected_decision_candidate(committee: Dict[str, Any], candidate: Dict[str, Any]) -> None:
@@ -653,10 +650,13 @@ def _run_report(
         payload["market_committee"] = _committee_payload(query, universe, analyze, backtest, portfolio, portfolio_backtest, freefirst, quality_gate)
         source_gate = payload.get("source_risk_gate", {}) if isinstance(payload.get("source_risk_gate", {}), dict) else {}
         decision_candidates = _decision_candidates(payload["market_committee"], source_gate, quality_gate)
+        candidate_selection = selection_rationale(decision_candidates, dict(decision_candidates[0]) if decision_candidates else {})
         payload["market_committee"]["decision_candidates"] = decision_candidates
         payload["market_committee"]["selected_decision_candidate"] = dict(decision_candidates[0]) if decision_candidates else {}
+        payload["market_committee"]["candidate_selection"] = candidate_selection
         if decision_candidates:
             _apply_selected_decision_candidate(payload["market_committee"], dict(decision_candidates[0]))
+        payload["candidate_protocol"] = {"schema": "v1", "selection_rationale": candidate_selection}
         payload["summary"] = f"Market committee completed a multi-role review for {query or universe}."
         payload["reflective_checkpoint"] = market_checkpoint(payload)
     else:

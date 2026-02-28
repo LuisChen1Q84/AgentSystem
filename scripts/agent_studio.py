@@ -143,6 +143,27 @@ def _run_resume_cmd(reg: AgentServiceRegistry, data_dir: str, question_set_id: s
     return 0 if bool(out.get("ok", False)) else 1
 
 
+def _session_list_cmd(reg: AgentServiceRegistry, data_dir: str, limit: int, status: str) -> int:
+    out = reg.execute(
+        "agent.session.list",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        limit=limit,
+        status=status,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _session_view_cmd(reg: AgentServiceRegistry, data_dir: str, session_id: str) -> int:
+    out = reg.execute(
+        "agent.session.view",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        session_id=session_id,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
 def _workbench_cmd(reg: AgentServiceRegistry, data_dir: str, context_dir: str, days: int, limit: int, out_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -670,7 +691,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
-        "Agent Studio REPL. commands: run <text>, context-profile <dir>, question-set <text>, question-pending [limit], workbench [days limit], observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
+        "Agent Studio REPL. commands: run <text>, context-profile <dir>, question-set <text>, question-pending [limit], question-answer <qs_id> <json>, run-resume <qs_id>, session-list [limit], session-view <session_id>, workbench [days limit], observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
         "research-report <text>, research-deck <text>, research-lookup <text>, market-report <text>, market-committee <text>, "
         "governance [days] [limit], failure-review [days], repair-observe [limit], repair-apply [days] [min_score] [max_actions], "
         "repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], "
@@ -711,6 +732,27 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "question-pending":
             _question_pending_cmd(reg, data_dir=data_dir, limit=int(args[0]) if args else 10, status="pending")
+            continue
+        if cmd == "question-answer":
+            if len(args) < 2:
+                print("usage: question-answer <question_set_id> <answers_json>")
+                continue
+            _question_answer_cmd(reg, data_dir=data_dir, question_set_id=str(args[0]), answers_json=str(args[1]), note="", resume=True)
+            continue
+        if cmd == "run-resume":
+            if not args:
+                print("usage: run-resume <question_set_id>")
+                continue
+            _run_resume_cmd(reg, data_dir=data_dir, question_set_id=str(args[0]), resume_token="")
+            continue
+        if cmd == "session-list":
+            _session_list_cmd(reg, data_dir=data_dir, limit=int(args[0]) if args else 12, status="all")
+            continue
+        if cmd == "session-view":
+            if not args:
+                print("usage: session-view <session_id>")
+                continue
+            _session_view_cmd(reg, data_dir=data_dir, session_id=str(args[0]))
             continue
         if cmd == "workbench":
             _workbench_cmd(
@@ -991,6 +1033,13 @@ def build_cli() -> argparse.ArgumentParser:
     run_resume.add_argument("--question-set-id", default="")
     run_resume.add_argument("--resume-token", default="")
 
+    session_list = sp.add_parser("session-list")
+    session_list.add_argument("--limit", type=int, default=12)
+    session_list.add_argument("--status", default="all")
+
+    session_view = sp.add_parser("session-view")
+    session_view.add_argument("--session-id", required=True)
+
     workbench = sp.add_parser("workbench")
     workbench.add_argument("--context-dir", default="")
     workbench.add_argument("--days", type=int, default=14)
@@ -1218,6 +1267,10 @@ def main() -> int:
         )
     if args.cmd == "run-resume":
         return _run_resume_cmd(reg, data_dir=data_dir, question_set_id=str(args.question_set_id), resume_token=str(args.resume_token))
+    if args.cmd == "session-list":
+        return _session_list_cmd(reg, data_dir=data_dir, limit=int(args.limit), status=str(args.status))
+    if args.cmd == "session-view":
+        return _session_view_cmd(reg, data_dir=data_dir, session_id=str(args.session_id))
     if args.cmd == "workbench":
         return _workbench_cmd(
             reg,

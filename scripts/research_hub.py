@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.context_profile import apply_context_defaults, build_context_profile, context_brief
+from core.kernel.candidate_protocol import rank_candidates, selection_rationale
 from core.kernel.memory_router import build_memory_route
 from core.kernel.reflective_checkpoint import research_checkpoint
 from core.registry.delivery_protocol import build_output_objects
@@ -1146,11 +1147,7 @@ def _research_candidates(
             "score": (100 - high_findings * 10) * 0.45 + evidence_density * 0.2 + context_fit * 0.2 + (15 if high_findings else 4),
         },
     ]
-    ranked = sorted(candidates, key=lambda item: (-float(item.get("score", 0.0)), str(item.get("candidate_id", ""))))
-    for idx, item in enumerate(ranked, start=1):
-        item["rank"] = idx
-        item["score"] = round(float(item.get("score", 0.0)), 2)
-    return ranked
+    return rank_candidates(candidates)
 
 
 def _markdown_report(payload: Dict[str, Any]) -> str:
@@ -1218,11 +1215,13 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     review = _peer_review_findings(playbook, evidence, assumptions, lang)
     candidate_set = _research_candidates(playbook, req, evidence, review, context_meta, lang)
     selected_candidate = dict(candidate_set[0]) if candidate_set else {}
+    candidate_selection = selection_rationale(candidate_set, selected_candidate)
     systematic_review = _build_systematic_review_outputs(playbook, req, evidence, assumptions, review, body["analysis_objects"], lang)
     ppt_bridge = _ppt_bridge(req, playbook, sections)
     if selected_candidate:
         ppt_bridge["story_angle"] = selected_candidate.get("angle", "")
         ppt_bridge["report_frame"] = selected_candidate.get("report_frame", [])
+        ppt_bridge["selection_rationale"] = candidate_selection
     methods = _reference_points()
 
     prompt_packet = compose_prompt_v2(
@@ -1233,6 +1232,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             "context_profile": context_meta,
             "memory_fusion": memory_route.get("fusion", {}),
             "selected_candidate": selected_candidate,
+            "candidate_selection": candidate_selection,
         },
         references=[
             *methods[:5],
@@ -1278,6 +1278,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "peer_review_findings": review,
         "candidate_set": candidate_set,
         "selected_candidate": selected_candidate,
+        "candidate_selection": candidate_selection,
         "systematic_review": systematic_review,
         "ppt_bridge": ppt_bridge,
         "prompt_packet": prompt_packet,
@@ -1285,6 +1286,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
         "memory_route": memory_route,
+        "candidate_protocol": {"schema": "v1", "selection_rationale": candidate_selection},
     }
 
     out_root = out_dir or (ROOT / "日志" / "research_hub")
@@ -1335,6 +1337,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "peer_review_findings": review,
         "candidate_set": candidate_set,
         "selected_candidate": selected_candidate,
+        "candidate_selection": candidate_selection,
         "systematic_review": systematic_review,
         "ppt_bridge": ppt_bridge,
         "json_path": str(out_json),
@@ -1365,6 +1368,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "context_profile": context_profile,
         "context_inheritance": resolved_values.get("context_inheritance", {}),
         "memory_route": memory_route,
+        "candidate_protocol": {"schema": "v1", "selection_rationale": candidate_selection},
         "reflective_checkpoint": {},
         "loop_closure": build_loop_closure(
             skill="research-hub",

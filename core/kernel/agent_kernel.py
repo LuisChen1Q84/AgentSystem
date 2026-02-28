@@ -21,6 +21,7 @@ try:
     from core.kernel.planner import build_run_blueprint, load_agent_cfg, now_ts, resolve_path
     from core.kernel.question_flow import persist_pending_question_set, should_pause_for_questions
     from core.kernel.reflective_checkpoint import kernel_checkpoint
+    from core.kernel.session_flow import ensure_session_id, persist_session, record_session_event
     from core.skill_intelligence import build_loop_closure
     from scripts import autonomy_generalist
 except ModuleNotFoundError:  # direct
@@ -28,6 +29,7 @@ except ModuleNotFoundError:  # direct
     from planner import build_run_blueprint, load_agent_cfg, now_ts, resolve_path  # type: ignore
     from question_flow import persist_pending_question_set, should_pause_for_questions  # type: ignore
     from reflective_checkpoint import kernel_checkpoint  # type: ignore
+    from session_flow import ensure_session_id, persist_session, record_session_event  # type: ignore
     from core.skill_intelligence import build_loop_closure  # type: ignore
     import autonomy_generalist  # type: ignore
 
@@ -38,10 +40,12 @@ class AgentKernel:
 
     def run(self, text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         started = dt.datetime.now()
+        runtime_values = dict(values)
+        session_id = ensure_session_id(runtime_values)
         cfg_path = resolve_path(values.get("cfg", CFG_DEFAULT), self.root)
         cfg = load_agent_cfg(cfg_path)
         defaults = cfg.get("defaults", {})
-        blueprint = build_run_blueprint(text, values, cfg)
+        blueprint = build_run_blueprint(text, runtime_values, cfg)
 
         run_request = blueprint["run_request"]
         run_context = blueprint["run_context"]
@@ -56,8 +60,21 @@ class AgentKernel:
         subtask_plan = blueprint["subtask_plan"]
         resolved_values = blueprint["resolved_values"]
 
-        log_dir = resolve_path(values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), self.root)
+        log_dir = resolve_path(runtime_values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), self.root)
         log_dir.mkdir(parents=True, exist_ok=True)
+        persist_session(
+            data_dir=log_dir,
+            session_id=session_id,
+            text=text,
+            task_kind=run_request.task.task_kind,
+            status="running",
+            profile=run_request.resolved_profile,
+            context_profile=context_profile,
+            run_id=run_request.run_id,
+            summary=f"Running {run_request.task.task_kind} task.",
+            meta={"profile_meta": profile_meta},
+        )
+        record_session_event(data_dir=log_dir, session_id=session_id, event="run_started", payload={"run_id": run_request.run_id, "task_kind": run_request.task.task_kind})
 
         pause_check = should_pause_for_questions(resolved_values, context_profile, clarification)
         if pause_check.get("pause", False):
@@ -71,8 +88,30 @@ class AgentKernel:
                 question_set=clarification,
                 params=resolved_values,
                 pause_reason=str(pause_check.get("reason", "")),
+                session_id=session_id,
+            )
+            session_record = persist_session(
+                data_dir=log_dir,
+                session_id=session_id,
+                text=text,
+                task_kind=run_request.task.task_kind,
+                status="needs_input",
+                profile=run_request.resolved_profile,
+                context_profile=context_profile,
+                run_id=run_request.run_id,
+                question_set_id=str(pending.get("question_set_id", "")),
+                resume_token=str(pending.get("resume_token", "")),
+                summary="Awaiting structured answers before execution can continue.",
+                meta={"pause_reason": str(pause_check.get("reason", ""))},
+            )
+            record_session_event(
+                data_dir=log_dir,
+                session_id=session_id,
+                event="needs_input",
+                payload={"question_set_id": pending.get("question_set_id", ""), "resume_token": pending.get("resume_token", "")},
             )
             return {
+                "session_id": session_id,
                 "run_id": run_request.run_id,
                 "ts": now_ts(),
                 "ok": True,
@@ -99,6 +138,7 @@ class AgentKernel:
                 "question_set_id": pending.get("question_set_id", ""),
                 "resume_token": pending.get("resume_token", ""),
                 "pending_question_set": pending,
+                "session": session_record,
                 "loop_closure": build_loop_closure(
                     skill="agent-os",
                     status="advisor",
@@ -133,6 +173,7 @@ class AgentKernel:
         selected_obj = result.get("selected", {}) if isinstance(result.get("selected", {}), dict) else {}
 
         payload = {
+            "session_id": session_id,
             "run_id": run_request.run_id,
             "ts": now_ts(),
             "ok": ok,
@@ -176,4 +217,25 @@ class AgentKernel:
             ),
         }
         payload["deliver_assets"] = persist_agent_payload(log_dir, payload)
+        session_record = persist_session(
+            data_dir=log_dir,
+            session_id=session_id,
+            text=text,
+            task_kind=run_request.task.task_kind,
+            status="completed" if ok else "failed",
+            profile=run_request.resolved_profile,
+            context_profile=context_profile,
+            run_id=run_request.run_id,
+            summary=str(payload.get("summary", "")) or f"{run_request.task.task_kind} run completed.",
+            selected_strategy=str(selected_obj.get("strategy", "")),
+            artifacts=list(payload.get("deliver_assets", {}).get("items", [])) if isinstance(payload.get("deliver_assets", {}).get("items", []), list) else [],
+            meta={"reflective_checkpoint": payload.get("reflective_checkpoint", {})},
+        )
+        payload["session"] = session_record
+        record_session_event(
+            data_dir=log_dir,
+            session_id=session_id,
+            event="run_completed" if ok else "run_failed",
+            payload={"run_id": run_request.run_id, "selected_strategy": selected_obj.get("strategy", ""), "status": session_record.get("status", "")},
+        )
         return payload

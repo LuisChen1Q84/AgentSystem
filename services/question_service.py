@@ -22,6 +22,7 @@ from core.kernel.question_flow import (
     record_answer_packet,
     mark_resumed,
 )
+from core.kernel.session_flow import persist_session, record_session_event
 from core.kernel.planner import task_kind_for_text
 from core.kernel.question_set import build_question_set
 from core.kernel.agent_kernel import AgentKernel
@@ -87,6 +88,28 @@ class AnswerQuestionSetService:
             return error_response("agent.question_set.answer", "missing_answers", code="missing_answers")
         packet = record_answer_packet(data_dir=Path(data_dir), question_set_id=question_set_id, answers=answers, note=note)
         pending = load_pending_question_set(data_dir=Path(data_dir), question_set_id=question_set_id)
+        session_id = str(packet.get("session_id", pending.get("session_id", ""))).strip()
+        if session_id and pending:
+            persist_session(
+                data_dir=Path(data_dir),
+                session_id=session_id,
+                text=str(pending.get("text", "")),
+                task_kind=str(pending.get("task_kind", "")),
+                status="answered",
+                profile=str(pending.get("profile", "")),
+                context_profile=pending.get("context_profile", {}) if isinstance(pending.get("context_profile", {}), dict) else {},
+                run_id=str(pending.get("run_id", "")),
+                question_set_id=str(pending.get("question_set_id", "")),
+                resume_token=str(pending.get("resume_token", "")),
+                summary=f"Answers recorded for {question_set_id}.",
+                meta={"answered_dimensions": packet.get("answered_dimensions", {})},
+            )
+            record_session_event(
+                data_dir=Path(data_dir),
+                session_id=session_id,
+                event="answers_recorded",
+                payload={"question_set_id": question_set_id, "answered_dimensions": packet.get("answered_dimensions", {})},
+            )
         payload: Dict[str, Any] = {
             "question_set_id": question_set_id,
             "answer_packet": packet,
@@ -124,8 +147,31 @@ class ResumeRunService:
         params = dict(pending.get("params", {})) if isinstance(pending.get("params", {}), dict) else {}
         params["answer_packet"] = packet
         params["question_mode"] = "skip"
+        session_id = str(packet.get("session_id", pending.get("session_id", ""))).strip()
+        if session_id:
+            params["session_id"] = session_id
         if not str(params.get("agent_log_dir", "")).strip():
             params["agent_log_dir"] = str(base)
+        if session_id:
+            persist_session(
+                data_dir=base,
+                session_id=session_id,
+                text=str(pending.get("text", "")),
+                task_kind=str(pending.get("task_kind", "")),
+                status="running",
+                profile=str(pending.get("profile", "")),
+                context_profile=pending.get("context_profile", {}) if isinstance(pending.get("context_profile", {}), dict) else {},
+                run_id=str(pending.get("run_id", "")),
+                question_set_id=str(pending.get("question_set_id", "")),
+                resume_token=str(pending.get("resume_token", "")),
+                summary="Resumed task after receiving missing inputs.",
+            )
+            record_session_event(
+                data_dir=base,
+                session_id=session_id,
+                event="run_resumed",
+                payload={"question_set_id": str(pending.get("question_set_id", "")), "resume_token": str(pending.get("resume_token", ""))},
+            )
         result = self.kernel.run(str(pending.get("text", "")), params)
         mark_resumed(data_dir=base, pending=pending, resumed_run_id=str(result.get("run_id", "")))
         payload = annotate_payload(

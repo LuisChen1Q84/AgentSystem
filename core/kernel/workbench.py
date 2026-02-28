@@ -15,6 +15,7 @@ from core.kernel.context_profile import build_context_profile, context_brief
 from core.kernel.diagnostics import build_agent_dashboard
 from core.kernel.governance_console import build_governance_console
 from core.kernel.question_flow import list_pending_question_sets
+from core.kernel.session_flow import list_sessions
 
 
 
@@ -116,6 +117,192 @@ def _focus_queue(pending: Dict[str, Any], dashboard: Dict[str, Any], governance:
     return items
 
 
+def _quick_actions(summary: Dict[str, Any], pending_rows: List[Dict[str, Any]], sessions: Dict[str, Any]) -> List[Dict[str, str]]:
+    actions: List[Dict[str, str]] = [
+        {"label": "Run Task", "command": "run --text '<task>'", "why": "Start a new task from the main agent entrypoint."},
+        {"label": "Diagnostics", "command": "diagnostics --days 14", "why": "Review recent delivery quality, failures, and feedback backlog."},
+    ]
+    if pending_rows:
+        first = pending_rows[0]
+        actions.append(
+            {
+                "label": "Answer Pending Questions",
+                "command": f"question-answer --question-set-id {first.get('question_set_id', '')} --answers-json '{{...}}' --resume",
+                "why": "Resume the paused task after providing the missing inputs.",
+            }
+        )
+    session_rows = sessions.get("rows", []) if isinstance(sessions.get("rows", []), list) else []
+    if session_rows:
+        actions.append(
+            {
+                "label": "Review Session",
+                "command": f"session-view --session-id {session_rows[0].get('session_id', '')}",
+                "why": "Inspect the most recent collaboration thread and its events.",
+            }
+        )
+    if int(summary.get("recent_failures", 0) or 0) > 0:
+        actions.append(
+            {
+                "label": "Failure Review",
+                "command": "failure-review --days 14 --limit 10",
+                "why": "Inspect grouped failure patterns before changing policy or repairs.",
+            }
+        )
+    return actions[:6]
+
+
+def _render_summary_cards(summary: Dict[str, Any]) -> str:
+    cards = [
+        ("Pending Questions", str(summary.get("pending_questions", 0))),
+        ("Open Sessions", str(summary.get("open_sessions", 0))),
+        ("Recent Failures", str(summary.get("recent_failures", 0))),
+        ("Pending Feedback", str(summary.get("pending_feedback", 0))),
+        ("Repair Applied", str(summary.get("repair_applied", 0))),
+        ("Market Source Gate", str(summary.get("market_source_gate_status", "n/a") or "n/a")),
+    ]
+    return "".join(
+        f"<div class='card'><div class='label'>{label}</div><div class='value'>{value}</div></div>"
+        for label, value in cards
+    )
+
+
+def _render_rows(rows: List[Dict[str, Any]], columns: List[str]) -> str:
+    if not rows:
+        return "<div class='empty'>none</div>"
+    head = "".join(f"<th>{col}</th>" for col in columns)
+    body_rows = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        cells = "".join(f"<td>{str(row.get(col, ''))}</td>" for col in columns)
+        body_rows.append(f"<tr>{cells}</tr>")
+    return "<table><thead><tr>" + head + "</tr></thead><tbody>" + "".join(body_rows) + "</tbody></table>"
+
+
+def render_workbench_html(report: Dict[str, Any]) -> str:
+    summary = report.get("summary", {}) if isinstance(report.get("summary", {}), dict) else {}
+    pending = report.get("pending_questions", {}) if isinstance(report.get("pending_questions", {}), dict) else {}
+    session_report = report.get("sessions", {}) if isinstance(report.get("sessions", {}), dict) else {}
+    workspace = report.get("workspace", {}) if isinstance(report.get("workspace", {}), dict) else {}
+    focus_queue = report.get("focus_queue", []) if isinstance(report.get("focus_queue", []), list) else []
+    quick_actions = report.get("quick_actions", []) if isinstance(report.get("quick_actions", []), list) else []
+    context_brief_obj = report.get("context_brief", {}) if isinstance(report.get("context_brief", {}), dict) else {}
+    html = f"""<html>
+<head>
+<meta charset="utf-8" />
+<title>Agent Workbench</title>
+<style>
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f2eb; color: #1e1d1a; margin: 0; }}
+.shell {{ max-width: 1360px; margin: 0 auto; padding: 28px; }}
+.hero {{ display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 20px; }}
+.hero h1 {{ margin: 0; font-size: 32px; }}
+.hero p {{ margin: 8px 0 0; color: #615c52; max-width: 760px; }}
+.cards {{ display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 22px 0; }}
+.card, .panel {{ background: #fffdfa; border: 1px solid #d8d0c0; border-radius: 16px; box-shadow: 0 10px 30px rgba(60, 47, 28, 0.06); }}
+.card {{ padding: 16px; }}
+.label {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #7b7467; }}
+.value {{ font-size: 28px; font-weight: 700; margin-top: 6px; }}
+.grid {{ display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 16px; }}
+.stack {{ display: grid; gap: 16px; }}
+.panel {{ padding: 18px; }}
+.panel h2 {{ margin: 0 0 12px; font-size: 18px; }}
+ul {{ margin: 0; padding-left: 18px; }}
+li {{ margin: 6px 0; }}
+table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+th, td {{ text-align: left; padding: 8px 10px; border-bottom: 1px solid #ece4d6; vertical-align: top; }}
+th {{ color: #6d6558; font-weight: 600; }}
+.empty {{ color: #8c8578; }}
+.action {{ padding: 12px 0; border-top: 1px solid #ece4d6; }}
+.action:first-child {{ border-top: 0; padding-top: 0; }}
+.cmd {{ display: inline-block; padding: 4px 8px; background: #f2ebdc; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 12px; margin: 6px 0; }}
+.bucket {{ margin-bottom: 12px; }}
+.bucket:last-child {{ margin-bottom: 0; }}
+@media (max-width: 1120px) {{
+  .cards {{ grid-template-columns: repeat(2, 1fr); }}
+  .grid {{ grid-template-columns: 1fr; }}
+}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="hero">
+    <div>
+      <h1>{summary.get("project_name", "") or "Personal Agent OS"}</h1>
+      <p>{context_brief_obj.get("summary", "") or "Unified workbench for recent runs, pending inputs, governance signals, and high-value deliverables."}</p>
+    </div>
+  </div>
+  <div class="cards">{_render_summary_cards(summary)}</div>
+  <div class="grid">
+    <div class="stack">
+      <div class="panel">
+        <h2>Focus Queue</h2>
+        {"<ul>" + "".join(f"<li>{item}</li>" for item in focus_queue) + "</ul>" if focus_queue else "<div class='empty'>none</div>"}
+      </div>
+      <div class="panel">
+        <h2>Pending Questions</h2>
+        {_render_rows(
+            [
+                {
+                    "question_set_id": row.get("question_set_id", ""),
+                    "task_kind": row.get("task_kind", ""),
+                    "status": row.get("status", ""),
+                    "readiness": (row.get("question_set", {}) if isinstance(row.get("question_set", {}), dict) else {}).get("readiness_score", ""),
+                }
+                for row in (pending.get("rows", []) if isinstance(pending.get("rows", []), list) else [])[:6]
+            ],
+            ["question_set_id", "task_kind", "status", "readiness"],
+        )}
+      </div>
+      <div class="panel">
+        <h2>Sessions</h2>
+        {_render_rows(
+            [
+                {
+                    "session_id": row.get("session_id", ""),
+                    "status": row.get("status", ""),
+                    "task_kind": row.get("task_kind", ""),
+                    "summary": row.get("summary", ""),
+                }
+                for row in (session_report.get("rows", []) if isinstance(session_report.get("rows", []), list) else [])[:6]
+            ],
+            ["session_id", "status", "task_kind", "summary"],
+        )}
+      </div>
+    </div>
+    <div class="stack">
+      <div class="panel">
+        <h2>Quick Actions</h2>
+        {"".join(
+            f"<div class='action'><div><strong>{item.get('label','')}</strong></div><div class='cmd'>{item.get('command','')}</div><div>{item.get('why','')}</div></div>"
+            for item in quick_actions
+        ) if quick_actions else "<div class='empty'>none</div>"}
+      </div>
+      <div class="panel">
+        <h2>Workspace Assets</h2>
+        {"".join(
+            f"<div class='bucket'><strong>{bucket}</strong><ul>" +
+            "".join(f"<li>{item.get('title','')} | {item.get('path','')}</li>" for item in (workspace.get(bucket, []) if isinstance(workspace.get(bucket, []), list) else [])[:3]) +
+            "</ul></div>"
+            for bucket in ("research", "ppt", "market")
+        )}
+      </div>
+      <div class="panel">
+        <h2>Governance Summary</h2>
+        <ul>
+          <li>Recent failures: {summary.get("recent_failures", 0)}</li>
+          <li>Pending feedback: {summary.get("pending_feedback", 0)}</li>
+          <li>Market source gate: {summary.get("market_source_gate_status", "")}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
+"""
+    return html + "\n"
+
+
 
 def build_workbench(*, data_dir: Path, context_dir: str = "", days: int = 14, limit: int = 8) -> Dict[str, Any]:
     data_dir = Path(data_dir)
@@ -123,6 +310,7 @@ def build_workbench(*, data_dir: Path, context_dir: str = "", days: int = 14, li
     dashboard = build_agent_dashboard(data_dir=data_dir, days=max(1, int(days)), pending_limit=max(1, int(limit)))
     governance = build_governance_console(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)), pending_limit=max(1, int(limit)))
     pending = list_pending_question_sets(data_dir=data_dir, limit=max(1, int(limit)), status="pending")
+    sessions = list_sessions(data_dir=data_dir, limit=max(1, int(limit)), status="all")
     workspace = {
         "research": _recent_research_assets(data_dir, limit=limit),
         "ppt": _recent_ppt_assets(limit=limit),
@@ -132,16 +320,19 @@ def build_workbench(*, data_dir: Path, context_dir: str = "", days: int = 14, li
         "window_days": max(1, int(days)),
         "project_name": str(context_profile.get("project_name", "")),
         "pending_questions": int(pending.get("summary", {}).get("pending", 0) or 0),
+        "open_sessions": int(sessions.get("summary", {}).get("active", 0) or 0),
         "recent_failures": int(dashboard.get("summary", {}).get("recent_failures", 0) or 0),
         "pending_feedback": int(dashboard.get("summary", {}).get("pending_feedback", 0) or 0),
         "repair_applied": int(dashboard.get("summary", {}).get("repair_applied", 0) or 0),
         "market_source_gate_status": str(governance.get("summary", {}).get("market_source_gate_status", "")),
     }
+    pending_rows = pending.get("rows", []) if isinstance(pending.get("rows", []), list) else []
     return {
         "summary": summary,
         "context_profile": context_profile,
         "context_brief": context_brief(context_profile),
         "pending_questions": pending,
+        "sessions": sessions,
         "dashboard": {
             "summary": dashboard.get("summary", {}),
             "recent_failures": dashboard.get("recent_failures", []),
@@ -153,6 +344,7 @@ def build_workbench(*, data_dir: Path, context_dir: str = "", days: int = 14, li
         },
         "workspace": workspace,
         "focus_queue": _focus_queue(pending, dashboard, governance),
+        "quick_actions": _quick_actions(summary, pending_rows, sessions),
     }
 
 
@@ -229,7 +421,7 @@ def write_workbench_files(report: Dict[str, Any], out_dir: Path) -> Dict[str, st
     html_path = out_dir / "agent_workbench_latest.html"
     json_text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
     md_text = render_workbench_md(report)
-    html_text = "<html><body><pre>" + md_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + "</pre></body></html>\n"
+    html_text = render_workbench_html(report)
     json_path.write_text(json_text, encoding="utf-8")
     md_path.write_text(md_text, encoding="utf-8")
     html_path.write_text(html_text, encoding="utf-8")

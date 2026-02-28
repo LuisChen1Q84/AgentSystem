@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 from core.kernel.question_flow import persist_pending_question_set
-from core.kernel.workbench import build_workbench
+from core.kernel.session_flow import persist_session
+from core.kernel.workbench import build_workbench, write_workbench_files
 
 
 class WorkbenchTest(unittest.TestCase):
@@ -42,12 +43,31 @@ class WorkbenchTest(unittest.TestCase):
                 question_set={"needed": True, "question_count": 2, "readiness_score": 54},
                 params={"profile": "strict"},
                 pause_reason="context_requires_questions",
+                session_id="session_1",
+            )
+            persist_session(
+                data_dir=data_dir,
+                session_id="session_1",
+                text="请做董事会汇报",
+                task_kind="presentation",
+                status="needs_input",
+                profile="strict",
+                context_profile={"context_dir": str(context_dir), "project_name": "Board Pack"},
+                run_id="agent_1",
+                question_set_id="qs_1",
+                summary="Waiting for missing inputs.",
             )
             report = build_workbench(data_dir=data_dir, context_dir=str(context_dir), days=14, limit=5)
             self.assertEqual(report["summary"]["pending_questions"], 1)
+            self.assertEqual(report["summary"]["open_sessions"], 1)
             self.assertEqual(report["context_profile"]["project_name"], "Board Pack")
             self.assertTrue(report["focus_queue"])
             self.assertEqual(report["pending_questions"]["rows"][0]["task_kind"], "presentation")
+            self.assertEqual(report["sessions"]["rows"][0]["session_id"], "session_1")
+            self.assertTrue(report["quick_actions"])
+            files = write_workbench_files(report, data_dir)
+            self.assertTrue(Path(files["html"]).exists())
+            self.assertIn("Pending Questions", Path(files["html"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.context_profile import apply_context_defaults, build_context_profile
+from core.kernel.candidate_protocol import selection_rationale
 from core.kernel.memory_router import build_memory_route
 from core.kernel.reflective_checkpoint import market_checkpoint
 from scripts.stock_market_hub import CFG_DEFAULT, _apply_selected_decision_candidate, _decision_candidates, load_cfg, pick_symbols, run_committee, run_report
@@ -370,10 +371,13 @@ class MarketHubApp:
                 payload["source_risk_gate"],
                 payload.get("quality_gate", {}) if isinstance(payload.get("quality_gate", {}), dict) else {},
             )
+            candidate_selection = selection_rationale(decision_candidates, dict(decision_candidates[0]) if decision_candidates else {})
             payload["market_committee"]["decision_candidates"] = decision_candidates
             payload["market_committee"]["selected_decision_candidate"] = dict(decision_candidates[0]) if decision_candidates else {}
+            payload["market_committee"]["candidate_selection"] = candidate_selection
             if decision_candidates:
                 _apply_selected_decision_candidate(payload["market_committee"], dict(decision_candidates[0]))
+            payload["candidate_protocol"] = {"schema": "v1", "selection_rationale": candidate_selection}
             loop_closure = payload.get("loop_closure", {})
             if isinstance(loop_closure, dict):
                 next_actions = loop_closure.get("next_actions", []) if isinstance(loop_closure.get("next_actions", []), list) else []

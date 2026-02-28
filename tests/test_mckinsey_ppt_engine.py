@@ -35,6 +35,8 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("quality_review", out)
             self.assertIn("candidate_set", out)
             self.assertIn("selected_candidate", out)
+            self.assertIn("candidate_selection", out)
+            self.assertIn("candidate_protocol", out)
             self.assertIn("memory_route", out)
             self.assertIn("reflective_checkpoint", out)
             self.assertIn("design_handoff", out)
@@ -133,6 +135,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("audience", out["context_inheritance"]["applied_defaults"])
             self.assertEqual(out["request"]["audience"], "board")
             self.assertEqual(out["memory_route"]["fusion"]["audience"], "board")
+            self.assertTrue(out["candidate_selection"]["selected_id"])
 
     def test_structured_business_data_flows_into_visual_payload_and_pptx(self):
         with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:

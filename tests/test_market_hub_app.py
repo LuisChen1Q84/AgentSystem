@@ -62,6 +62,8 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertNotIn("recommended_next_actions", out.get("market_committee", {}).get("decision", {}))
             self.assertTrue(out.get("market_committee", {}).get("decision_candidates"))
             self.assertTrue(out.get("market_committee", {}).get("selected_decision_candidate", {}).get("candidate_id"))
+            self.assertTrue(out.get("market_committee", {}).get("candidate_selection", {}).get("selected_id"))
+            self.assertIn("candidate_protocol", out)
             self.assertIn("reflective_checkpoint", out)
             self.assertEqual(out.get("memory_route", {}).get("fusion", {}).get("audience"), "investment committee")
 
@@ -104,6 +106,7 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertTrue(out.get("market_committee", {}).get("decision", {}).get("recommended_next_actions"))
             self.assertTrue(out.get("market_committee", {}).get("recommended_next_actions"))
             self.assertEqual(out.get("market_committee", {}).get("selected_decision_candidate", {}).get("stance"), "defensive")
+            self.assertEqual(out.get("market_committee", {}).get("candidate_selection", {}).get("selected_angle"), "defensive")
 
 
 if __name__ == "__main__":

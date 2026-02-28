@@ -26,6 +26,8 @@ TABLE_SPECS = {
     "preferences": ("pref_key", "pref_key TEXT PRIMARY KEY, ts TEXT, payload_json TEXT NOT NULL"),
     "pending_questions": ("question_set_id", "question_set_id TEXT PRIMARY KEY, ts TEXT, status TEXT, payload_json TEXT NOT NULL"),
     "answer_packets": ("question_set_id", "question_set_id TEXT PRIMARY KEY, ts TEXT, payload_json TEXT NOT NULL"),
+    "sessions": ("session_id", "session_id TEXT PRIMARY KEY, ts TEXT, status TEXT, payload_json TEXT NOT NULL"),
+    "session_events": ("event_id", "event_id TEXT PRIMARY KEY, ts TEXT, session_id TEXT, event TEXT, payload_json TEXT NOT NULL"),
 }
 
 
@@ -68,6 +70,12 @@ class StateStore:
         elif table == "pending_questions":
             cols.append("status")
             vals.append(str((extra or {}).get("status", "")).strip())
+        elif table == "sessions":
+            cols.append("status")
+            vals.append(str((extra or {}).get("status", "")).strip())
+        elif table == "session_events":
+            cols.extend(["session_id", "event"])
+            vals.extend([str((extra or {}).get("session_id", "")).strip(), str((extra or {}).get("event", "")).strip()])
         cols.append("payload_json")
         vals.append(json.dumps(payload, ensure_ascii=False))
         placeholders = ",".join("?" for _ in cols)
@@ -209,6 +217,22 @@ def sync_state_store(data_dir: Path) -> Dict[str, Any]:
         if question_set_id:
             store.upsert("answer_packets", question_set_id, str(row.get("ts", "")), row)
             synced["answer_packets"] += 1
+    for row in _load_jsonl(base / "agent_sessions.jsonl"):
+        session_id = str(row.get("session_id", "")).strip()
+        if session_id:
+            store.upsert("sessions", session_id, str(row.get("ts", "")), row, extra={"status": str(row.get("status", ""))})
+            synced["sessions"] += 1
+    for row in _load_jsonl(base / "agent_session_events.jsonl"):
+        event_id = str(row.get("event_id", "")).strip()
+        if event_id:
+            store.upsert(
+                "session_events",
+                event_id,
+                str(row.get("ts", "")),
+                row,
+                extra={"session_id": str(row.get("session_id", "")), "event": str(row.get("event", ""))},
+            )
+            synced["session_events"] += 1
     prefs_file = base / "agent_user_preferences.json"
     prefs = _load_json(prefs_file)
     if prefs:

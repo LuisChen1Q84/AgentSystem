@@ -29,6 +29,8 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.question_set.pending", names)
         self.assertIn("agent.question_set.answer", names)
         self.assertIn("agent.run.resume", names)
+        self.assertIn("agent.session.list", names)
+        self.assertIn("agent.session.view", names)
         self.assertIn("agent.workbench", names)
         self.assertIn("agent.repairs.apply", names)
         self.assertIn("agent.repairs.approve", names)
@@ -257,6 +259,16 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
             self.assertEqual(out.get("context_profile", {}).get("project_name"), "Weekly Review")
+            self.assertTrue(str(out.get("session_id", "")).startswith("session_"))
+            self.assertEqual(out.get("session", {}).get("status"), "completed")
+
+            sessions = reg.execute("agent.session.list", data_dir=str(root / "agent"), limit=10, status="all")
+            self.assertTrue(sessions.get("ok", False))
+            self.assertEqual(sessions.get("report", {}).get("summary", {}).get("count"), 1)
+            session_id = sessions.get("report", {}).get("rows", [])[0].get("session_id", "")
+            session_view = reg.execute("agent.session.view", data_dir=str(root / "agent"), session_id=session_id)
+            self.assertTrue(session_view.get("ok", False))
+            self.assertEqual(session_view.get("report", {}).get("session_id"), session_id)
 
     def test_execute_context_and_question_services(self):
         with tempfile.TemporaryDirectory() as td:
