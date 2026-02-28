@@ -117,6 +117,22 @@ class ResearchHubTest(unittest.TestCase):
             self.assertTrue(Path(out["pptx_path"]).exists())
             self.assertIn("research_payload", out.get("deck_seed", {}))
 
+    def test_systematic_review_assets_flow_into_deck_seed(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = run_deck_request(
+                "请为数字疗法主题制定系统文献搜索策略，并输出 PRISMA 方案与 deck",
+                {
+                    "playbook": "systematic_search",
+                    "research_question": "数字疗法在慢病管理中的效果",
+                },
+                out_dir=Path(td),
+            )
+            self.assertTrue(out.get("ok", False))
+            research_payload = out.get("deck_seed", {}).get("research_payload", {})
+            self.assertIn("systematic_review", research_payload)
+            self.assertTrue(research_payload.get("systematic_review", {}).get("prisma_flow"))
+            self.assertTrue(research_payload.get("appendix_assets", []))
+
 
 if __name__ == "__main__":
     unittest.main()

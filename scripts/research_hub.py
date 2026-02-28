@@ -1011,6 +1011,7 @@ def _deck_seed(payload: Dict[str, Any]) -> Dict[str, Any]:
     assumptions = payload.get("assumption_register", []) if isinstance(payload.get("assumption_register", []), list) else []
     review = payload.get("peer_review_findings", []) if isinstance(payload.get("peer_review_findings", []), list) else []
     ppt_bridge = payload.get("ppt_bridge", {}) if isinstance(payload.get("ppt_bridge", {}), dict) else {}
+    systematic_review = payload.get("systematic_review", {}) if isinstance(payload.get("systematic_review", {}), dict) else {}
 
     metric_values: List[Dict[str, Any]] = []
     tam = analysis.get("tam_sam_som", {}) if isinstance(analysis.get("tam_sam_som", {}), dict) else {}
@@ -1071,6 +1072,14 @@ def _deck_seed(payload: Dict[str, Any]) -> Dict[str, Any]:
             "timing": "本周",
         }
     ]
+    appendix_assets = [
+        {"label": "Appendix Markdown", "path": str(payload.get("appendix_md_path", "")).strip()},
+        {"label": "Quality Scorecard CSV", "path": str(payload.get("quality_scorecard_csv_path", "")).strip()},
+        {"label": "Citation Appendix CSV", "path": str(payload.get("citation_appendix_csv_path", "")).strip()},
+        {"label": "Review Workbook", "path": str(payload.get("review_appendix_xlsx_path", "")).strip()},
+        {"label": "PRISMA SVG", "path": str(payload.get("prisma_svg_path", "")).strip()},
+    ]
+    appendix_assets = [item for item in appendix_assets if item["path"]]
 
     return {
         "topic": str(ppt_bridge.get("deck_title", req.get("title", "Research Readout"))).strip(),
@@ -1093,6 +1102,8 @@ def _deck_seed(payload: Dict[str, Any]) -> Dict[str, Any]:
             "citation_block": payload.get("citation_block", []),
             "peer_review_findings": review,
             "assumption_register": assumptions,
+            "systematic_review": systematic_review,
+            "appendix_assets": appendix_assets,
         },
     }
 

@@ -131,6 +131,8 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
     research_review = research_payload.get("peer_review_findings", []) if isinstance(research_payload.get("peer_review_findings", []), list) else []
     research_assumptions = research_payload.get("assumption_register", []) if isinstance(research_payload.get("assumption_register", []), list) else []
     research_citations = research_payload.get("citation_block", []) if isinstance(research_payload.get("citation_block", []), list) else []
+    research_systematic_review = research_payload.get("systematic_review", {}) if isinstance(research_payload.get("systematic_review", {}), dict) else {}
+    research_appendix_assets = research_payload.get("appendix_assets", []) if isinstance(research_payload.get("appendix_assets", []), list) else []
     topic = str(values.get("topic") or text or "Business strategy").strip()
     default_audience = "管理层" if lang == "zh" else "Management"
     default_objective = "支持管理层决策" if lang == "zh" else "Support decision making"
@@ -176,6 +178,8 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "research_review": research_review,
         "research_assumptions": research_assumptions,
         "research_citations": research_citations,
+        "research_systematic_review": research_systematic_review,
+        "research_appendix_assets": research_appendix_assets,
     }
 
 
@@ -556,25 +560,58 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
         }
     if layout == "appendix_evidence":
         research_citations = req.get("research_citations", []) if isinstance(req.get("research_citations", []), list) else []
-        if research_citations:
-            return {
-                "kind": "appendix_evidence",
-                "sources": [
-                    {
-                        "label": str(item.get("title", item.get("id", ""))).strip(),
-                        "status": str(item.get("id", "")).strip() or ("citation" if lang == "en" else "引用"),
-                        "detail": str(item.get("url", "")).strip(),
-                    }
-                    for item in research_citations[:5]
-                ],
-            }
-        return {
+        systematic_review = req.get("research_systematic_review", {}) if isinstance(req.get("research_systematic_review", {}), dict) else {}
+        appendix_assets = req.get("research_appendix_assets", []) if isinstance(req.get("research_appendix_assets", []), list) else []
+        citation_appendix = systematic_review.get("citation_appendix", []) if isinstance(systematic_review.get("citation_appendix", []), list) else []
+        sources_seed = research_citations or citation_appendix
+        prisma_flow = systematic_review.get("prisma_flow", []) if isinstance(systematic_review.get("prisma_flow", []), list) else []
+        quality_scorecard = systematic_review.get("quality_scorecard", []) if isinstance(systematic_review.get("quality_scorecard", []), list) else []
+        appendix_payload = {
             "kind": "appendix_evidence",
-            "sources": [
-                {"label": item, "status": "ready" if idx == 0 else "verify"}
-                for idx, item in enumerate(evidence[:4])
+            "sources": [],
+            "prisma_flow": [
+                {
+                    "stage": str(item.get("stage", "")).strip(),
+                    "count": int(item.get("count", 0) or 0),
+                }
+                for item in prisma_flow[:5]
+                if str(item.get("stage", "")).strip()
+            ],
+            "quality_rows": [
+                {
+                    "study_id": str(item.get("study_id", "")).strip(),
+                    "risk_of_bias": str(item.get("risk_of_bias", "")).strip(),
+                    "certainty": str(item.get("certainty", "")).strip(),
+                }
+                for item in quality_scorecard[:4]
+                if str(item.get("study_id", "")).strip()
+            ],
+            "appendix_assets": [
+                {
+                    "label": str(item.get("label", "")).strip(),
+                    "path": str(item.get("path", "")).strip(),
+                }
+                for item in appendix_assets[:4]
+                if str(item.get("label", "")).strip() and str(item.get("path", "")).strip()
             ],
         }
+        if sources_seed:
+            appendix_payload["sources"] = [
+                {
+                    "label": str(item.get("title", item.get("id", ""))).strip(),
+                    "status": str(item.get("id", "")).strip() or ("citation" if lang == "en" else "引用"),
+                    "detail": str(item.get("url", item.get("path", ""))).strip(),
+                }
+                for item in sources_seed[:5]
+            ]
+            return appendix_payload
+        if research_citations:
+            return appendix_payload
+        appendix_payload["sources"] = [
+                {"label": item, "status": "ready" if idx == 0 else "verify"}
+                for idx, item in enumerate(evidence[:4])
+        ]
+        return appendix_payload
     if layout == "metric_deep_dive":
         metrics = _metric_value_rows(req, lang)
         return {

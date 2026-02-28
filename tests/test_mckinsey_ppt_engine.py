@@ -193,6 +193,42 @@ class McKinseyPptEngineTest(unittest.TestCase):
                 self.assertIn("行业报告A", slide_xml)
                 self.assertIn("https://example.com/a", slide_xml)
 
+    def test_systematic_review_appendix_flows_into_html_and_pptx(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            out = run_request(
+                "帮我生成系统综述deck",
+                {
+                    "page_count": 11,
+                    "research_payload": {
+                        "citation_block": [
+                            {"id": "S1", "title": "行业报告A", "url": "https://example.com/a"},
+                        ],
+                        "systematic_review": {
+                            "prisma_flow": [{"stage": "identified", "count": 120}, {"stage": "included", "count": 16}],
+                            "quality_scorecard": [{"study_id": "S1", "risk_of_bias": "low", "certainty": "moderate"}],
+                        },
+                        "appendix_assets": [
+                            {"label": "PRISMA SVG", "path": "/tmp/prisma.svg"},
+                        ],
+                    },
+                },
+                Path(td),
+            )
+            appendix = out["slides"][-1]["visual_payload"]
+            self.assertEqual(appendix["kind"], "appendix_evidence")
+            self.assertEqual(appendix["prisma_flow"][0]["count"], 120)
+            self.assertEqual(appendix["quality_rows"][0]["study_id"], "S1")
+            self.assertEqual(appendix["appendix_assets"][0]["label"], "PRISMA SVG")
+
+            html_text = Path(out["html_path"]).read_text(encoding="utf-8")
+            self.assertIn("PRISMA Flow", html_text)
+            self.assertIn("/tmp/prisma.svg", html_text)
+
+            with ZipFile(out["pptx_path"]) as zf:
+                slide_xml = zf.read(f"ppt/slides/slide{len(out['slides'])}.xml").decode("utf-8")
+                self.assertIn("identified: 120", slide_xml)
+                self.assertIn("PRISMA SVG: /tmp/prisma.svg", slide_xml)
+
 
 if __name__ == "__main__":
     unittest.main()

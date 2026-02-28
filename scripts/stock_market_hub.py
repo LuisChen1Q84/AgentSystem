@@ -418,15 +418,29 @@ def render_md(payload: Dict[str, Any]) -> str:
         if source_evidence_map.get("by_connector"):
             lines.extend(["", "### Source Evidence Map", ""])
             for connector, count in source_evidence_map.get("by_connector", {}).items():
-                lines.append(f"- {connector}: {count}")
+                confidence = source_evidence_map.get("connector_confidence", {}).get(connector, "")
+                recency = source_evidence_map.get("connector_recency", {}).get(connector, "")
+                lines.append(f"- {connector}: {count} | confidence={confidence} | recency_score={recency}")
+        if source_evidence_map.get("source_recency_score"):
+            lines.extend(["", "### Source Recency Score", "", f"- overall: {source_evidence_map.get('source_recency_score', 0)}"])
+        if source_evidence_map.get("sec_form_digest"):
+            lines.extend(["", "### SEC Form Digest", ""])
+            for item in source_evidence_map.get("sec_form_digest", [])[:6]:
+                lines.append(f"- {item.get('form','')}: {item.get('count',0)}")
         if source_evidence_map.get("event_timeline"):
             lines.extend(["", "### Event Timeline", ""])
             for item in source_evidence_map.get("event_timeline", [])[:6]:
-                lines.append(f"- {item.get('date','')} | {item.get('connector','')} | {item.get('title','')} | {item.get('location','')}")
+                lines.append(
+                    f"- {item.get('date','')} | {item.get('connector','')} | {item.get('title','')} | {item.get('location','')} | "
+                    f"confidence={item.get('confidence','')} | recency={item.get('recency_score','')}"
+                )
         if source_evidence_map.get("highlights"):
             lines.extend(["", "### Source Highlights", ""])
             for item in source_evidence_map.get("highlights", [])[:6]:
-                lines.append(f"- {item.get('connector','')} | {item.get('headline','')} | {item.get('summary','')}")
+                lines.append(
+                    f"- {item.get('connector','')} | {item.get('headline','')} | {item.get('summary','')} | "
+                    f"confidence={item.get('confidence','')} | recency={item.get('recency_score','')}"
+                )
         if source_evidence_map.get("watchouts"):
             lines.extend(["", "### Source Watchouts", ""])
             for item in source_evidence_map.get("watchouts", [])[:6]:

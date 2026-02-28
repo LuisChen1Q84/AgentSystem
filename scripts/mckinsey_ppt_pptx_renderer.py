@@ -510,8 +510,11 @@ def _decision_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
 def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     sources = payload.get("sources", []) if isinstance(payload.get("sources", []), list) else []
+    prisma_flow = payload.get("prisma_flow", []) if isinstance(payload.get("prisma_flow", []), list) else []
+    quality_rows = payload.get("quality_rows", []) if isinstance(payload.get("quality_rows", []), list) else []
+    appendix_assets = payload.get("appendix_assets", []) if isinstance(payload.get("appendix_assets", []), list) else []
     shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
-    for idx, item in enumerate(sources[:4], start=0):
+    for idx, item in enumerate(sources[:2], start=0):
         shapes.append(
             _textbox_shape(
                 6 + idx,
@@ -522,6 +525,72 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 580000,
                 [str(item.get("label", "")), f"Status: {item.get('status', '')}", str(item.get("detail", "")).strip()],
                 font_size=1240,
+                color=colors["ink"],
+                fill=colors["panel"],
+                line=colors["line"],
+                bold_first=True,
+            )
+        )
+    prisma_lines = ["PRISMA flow"] + [
+        f"{item.get('stage', '')}: {item.get('count', '')}"
+        for item in prisma_flow[:5]
+        if str(item.get("stage", "")).strip()
+    ]
+    quality_lines = ["Quality scorecard"] + [
+        f"{item.get('study_id', '')} | {item.get('risk_of_bias', '')} | {item.get('certainty', '')}"
+        for item in quality_rows[:4]
+        if str(item.get("study_id", "")).strip()
+    ]
+    asset_lines = ["Appendix assets"] + [
+        f"{item.get('label', '')}: {item.get('path', '')}"
+        for item in appendix_assets[:3]
+        if str(item.get("label", "")).strip() and str(item.get("path", "")).strip()
+    ]
+    if len(prisma_lines) > 1:
+        shapes.append(
+            _textbox_shape(
+                10,
+                "Prisma Summary",
+                700000,
+                3700000,
+                4500000,
+                1600000,
+                prisma_lines,
+                font_size=1220,
+                color=colors["ink"],
+                fill=colors["panel"],
+                line=colors["line"],
+                bold_first=True,
+            )
+        )
+    if len(quality_lines) > 1:
+        shapes.append(
+            _textbox_shape(
+                11,
+                "Quality Summary",
+                5500000,
+                2100000,
+                4600000,
+                1500000,
+                quality_lines,
+                font_size=1180,
+                color=colors["ink"],
+                fill=colors["panel"],
+                line=colors["line"],
+                bold_first=True,
+            )
+        )
+    if len(asset_lines) > 1:
+        shapes.append(
+            _textbox_shape(
+                12,
+                "Appendix Assets",
+                5500000,
+                3800000,
+                4600000,
+                1500000,
+                asset_lines,
+                font_size=1120,
                 color=colors["ink"],
                 fill=colors["panel"],
                 line=colors["line"],

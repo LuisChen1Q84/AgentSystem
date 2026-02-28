@@ -359,6 +359,9 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
         )
     if kind == "appendix_evidence":
         sources = payload.get("sources", []) if isinstance(payload.get("sources", []), list) else []
+        prisma_flow = payload.get("prisma_flow", []) if isinstance(payload.get("prisma_flow", []), list) else []
+        quality_rows = payload.get("quality_rows", []) if isinstance(payload.get("quality_rows", []), list) else []
+        appendix_assets = payload.get("appendix_assets", []) if isinstance(payload.get("appendix_assets", []), list) else []
         return (
             '<section class="visual-stage">'
             '<div class="visual-head">Evidence Index</div>'
@@ -371,7 +374,29 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 '</div>'
                 for item in sources
             )
-            + '</div></section>'
+            + '</div>'
+            + (
+                '<div class="visual-grid three-up appendix-grid">'
+                '<div class="visual-card"><h4>PRISMA Flow</h4><ul>'
+                + "".join(f'<li>{_esc(item.get("stage", ""))}: {_esc(item.get("count", ""))}</li>' for item in prisma_flow)
+                + '</ul></div>'
+                '<div class="visual-card"><h4>Quality Scorecard</h4><ul>'
+                + "".join(
+                    f'<li>{_esc(item.get("study_id", ""))} | {_esc(item.get("risk_of_bias", ""))} | {_esc(item.get("certainty", ""))}</li>'
+                    for item in quality_rows
+                )
+                + '</ul></div>'
+                '<div class="visual-card"><h4>Appendix Assets</h4><ul>'
+                + "".join(
+                    f'<li>{_esc(item.get("label", ""))}: {_esc(item.get("path", ""))}</li>'
+                    for item in appendix_assets
+                )
+                + '</ul></div>'
+                '</div>'
+                if prisma_flow or quality_rows or appendix_assets
+                else ""
+            )
+            + '</section>'
         )
     if kind == "metric_deep_dive":
         metric = payload.get("focus_metric", {}) if isinstance(payload.get("focus_metric", {}), dict) else {}
