@@ -44,6 +44,28 @@ class GovernanceConsoleTest(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            (root / "market_committee_latest.json").write_text(
+                json.dumps(
+                    {
+                        "query": "QQQ committee",
+                        "market_committee": {
+                            "decision": {
+                                "stance": "defensive",
+                                "conviction": "low",
+                                "sizing_band": "0%",
+                                "source_adjusted": True,
+                                "recommended_next_actions": ["Refresh SEC filings"],
+                            },
+                            "source_gate_status": "elevated",
+                            "source_risk_flags": ["source_gap"],
+                            "source_recency_score": 28,
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
             report = build_governance_console(data_dir=root, days=14, limit=10)
             self.assertEqual(report["summary"]["runs"], 1)
@@ -52,12 +74,16 @@ class GovernanceConsoleTest(unittest.TestCase):
             self.assertTrue(report["preset_drift"]["alerts"])
             self.assertTrue(report["failure_review"]["repair_actions"])
             self.assertTrue(report["recommendations"])
+            self.assertEqual(report["summary"]["market_source_gate_status"], "elevated")
+            self.assertEqual(report["summary"]["market_source_adjusted"], 1)
+            self.assertEqual(report["dashboard"]["market_governance"]["query"], "QQQ committee")
 
             files = write_governance_console_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())
             self.assertTrue(Path(files["html"]).exists())
             self.assertIn("Drift Alerts", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("Market Source Governance", Path(files["md"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -198,6 +198,53 @@ def _repair_governance_summary(data_dir: Path, limit: int = 20) -> Dict[str, Any
 
 
 
+def _market_governance_summary(data_dir: Path) -> Dict[str, Any]:
+    candidates = [
+        data_dir / "market_committee_latest.json",
+        ROOT / "日志" / "stock_market_hub" / "latest.json",
+    ]
+    payload: Dict[str, Any] = {}
+    source_path = ""
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            item = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(item, dict):
+            payload = item
+            source_path = str(path)
+            break
+    if not payload:
+        return {}
+    committee = payload.get("market_committee", {}) if isinstance(payload.get("market_committee", {}), dict) else {}
+    decision = committee.get("decision", {}) if isinstance(committee.get("decision", {}), dict) else {}
+    source_gate = committee.get("source_risk_gate", {}) if isinstance(committee.get("source_risk_gate", {}), dict) else {}
+    if not source_gate and isinstance(payload.get("source_risk_gate", {}), dict):
+        source_gate = dict(payload.get("source_risk_gate", {}))
+    return {
+        "path": source_path,
+        "query": str(payload.get("query", "")),
+        "stance": str(decision.get("stance", "")),
+        "conviction": str(decision.get("conviction", "")),
+        "sizing_band": str(decision.get("sizing_band", "")),
+        "source_adjusted": bool(decision.get("source_adjusted", False)),
+        "source_gate_status": str(committee.get("source_gate_status", source_gate.get("status", ""))),
+        "source_risk_flags": (
+            list(committee.get("source_risk_flags", source_gate.get("flags", [])))
+            if isinstance(committee.get("source_risk_flags", source_gate.get("flags", [])), list)
+            else []
+        ),
+        "source_recency_score": float(committee.get("source_recency_score", 0.0) or 0.0),
+        "recommended_next_actions": (
+            list(committee.get("recommended_next_actions", decision.get("recommended_next_actions", [])))
+            if isinstance(committee.get("recommended_next_actions", decision.get("recommended_next_actions", [])), list)
+            else []
+        ),
+    }
+
+
 def _quality_band(score: float) -> str:
     if score >= 0.85:
         return "strong"
@@ -265,6 +312,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     scoped_evidence_rows = [row for row in evidence_rows if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
     risk_dist = Counter(str(r.get("risk_level", "unknown")) for r in scoped_evidence_rows if str(r.get("risk_level", "")).strip())
     repair_governance = _repair_governance_summary(data_dir)
+    market_governance = _market_governance_summary(data_dir)
     repair_observe = build_repair_observation_report(data_dir=data_dir, limit=10)
     repair_preset_inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=_local_presets_file(data_dir))
     policy_tuning = tune_policy(
@@ -298,6 +346,8 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "repair_last_rolled_back_at": str(repair_governance.get("activity", {}).get("last_rolled_back", {}).get("ts", "")),
         "repair_promote_recommended": int(repair_observe.get("summary", {}).get("promote_recommended", 0) or 0),
         "repair_rollback_recommended": int(repair_observe.get("summary", {}).get("rollback_recommended", 0) or 0),
+        "market_source_gate_status": str(market_governance.get("source_gate_status", "")),
+        "market_source_adjusted": 1 if market_governance.get("source_adjusted", False) else 0,
     }
 
     report = {
@@ -307,6 +357,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "evaluation": eval_summary,
         "object_coverage": object_coverage,
         "repair_governance": repair_governance,
+        "market_governance": market_governance,
         "repair_observe": repair_observe,
         "repair_preset_effectiveness": {
             "count": int(repair_preset_inventory.get("count", 0) or 0),
@@ -320,7 +371,15 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "pending_feedback": pending,
         "recent_deliveries": deliveries,
         "strategy_top": [{"strategy": k, "runs": v} for k, v in strategy_dist.most_common(5)],
-        "recommendations": _recommendations(obs_summary, eval_summary, len(pending), failures, object_coverage) + list(policy_tuning.get("recommendations", [])),
+        "recommendations": _recommendations(obs_summary, eval_summary, len(pending), failures, object_coverage)
+        + (
+            [
+                f"Market source gate is {market_governance.get('source_gate_status','unknown')}; refresh evidence and close missing connectors before acting on the committee stance."
+            ]
+            if str(market_governance.get("source_gate_status", "")).lower() not in {"", "clear", "ok"}
+            else []
+        )
+        + list(policy_tuning.get("recommendations", [])),
         "sources": {
             "runs": str(data_dir / "agent_runs.jsonl"),
             "evaluations": str(data_dir / "agent_evaluations.jsonl"),
@@ -342,6 +401,7 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
     s = report.get("summary", {})
     object_coverage = report.get("object_coverage", {})
     repair_governance = report.get("repair_governance", {}) if isinstance(report.get("repair_governance", {}), dict) else {}
+    market_governance = report.get("market_governance", {}) if isinstance(report.get("market_governance", {}), dict) else {}
     repair_activity = repair_governance.get("activity", {}) if isinstance(repair_governance.get("activity", {}), dict) else {}
     governance_stream = repair_governance.get("stream", []) if isinstance(repair_governance.get("stream", []), list) else []
     preset_effectiveness = report.get("repair_preset_effectiveness", {}) if isinstance(report.get("repair_preset_effectiveness", {}), dict) else {}
@@ -358,6 +418,8 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
         f"- recent_failures: {s.get('recent_failures', 0)}",
         f"- last_run_at: {s.get('last_run_at', '')}",
         f"- last_feedback_at: {s.get('last_feedback_at', '')}",
+        f"- market_source_gate_status: {s.get('market_source_gate_status', '')}",
+        f"- market_source_adjusted: {s.get('market_source_adjusted', 0)}",
         "",
         "## Object Coverage",
         "",
@@ -422,6 +484,26 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
                 )
         else:
             lines.append("- none")
+    lines += ["", "## Market Source Governance", ""]
+    if market_governance:
+        lines += [
+            f"- query: {market_governance.get('query', '')}",
+            f"- stance: {market_governance.get('stance', '')}",
+            f"- conviction: {market_governance.get('conviction', '')}",
+            f"- sizing_band: {market_governance.get('sizing_band', '')}",
+            f"- source_gate_status: {market_governance.get('source_gate_status', '')}",
+            f"- source_adjusted: {1 if market_governance.get('source_adjusted', False) else 0}",
+            f"- source_recency_score: {market_governance.get('source_recency_score', 0.0)}",
+            f"- source_risk_flags: {','.join(market_governance.get('source_risk_flags', []))}",
+        ]
+        next_actions = market_governance.get("recommended_next_actions", []) if isinstance(market_governance.get("recommended_next_actions", []), list) else []
+        lines.append("- recommended_next_actions:")
+        if next_actions:
+            lines += [f"  - {item}" for item in next_actions]
+        else:
+            lines.append("  - none")
+    else:
+        lines.append("- none")
     lines += ["", "## Recommendations", ""]
     lines += [f"- {x}" for x in report.get("recommendations", [])]
     lines += ["", "## Top Strategies", "", "| strategy | runs |", "|---|---:|"]
@@ -483,6 +565,7 @@ def render_dashboard_html(report: Dict[str, Any]) -> str:
     repair_stream = report.get("repair_governance", {}).get("stream", []) if isinstance(report.get("repair_governance", {}), dict) else []
     preset_effectiveness = report.get("repair_preset_effectiveness", {}) if isinstance(report.get("repair_preset_effectiveness", {}), dict) else {}
     preset_dimensions = preset_effectiveness.get("dimensions", {}) if isinstance(preset_effectiveness.get("dimensions", {}), dict) else {}
+    market_governance = report.get("market_governance", {}) if isinstance(report.get("market_governance", {}), dict) else {}
     repair_stream_rows: List[str] = []
     for row in repair_stream:
         if not isinstance(row, dict):
@@ -514,6 +597,26 @@ def render_dashboard_html(report: Dict[str, Any]) -> str:
         ) or "<li>none</li>"
         dimension_sections.append(f"<h3>{label}</h3><ul>{rows_html}</ul>")
     dimension_html = "".join(dimension_sections)
+    market_actions = market_governance.get("recommended_next_actions", []) if isinstance(market_governance.get("recommended_next_actions", []), list) else []
+    market_html = (
+        "<ul>"
+        + "".join(
+            [
+                f"<li>query: {market_governance.get('query','')}</li>",
+                f"<li>stance: {market_governance.get('stance','')}</li>",
+                f"<li>conviction: {market_governance.get('conviction','')}</li>",
+                f"<li>sizing_band: {market_governance.get('sizing_band','')}</li>",
+                f"<li>source_gate_status: {market_governance.get('source_gate_status','')}</li>",
+                f"<li>source_adjusted: {1 if market_governance.get('source_adjusted', False) else 0}</li>",
+                f"<li>source_recency_score: {market_governance.get('source_recency_score',0.0)}</li>",
+                f"<li>source_risk_flags: {', '.join(market_governance.get('source_risk_flags', []))}</li>",
+            ]
+        )
+        + ("".join(f"<li>next_action: {item}</li>" for item in market_actions) or "<li>next_action: none</li>")
+        + "</ul>"
+        if market_governance
+        else "<ul><li>none</li></ul>"
+    )
     fail_html = "".join(
         f"<li>{x.get('ts','')} | {x.get('task_kind','')} | {x.get('selected_strategy','')}</li>"
         for x in report.get("recent_failures", [])
@@ -534,6 +637,7 @@ body {{ margin:0; font-family:"IBM Plex Sans","Noto Sans SC",sans-serif; backgro
 <div class="panel"><h2>Recommendations</h2><ul>{rec_html}</ul></div>
 <div class="panel"><h2>Repair Governance</h2><ul>{repair_html}</ul><h3>Recent Activity</h3><ul>{repair_activity_html}</ul><h3>Recent Governance Events</h3><ul>{repair_recent_html}</ul><h3>Governance Stream</h3><ul>{repair_stream_html}</ul></div>
 <div class="panel"><h2>Repair Preset Effectiveness</h2><ul>{preset_html}</ul>{dimension_html}</div>
+<div class="panel"><h2>Market Source Governance</h2>{market_html}</div>
 <div class="panel"><h2>Recent Failures</h2><ul>{fail_html}</ul></div>
 </div></body></html>'''
 

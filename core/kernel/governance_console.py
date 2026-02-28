@@ -96,6 +96,8 @@ def build_governance_console(*, data_dir: Path, days: int = 14, limit: int = 10,
         "state_store_runs": int(state_report.get("summary", {}).get("counts", {}).get("runs", 0) or 0),
         "repair_promote_recommended": int(repair_observe.get("summary", {}).get("promote_recommended", 0) or 0),
         "repair_rollback_recommended": int(repair_observe.get("summary", {}).get("rollback_recommended", 0) or 0),
+        "market_source_gate_status": str(dashboard.get("summary", {}).get("market_source_gate_status", "")),
+        "market_source_adjusted": int(dashboard.get("summary", {}).get("market_source_adjusted", 0) or 0),
     }
     return {
         "as_of": drift.get("as_of", ""),
@@ -105,6 +107,7 @@ def build_governance_console(*, data_dir: Path, days: int = 14, limit: int = 10,
             "summary": dashboard.get("summary", {}),
             "repair_governance": dashboard.get("repair_governance", {}),
             "repair_preset_effectiveness": dashboard.get("repair_preset_effectiveness", {}),
+            "market_governance": dashboard.get("market_governance", {}),
         },
         "repair_observe": repair_observe,
         "preferences": preferences,
@@ -140,6 +143,8 @@ def render_governance_console_md(report: Dict[str, Any]) -> str:
         f"- state_store_runs: {summary.get('state_store_runs', 0)}",
         f"- repair_promote_recommended: {summary.get('repair_promote_recommended', 0)}",
         f"- repair_rollback_recommended: {summary.get('repair_rollback_recommended', 0)}",
+        f"- market_source_gate_status: {summary.get('market_source_gate_status', '')}",
+        f"- market_source_adjusted: {summary.get('market_source_adjusted', 0)}",
         "",
         "## Policy",
         "",
@@ -183,6 +188,24 @@ def render_governance_console_md(report: Dict[str, Any]) -> str:
         lines.append(
             f"- {row.get('snapshot_id', '')} | {row.get('lifecycle', '')} | changes={row.get('change_count', 0)} | auto_choice={choice_card.get('preset_name', '')}"
         )
+    lines += ["", "## Market Source Governance", ""]
+    market_governance = dashboard.get("market_governance", {}) if isinstance(dashboard.get("market_governance", {}), dict) else {}
+    if market_governance:
+        lines += [
+            f"- query: {market_governance.get('query', '')}",
+            f"- stance: {market_governance.get('stance', '')}",
+            f"- conviction: {market_governance.get('conviction', '')}",
+            f"- sizing_band: {market_governance.get('sizing_band', '')}",
+            f"- source_gate_status: {market_governance.get('source_gate_status', '')}",
+            f"- source_adjusted: {1 if market_governance.get('source_adjusted', False) else 0}",
+            f"- source_recency_score: {market_governance.get('source_recency_score', 0.0)}",
+            f"- source_risk_flags: {','.join(market_governance.get('source_risk_flags', []))}",
+        ]
+        next_actions = market_governance.get("recommended_next_actions", []) if isinstance(market_governance.get("recommended_next_actions", []), list) else []
+        if next_actions:
+            lines += [f"- next_action: {item}" for item in next_actions]
+    else:
+        lines.append("- none")
     lines += ["", "## Recommendations", ""]
     for item in report.get("recommendations", []) if isinstance(report.get("recommendations", []), list) else []:
         lines.append(f"- {item}")

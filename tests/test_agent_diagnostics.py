@@ -147,6 +147,29 @@ class AgentDiagnosticsTest(unittest.TestCase):
                 json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "ts": "2026-02-28 10:02:00"}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
+            (root / "market_committee_latest.json").write_text(
+                json.dumps(
+                    {
+                        "query": "SPY vs QQQ",
+                        "market_committee": {
+                            "decision": {
+                                "stance": "defensive",
+                                "conviction": "low",
+                                "sizing_band": "0-10%",
+                                "source_adjusted": True,
+                                "recommended_next_actions": ["Refresh stale evidence", "Backfill missing connector"],
+                            },
+                            "source_gate_status": "elevated",
+                            "source_risk_flags": ["source_gap", "evidence_freshness_warning"],
+                            "source_recency_score": 35,
+                        },
+                        "source_risk_gate": {"status": "elevated", "flags": ["source_gap", "evidence_freshness_warning"]},
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
             report = build_agent_dashboard(data_dir=root, days=14, pending_limit=10)
             self.assertEqual(report["summary"]["total_runs"], 2)
@@ -171,6 +194,10 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertEqual(report["repair_governance"]["stream"][0]["auto_choice_card"]["preset_name"], "presentation_recovery")
             self.assertEqual(report["repair_preset_effectiveness"]["count"], 1)
             self.assertEqual(report["repair_preset_effectiveness"]["dimensions"]["task_kind_top"][0]["name"], "presentation")
+            self.assertEqual(report["summary"]["market_source_gate_status"], "elevated")
+            self.assertEqual(report["summary"]["market_source_adjusted"], 1)
+            self.assertEqual(report["market_governance"]["stance"], "defensive")
+            self.assertEqual(report["market_governance"]["recommended_next_actions"][0], "Refresh stale evidence")
 
             files = write_dashboard_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
@@ -179,8 +206,11 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertIn("Recent Governance Events", Path(files["md"]).read_text(encoding="utf-8"))
             self.assertIn("Governance Stream", Path(files["md"]).read_text(encoding="utf-8"))
             self.assertIn("Repair Preset Effectiveness", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("Market Source Governance", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("source_gate_status: elevated", Path(files["md"]).read_text(encoding="utf-8"))
             self.assertIn("rolled_back", Path(files["html"]).read_text(encoding="utf-8"))
             self.assertIn("repair-compare", Path(files["html"]).read_text(encoding="utf-8"))
+            self.assertIn("Market Source Governance", Path(files["html"]).read_text(encoding="utf-8"))
 
     def test_data_service_uses_app_facade(self):
         svc = DataService()

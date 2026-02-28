@@ -687,6 +687,24 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
 
 
 def _storyline(req: Dict[str, Any], lang: str) -> List[Dict[str, Any]]:
+    if req.get("has_systematic_appendix"):
+        topic = req["topic"]
+        decision_ask = req["decision_ask"]
+        if lang == "zh":
+            return [
+                {"section": "Context", "headline": f"{topic} 需要先把研究问题和证据边界讲清，而不是直接跳结论", "implication": "这类 deck 的第一优先级是研究可信度，而不是商业修辞。"},
+                {"section": "Method", "headline": "检索范围、纳排标准和 PRISMA 流程决定了结论是否可复核", "implication": "如果方法学讲不清，后续综合结论很难站住。"},
+                {"section": "Evidence", "headline": "核心发现必须建立在质量分层后的证据集合上", "implication": "应把高质量研究、风险研究和空白点分开说。"},
+                {"section": "Synthesis", "headline": "真正有价值的是综合后的判断，而不是逐篇摘要", "implication": "页面应回答一致结论、分歧点和研究空白。"},
+                {"section": "Action", "headline": decision_ask or "最后需要批准的是研究结论如何转化为下一步决策", "implication": "最终页要把研究价值转成管理动作或下一步研究动作。"},
+            ]
+        return [
+            {"section": "Context", "headline": f"{topic} must open with the research question and evidence boundary, not with generic conclusions", "implication": "Credibility comes from method clarity before recommendation strength."},
+            {"section": "Method", "headline": "Search scope, inclusion logic, and PRISMA flow determine whether the review is defensible", "implication": "If the method is weak, every later claim becomes fragile."},
+            {"section": "Evidence", "headline": "The core findings should sit on quality-tiered evidence, not on undifferentiated summaries", "implication": "Separate robust studies, fragile studies, and explicit gaps."},
+            {"section": "Synthesis", "headline": "The value of the deck is the synthesis, not a paper-by-paper recap", "implication": "Show convergence, conflict, and evidence gaps in one logic chain."},
+            {"section": "Action", "headline": decision_ask or "The final ask is how the evidence should change the next decision", "implication": "Translate the review into a clear management or research action."},
+        ]
     topic = req["topic"]
     horizon = req["time_horizon"]
     decision_ask = req["decision_ask"]
@@ -799,6 +817,228 @@ def _canonical_blueprints(req: Dict[str, Any], lang: str) -> List[Dict[str, Any]
     metrics = req["key_metrics"][:3] or (["增长率", "毛利率", "回收期"] if lang == "zh" else ["growth", "margin", "payback"])
     horizon = req["time_horizon"]
     decision = req["decision_ask"]
+    if req.get("has_systematic_appendix"):
+        if lang == "zh":
+            return [
+                {
+                    "section": "Research Question",
+                    "layout": "cover_signal",
+                    "title_assertion": f"{topic} 的关键不只是结论，而是研究问题和证据边界是否定义清楚",
+                    "so_what": "先让读者知道这项综述到底回答什么、不回答什么。",
+                    "visual_brief": "封面式研究问题页，带研究目标和决策请求。",
+                    "evidence_needed": ["研究问题", "目标人群/主题边界", decision],
+                    "decision_link": decision,
+                },
+                {
+                    "section": "Review Thesis",
+                    "layout": "executive_summary",
+                    "title_assertion": "这项系统综述的价值在于把方法、证据质量和综合判断压缩成少数可执行结论",
+                    "so_what": "高层先看结论，再决定是否深入方法学。",
+                    "visual_brief": "三栏摘要：结论、证据质量、管理含义。",
+                    "evidence_needed": ["核心发现", "证据等级", "管理含义"],
+                    "decision_link": "确认后续讨论应围绕哪三条结论展开。",
+                },
+                {
+                    "section": "Search Design",
+                    "layout": "situation_snapshot",
+                    "title_assertion": "检索策略、数据库覆盖和纳排标准共同决定了证据库是否可信",
+                    "so_what": "方法页要能回答“为什么是这些文献”。",
+                    "visual_brief": "左侧方法摘要，右侧检索覆盖与筛选口径。",
+                    "evidence_needed": ["数据库覆盖", "Boolean/MeSH 逻辑", "纳排标准"],
+                    "decision_link": "确认检索和筛选口径是否足够支持后续综合。",
+                },
+                {
+                    "section": "PRISMA Flow",
+                    "layout": "issue_tree",
+                    "title_assertion": "PRISMA 流程会暴露证据在识别、去重、筛选和纳入各环节的主要损耗点",
+                    "so_what": "让读者看到证据库是怎样收缩成最终纳入研究的。",
+                    "visual_brief": "流程树或阶段式漏斗，突出被排除的关键原因。",
+                    "evidence_needed": ["identified/screened/included", "主要排除原因", "去重策略"],
+                    "decision_link": "确认筛选过程是否足够透明。",
+                },
+                {
+                    "section": "Evidence Quality",
+                    "layout": "benchmark_matrix",
+                    "title_assertion": "最该关注的不是研究数量，而是证据质量在不同研究之间如何分层",
+                    "so_what": "高质量和低质量研究不能被平均看待。",
+                    "visual_brief": "质量矩阵或评分表，区分高/中/低可信证据。",
+                    "evidence_needed": ["GRADE/CASP/MMAT", "risk of bias", "certainty levels"],
+                    "decision_link": "确认哪些研究能进入核心结论层。",
+                },
+                {
+                    "section": "Synthesis Themes",
+                    "layout": "strategic_options",
+                    "title_assertion": "综合结果应同时呈现一致结论、分歧结论和需要保留的解释空间",
+                    "so_what": "不要把主题综合写成一串论文摘要。",
+                    "visual_brief": "主题/结论/证据强度对照页。",
+                    "evidence_needed": ["主题综合", "反驳性证据", "关键分歧点"],
+                    "decision_link": "确认最终叙述应强调哪些综合结论。",
+                },
+                {
+                    "section": "Gap Map",
+                    "layout": "initiative_portfolio",
+                    "title_assertion": "研究空白比已有结论更能决定下一轮研究和业务动作优先级",
+                    "so_what": "把证据空白、人群空白和方法空白显性化。",
+                    "visual_brief": "空白地图或优先级矩阵。",
+                    "evidence_needed": ["evidence gaps", "population gaps", "method gaps"],
+                    "decision_link": "确认下一步研究或业务试点应填补哪些空白。",
+                },
+                {
+                    "section": "Implications",
+                    "layout": "roadmap_track",
+                    "title_assertion": f"在 {horizon} 内，应把研究结论转成分阶段动作，而不是停留在文献综述层面",
+                    "so_what": "研究的价值体现在后续决策节奏和验证动作。",
+                    "visual_brief": "分阶段研究/业务动作路线图。",
+                    "evidence_needed": ["短中期动作", "验证节奏", "owner"],
+                    "decision_link": "批准从研究结论到执行动作的转换路径。",
+                },
+                {
+                    "section": "Limitations",
+                    "layout": "risk_control",
+                    "title_assertion": "最大的风险通常不是没有结论，而是证据异质性、偏倚和外部有效性被低估",
+                    "so_what": "限制页是保护结论边界，不是自我否定。",
+                    "visual_brief": "偏倚、局限和监控项清单。",
+                    "evidence_needed": ["heterogeneity", "bias", "external validity"],
+                    "decision_link": "确认哪些限制必须在结论中显式声明。",
+                },
+                {
+                    "section": "Decision Ask",
+                    "layout": "decision_ask",
+                    "title_assertion": decision or "现在需要批准的是：如何基于这轮系统综述进入下一步行动",
+                    "so_what": "最后一页只回答研究结论要求管理层做什么。",
+                    "visual_brief": "决策清单 + 下一步动作。",
+                    "evidence_needed": ["需批准事项", "研究到行动的转换", "优先级"],
+                    "decision_link": decision or "确认下一步。",
+                },
+                {
+                    "section": "Appendix Evidence",
+                    "layout": "appendix_evidence",
+                    "title_assertion": "第一层附录保留核心证据索引和方法学追问入口",
+                    "so_what": "把最可能被追问的数据和来源先放出来。",
+                    "visual_brief": "证据索引 + PRISMA 摘要 + 资产入口。",
+                    "evidence_needed": ["引用来源", "PRISMA", "附录资产"],
+                    "decision_link": "支持快速 drill-down。",
+                },
+                {
+                    "section": "Review Tables",
+                    "layout": "appendix_review_tables",
+                    "title_assertion": "第二层附录单独承载质量评分表、引文表和方法学资产",
+                    "so_what": "把方法学表格和主线证据分开，保持附录可读。",
+                    "visual_brief": "PRISMA、质量评分、引文附录、资产表。",
+                    "evidence_needed": ["quality scorecard", "citation appendix", "review assets"],
+                    "decision_link": "供研究负责人、审稿人和法务单独核查。",
+                },
+            ]
+        return [
+            {
+                "section": "Research Question",
+                "layout": "cover_signal",
+                "title_assertion": f"The review should open with the question and evidence boundary for {topic}, not with generic conclusions",
+                "so_what": "Define what the review answers before presenting findings.",
+                "visual_brief": "Research-question cover with objective and final ask.",
+                "evidence_needed": ["research question", "scope boundary", decision],
+                "decision_link": decision,
+            },
+            {
+                "section": "Review Thesis",
+                "layout": "executive_summary",
+                "title_assertion": "The review is valuable only if method, evidence quality, and synthesis are reduced to a few defendable conclusions",
+                "so_what": "Executives should see the synthesis before diving into method detail.",
+                "visual_brief": "Three-part review summary: findings, quality, implication.",
+                "evidence_needed": ["core findings", "quality tiers", "management implication"],
+                "decision_link": "Confirm which findings should anchor the discussion.",
+            },
+            {
+                "section": "Search Design",
+                "layout": "situation_snapshot",
+                "title_assertion": "Search logic, database coverage, and inclusion rules determine whether the evidence base is defensible",
+                "so_what": "Show why these studies entered the review and others did not.",
+                "visual_brief": "Method snapshot with search logic and inclusion boundaries.",
+                "evidence_needed": ["database coverage", "search logic", "inclusion criteria"],
+                "decision_link": "Confirm the search method is credible enough for synthesis.",
+            },
+            {
+                "section": "PRISMA Flow",
+                "layout": "issue_tree",
+                "title_assertion": "The PRISMA flow shows where the evidence set narrowed and what that implies for final confidence",
+                "so_what": "Make the screening logic auditable.",
+                "visual_brief": "Flow or tree showing screening and exclusion stages.",
+                "evidence_needed": ["identified/screened/included", "exclusion reasons", "dedup logic"],
+                "decision_link": "Confirm the screening path is transparent.",
+            },
+            {
+                "section": "Evidence Quality",
+                "layout": "benchmark_matrix",
+                "title_assertion": "The real issue is not study count but how evidence quality is distributed across the included studies",
+                "so_what": "High- and low-quality studies should not carry equal weight.",
+                "visual_brief": "Evidence quality matrix or scorecard.",
+                "evidence_needed": ["GRADE/CASP/MMAT", "risk of bias", "certainty"],
+                "decision_link": "Confirm which studies should anchor the conclusions.",
+            },
+            {
+                "section": "Synthesis Themes",
+                "layout": "strategic_options",
+                "title_assertion": "The synthesis should present convergence, conflict, and uncertainty rather than a paper-by-paper recap",
+                "so_what": "Make the cross-study logic explicit.",
+                "visual_brief": "Theme-to-evidence comparison slide.",
+                "evidence_needed": ["synthesis themes", "conflicting findings", "certainty of claims"],
+                "decision_link": "Confirm which synthesized claims should drive the final narrative.",
+            },
+            {
+                "section": "Gap Map",
+                "layout": "initiative_portfolio",
+                "title_assertion": "Evidence gaps matter as much as existing conclusions because they define the next best action",
+                "so_what": "Expose the most material research and population gaps.",
+                "visual_brief": "Gap matrix across evidence, population, and method.",
+                "evidence_needed": ["evidence gaps", "population gaps", "method gaps"],
+                "decision_link": "Prioritize which gaps should shape the next study or business action.",
+            },
+            {
+                "section": "Implications",
+                "layout": "roadmap_track",
+                "title_assertion": f"The findings should turn into staged actions over {horizon}, not remain as a static review",
+                "so_what": "Translate evidence into next decisions and validation steps.",
+                "visual_brief": "Staged evidence-to-action roadmap.",
+                "evidence_needed": ["near-term actions", "validation cadence", "owners"],
+                "decision_link": "Approve the sequence from evidence to action.",
+            },
+            {
+                "section": "Limitations",
+                "layout": "risk_control",
+                "title_assertion": "The biggest risk is usually underestimating bias, heterogeneity, and external validity limits",
+                "so_what": "Limitations protect the conclusion boundary.",
+                "visual_brief": "Bias, limitation, and monitoring list.",
+                "evidence_needed": ["heterogeneity", "bias", "external validity"],
+                "decision_link": "Confirm which limitations must stay explicit in the final readout.",
+            },
+            {
+                "section": "Decision Ask",
+                "layout": "decision_ask",
+                "title_assertion": decision or "The final ask is how the review should change the next decision",
+                "so_what": "Close with the concrete action the review enables.",
+                "visual_brief": "Decision checklist and next-step actions.",
+                "evidence_needed": ["approval asks", "translation to action", "priority"],
+                "decision_link": decision or "Confirm next step.",
+            },
+            {
+                "section": "Appendix Evidence",
+                "layout": "appendix_evidence",
+                "title_assertion": "The first appendix layer should keep only the evidence index and method drill-down entry points",
+                "so_what": "Expose the most challenge-worthy evidence first.",
+                "visual_brief": "Evidence index, PRISMA summary, asset entry points.",
+                "evidence_needed": ["citations", "PRISMA", "assets"],
+                "decision_link": "Support fast drill-down.",
+            },
+            {
+                "section": "Review Tables",
+                "layout": "appendix_review_tables",
+                "title_assertion": "The second appendix layer should carry the quality tables, citation tables, and method assets",
+                "so_what": "Keep method tables separate from the evidence index.",
+                "visual_brief": "PRISMA, quality scorecard, citation appendix, review assets.",
+                "evidence_needed": ["quality scorecard", "citation appendix", "review assets"],
+                "decision_link": "Enable method-level audit.",
+            },
+        ]
     if lang == "zh":
         blueprints = [
             {

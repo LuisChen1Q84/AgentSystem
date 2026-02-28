@@ -221,6 +221,9 @@ class McKinseyPptEngineTest(unittest.TestCase):
             )
             self.assertEqual(out["request"]["requested_page_count"], 11)
             self.assertEqual(out["request"]["page_count"], 12)
+            self.assertEqual(out["slides"][0]["section"], "Research Question")
+            self.assertEqual(out["slides"][2]["section"], "Search Design")
+            self.assertEqual(out["slides"][3]["section"], "PRISMA Flow")
             appendix = out["slides"][-2]["visual_payload"]
             review_appendix = out["slides"][-1]["visual_payload"]
             self.assertEqual(appendix["kind"], "appendix_evidence")
