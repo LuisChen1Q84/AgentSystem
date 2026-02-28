@@ -27,7 +27,7 @@ help:
 	@echo "  make stock-env-check [root='$(ROOT)']"
 	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
-	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|slo|pending|feedback-add|feedback-stats|services'] | agent-observe [days=14] | agent-recommend [days=30] [apply=1] | agent-pack cmd='list|enable|disable' [name='finance'] | agent-slo-guard [enforce=1] | agent-golden [strict=1] | agent-fault [strict=1] | agent-feedback cmd='add|stats|pending' [run_id='...'] [rating='1|-1'] | agent-learn [apply=1] | capability-catalog | skill-contract-lint [strict=1] | autonomy-observe [days=14] | autonomy-eval | image-hub text='...' [params='{\"k\":\"v\"}'] | image-hub-observe [days=7]"
+	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|slo|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|data.query'] [params='{\"k\":\"v\"}'] | agent-observe [days=14] | agent-recommend [days=30] [apply=1] | agent-pack cmd='list|enable|disable' [name='finance'] | agent-slo-guard [enforce=1] | agent-golden [strict=1] | agent-fault [strict=1] | agent-feedback cmd='add|stats|pending' [run_id='...'] [rating='1|-1'] | agent-learn [apply=1] | capability-catalog | skill-contract-lint [strict=1] | autonomy-observe [days=14] | autonomy-eval | image-hub text='...' [params='{\"k\":\"v\"}'] | image-hub-observe [days=7]"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
@@ -872,7 +872,7 @@ agent:
 	@$(ROOT)/scripts/agentsys.sh agent "$(text)" '$(or $(params),{})'
 
 agent-studio:
-	@$(ROOT)/scripts/agentsys.sh agent-studio $(or $(cmd),repl) $(if $(text),--text "$(text)",) $(if $(profile),--profile "$(profile)",) $(if $(days),--days $(days),) $(if $(limit),--limit $(limit),) $(if $(task_kind),--task-kind "$(task_kind)",) $(if $(rating),--rating "$(rating)",) $(if $(run_id),--run-id "$(run_id)",) $(if $(note),--note "$(note)",) $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(params),--params-json '$(params)',) $(if $(dry),--dry-run,)
+	@$(ROOT)/scripts/agentsys.sh agent-studio $(or $(cmd),repl) $(if $(text),--text "$(text)",) $(if $(profile),--profile "$(profile)",) $(if $(days),--days $(days),) $(if $(limit),--limit $(limit),) $(if $(task_kind),--task-kind "$(task_kind)",) $(if $(rating),--rating "$(rating)",) $(if $(run_id),--run-id "$(run_id)",) $(if $(note),--note "$(note)",) $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(service),--service "$(service)",) $(if $(params),--params-json '$(params)',) $(if $(dry),--dry-run,)
 
 agent-observe:
 	@$(ROOT)/scripts/agentsys.sh agent-observe $(if $(days),--days $(days),) $(if $(out_json),--out-json "$(out_json)",) $(if $(out_md),--out-md "$(out_md)",)

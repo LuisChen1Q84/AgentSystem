@@ -23,39 +23,49 @@ except ModuleNotFoundError:  # direct
     from agent_service_registry import AgentServiceRegistry  # type: ignore
 
 
+
+def _parse_params_json(params_json: str) -> Dict[str, Any]:
+    if not params_json.strip():
+        return {}
+    raw = json.loads(params_json)
+    if not isinstance(raw, dict):
+        raise ValueError("params-json must be object")
+    return raw
+
+
+
+def _print_json(out: Dict[str, Any]) -> None:
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+
 def _print_run_summary(out: Dict[str, Any]) -> None:
     if not isinstance(out, dict):
-        print(json.dumps({"ok": False, "error": "invalid_result"}, ensure_ascii=False, indent=2))
+        _print_json({"ok": False, "error": "invalid_result"})
         return
     selected = out.get("result", {}).get("selected", {}) if isinstance(out.get("result", {}), dict) else {}
-    print(
-        json.dumps(
-            {
-                "ok": bool(out.get("ok", False)),
-                "run_id": out.get("run_id", ""),
-                "profile": out.get("profile", ""),
-                "task_kind": out.get("task_kind", ""),
-                "selected_strategy": selected.get("strategy", ""),
-                "duration_ms": out.get("duration_ms", 0),
-                "clarification": out.get("clarification", {}),
-                "deliver_assets": out.get("deliver_assets", {}),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
+    _print_json(
+        {
+            "ok": bool(out.get("ok", False)),
+            "run_id": out.get("run_id", ""),
+            "profile": out.get("profile", ""),
+            "task_kind": out.get("task_kind", ""),
+            "selected_strategy": selected.get("strategy", ""),
+            "duration_ms": out.get("duration_ms", 0),
+            "clarification": out.get("clarification", {}),
+            "deliver_assets": out.get("deliver_assets", {}),
+            "delivery_bundle": out.get("delivery_bundle", {}),
+        }
     )
 
 
+
 def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, params_json: str, data_dir: str) -> int:
-    params = {}
-    if params_json.strip():
-        try:
-            raw = json.loads(params_json)
-            if isinstance(raw, dict):
-                params.update(raw)
-        except Exception as e:
-            print(json.dumps({"ok": False, "error": f"invalid params-json: {e}"}, ensure_ascii=False, indent=2))
-            return 2
+    try:
+        params = _parse_params_json(params_json)
+    except Exception as e:
+        _print_json({"ok": False, "error": f"invalid params-json: {e}"})
+        return 2
     if profile.strip():
         params["profile"] = profile.strip()
     if dry_run:
@@ -70,34 +80,37 @@ def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, 
     return 0 if bool(out.get("ok", False)) else 1
 
 
+
 def _observe_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
-    out = reg.execute("agent.observe", days=days, data_dir=data_dir or str(ROOT / "日志/agent_os"))
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    _print_json(reg.execute("agent.observe", days=days, data_dir=data_dir or str(ROOT / "日志/agent_os")))
     return 0
+
 
 
 def _recommend_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
-    out = reg.execute("agent.recommend", days=days, data_dir=data_dir or str(ROOT / "日志/agent_os"))
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    _print_json(reg.execute("agent.recommend", days=days, data_dir=data_dir or str(ROOT / "日志/agent_os")))
     return 0
+
 
 
 def _slo_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
-    out = reg.execute("agent.slo", data_dir=data_dir or str(ROOT / "日志/agent_os"), cfg={"defaults": {}})
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    _print_json(reg.execute("agent.slo", data_dir=data_dir or str(ROOT / "日志/agent_os"), cfg={"defaults": {}}))
     return 0
+
 
 
 def _pending_cmd(reg: AgentServiceRegistry, limit: int, task_kind: str, profile: str, data_dir: str) -> int:
-    out = reg.execute(
-        "agent.feedback.pending",
-        data_dir=data_dir or str(ROOT / "日志/agent_os"),
-        limit=limit,
-        task_kind=task_kind,
-        profile=profile,
+    _print_json(
+        reg.execute(
+            "agent.feedback.pending",
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            limit=limit,
+            task_kind=task_kind,
+            profile=profile,
+        )
     )
-    print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
+
 
 
 def _feedback_add_cmd(
@@ -109,34 +122,49 @@ def _feedback_add_cmd(
     task_kind: str,
     data_dir: str,
 ) -> int:
-    out = reg.execute(
-        "agent.feedback.add",
-        data_dir=data_dir or str(ROOT / "日志/agent_os"),
-        run_id=run_id,
-        rating=rating,
-        note=note,
-        profile=profile,
-        task_kind=task_kind,
+    _print_json(
+        reg.execute(
+            "agent.feedback.add",
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            run_id=run_id,
+            rating=rating,
+            note=note,
+            profile=profile,
+            task_kind=task_kind,
+        )
     )
-    print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
+
 
 
 def _feedback_stats_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
-    out = reg.execute("agent.feedback.stats", data_dir=data_dir or str(ROOT / "日志/agent_os"))
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+    _print_json(reg.execute("agent.feedback.stats", data_dir=data_dir or str(ROOT / "日志/agent_os")))
     return 0
+
 
 
 def _services_cmd(reg: AgentServiceRegistry) -> int:
-    print(json.dumps({"ok": True, "services": reg.list_services()}, ensure_ascii=False, indent=2))
+    _print_json({"ok": True, "services": reg.list_services()})
     return 0
+
+
+
+def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
+    try:
+        params = _parse_params_json(params_json)
+    except Exception as e:
+        _print_json({"ok": False, "error": f"invalid params-json: {e}"})
+        return 2
+    out = reg.execute(service, **params)
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
 
 
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], pending [limit], "
-        "feedback <run_id> <rating> [note], stats, services, exit"
+        "feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -158,50 +186,43 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             _run_cmd(reg, text=text, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir)
             continue
         if cmd == "observe":
-            days = int(args[0]) if args else 14
-            _observe_cmd(reg, days=days, data_dir=data_dir)
+            _observe_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir)
             continue
         if cmd == "recommend":
-            days = int(args[0]) if args else 30
-            _recommend_cmd(reg, days=days, data_dir=data_dir)
+            _recommend_cmd(reg, days=int(args[0]) if args else 30, data_dir=data_dir)
             continue
         if cmd == "pending":
-            limit = int(args[0]) if args else 10
-            _pending_cmd(reg, limit=limit, task_kind="", profile="", data_dir=data_dir)
+            _pending_cmd(reg, limit=int(args[0]) if args else 10, task_kind="", profile="", data_dir=data_dir)
             continue
         if cmd == "feedback":
             if len(args) < 2:
                 print("usage: feedback <run_id> <rating> [note]")
                 continue
-            run_id = str(args[0])
             try:
                 rating = int(args[1])
             except ValueError:
                 print("rating must be integer in {-1,0,1}")
                 continue
-            note = " ".join(args[2:]) if len(args) > 2 else ""
-            _feedback_add_cmd(
-                reg,
-                run_id=run_id,
-                rating=rating,
-                note=note,
-                profile="",
-                task_kind="",
-                data_dir=data_dir,
-            )
+            _feedback_add_cmd(reg, run_id=str(args[0]), rating=rating, note=" ".join(args[2:]), profile="", task_kind="", data_dir=data_dir)
             continue
         if cmd == "stats":
             _feedback_stats_cmd(reg, data_dir=data_dir)
             continue
-        if cmd == "slo":
-            _slo_cmd(reg, data_dir=data_dir)
-            continue
         if cmd == "services":
             _services_cmd(reg)
+            continue
+        if cmd == "call":
+            if not args:
+                print("usage: call <service> [params_json]")
+                continue
+            service = str(args[0])
+            params_json = args[1] if len(args) > 1 else "{}"
+            _call_cmd(reg, service=service, params_json=params_json)
             continue
         # fallback: direct natural language task
         _run_cmd(reg, text=line, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir)
     return 0
+
 
 
 def build_cli() -> argparse.ArgumentParser:
@@ -236,9 +257,15 @@ def build_cli() -> argparse.ArgumentParser:
     fb.add_argument("--task-kind", default="")
 
     sp.add_parser("feedback-stats")
+
+    call = sp.add_parser("call")
+    call.add_argument("--service", required=True)
+    call.add_argument("--params-json", default="{}")
+
     sp.add_parser("services")
     sp.add_parser("repl")
     return p
+
 
 
 def main() -> int:
@@ -247,14 +274,7 @@ def main() -> int:
     data_dir = str(args.data_dir)
 
     if args.cmd == "run":
-        return _run_cmd(
-            reg,
-            text=str(args.text),
-            profile=str(args.profile),
-            dry_run=bool(args.dry_run),
-            params_json=str(args.params_json),
-            data_dir=data_dir,
-        )
+        return _run_cmd(reg, text=str(args.text), profile=str(args.profile), dry_run=bool(args.dry_run), params_json=str(args.params_json), data_dir=data_dir)
     if args.cmd == "observe":
         return _observe_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "recommend":
@@ -264,17 +284,11 @@ def main() -> int:
     if args.cmd == "pending":
         return _pending_cmd(reg, limit=int(args.limit), task_kind=str(args.task_kind), profile=str(args.profile), data_dir=data_dir)
     if args.cmd == "feedback-add":
-        return _feedback_add_cmd(
-            reg,
-            run_id=str(args.run_id),
-            rating=int(args.rating),
-            note=str(args.note),
-            profile=str(args.profile),
-            task_kind=str(args.task_kind),
-            data_dir=data_dir,
-        )
+        return _feedback_add_cmd(reg, run_id=str(args.run_id), rating=int(args.rating), note=str(args.note), profile=str(args.profile), task_kind=str(args.task_kind), data_dir=data_dir)
     if args.cmd == "feedback-stats":
         return _feedback_stats_cmd(reg, data_dir=data_dir)
+    if args.cmd == "call":
+        return _call_cmd(reg, service=str(args.service), params_json=str(args.params_json))
     if args.cmd == "services":
         return _services_cmd(reg)
     return _repl(reg, data_dir=data_dir)

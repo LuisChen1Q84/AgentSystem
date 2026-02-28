@@ -3,52 +3,40 @@
 
 from __future__ import annotations
 
-import json
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List
-
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 
-
-@dataclass(frozen=True)
-class ServiceSpec:
-    name: str
-    category: str
-    description: str
-    risk: str
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "category": self.category,
-            "description": self.description,
-            "risk": self.risk,
-        }
-
-
-def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
-    if not path.exists():
-        return []
-    rows: List[Dict[str, Any]] = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except Exception:
-                continue
-    return rows
+from core.registry.service_protocol import ServiceSpec, error_response
+from services.agent_runtime_service import AgentRuntimeService
+from services.data_service import DataService
+from services.feedback_service import FeedbackService
+from services.image_service import ImageService
+from services.market_service import MarketService
+from services.mcp_service import MCPService
+from services.observability_service import ObservabilityService
+from services.ppt_service import PPTService
+from services.recommendation_service import RecommendationService
+from services.slo_service import SLOService
 
 
 class AgentServiceRegistry:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
+        self.runtime = AgentRuntimeService(root=self.root)
+        self.observe = ObservabilityService(root=self.root)
+        self.feedback = FeedbackService(root=self.root)
+        self.recommend = RecommendationService(root=self.root)
+        self.slo = SLOService(root=self.root)
+        self.mcp = MCPService(root=self.root)
+        self.ppt = PPTService(root=self.root)
+        self.image = ImageService(root=self.root)
+        self.market = MarketService(root=self.root)
+        self.data = DataService(root=self.root)
+
         self._services: Dict[str, ServiceSpec] = {
             "agent.run": ServiceSpec("agent.run", "runtime", "Run Personal Agent OS task", "medium"),
             "agent.observe": ServiceSpec("agent.observe", "observability", "Build agent observability report", "low"),
@@ -57,6 +45,11 @@ class AgentServiceRegistry:
             "agent.feedback.add": ServiceSpec("agent.feedback.add", "feedback", "Append feedback for a run", "low"),
             "agent.feedback.stats": ServiceSpec("agent.feedback.stats", "feedback", "Summarize collected feedback", "low"),
             "agent.feedback.pending": ServiceSpec("agent.feedback.pending", "feedback", "List runs pending feedback", "low"),
+            "mcp.run": ServiceSpec("mcp.run", "tooling", "Run MCP candidate routing and execution", "medium"),
+            "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
+            "image.generate": ServiceSpec("image.generate", "creative", "Generate image assets through image hub", "medium"),
+            "market.report": ServiceSpec("market.report", "domain", "Generate stock market strategy report", "high"),
+            "data.query": ServiceSpec("data.query", "data", "Query DataHub metrics from private store", "medium"),
         }
 
     def list_services(self) -> List[Dict[str, Any]]:
@@ -65,93 +58,77 @@ class AgentServiceRegistry:
         return rows
 
     def execute(self, service: str, **kwargs: Any) -> Dict[str, Any]:
-        if service == "agent.run":
-            return self._run_agent(kwargs)
-        if service == "agent.observe":
-            return self._observe(kwargs)
-        if service == "agent.recommend":
-            return self._recommend(kwargs)
-        if service == "agent.slo":
-            return self._slo(kwargs)
-        if service == "agent.feedback.add":
-            return self._feedback_add(kwargs)
-        if service == "agent.feedback.stats":
-            return self._feedback_stats(kwargs)
-        if service == "agent.feedback.pending":
-            return self._pending_feedback(kwargs)
-        raise ValueError(f"unknown service: {service}")
+        handler = getattr(self, f"_exec_{service.replace('.', '_')}", None)
+        if handler is None:
+            return error_response(service, f"unknown service: {service}", code="unknown_service").to_dict()
+        return handler(**kwargs)
 
-    def _run_agent(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        from scripts.agent_os import run_request
-
+    def _exec_agent_run(self, **kwargs: Any) -> Dict[str, Any]:
         text = str(kwargs.get("text", "")).strip()
         params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
         if not text:
-            return {"ok": False, "error": "missing_text"}
-        return run_request(text, params)
+            return error_response("agent.run", "missing_text", code="missing_text").to_dict()
+        return self.runtime.run(text, params).to_dict()
 
-    def _observe(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        from scripts.agent_os_observability import aggregate
+    def _exec_agent_observe(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.observe.run(data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")), days=max(1, int(kwargs.get("days", 14)))).to_dict()
 
-        data_dir = Path(str(kwargs.get("data_dir", self.root / "日志/agent_os")))
-        days = max(1, int(kwargs.get("days", 14)))
-        rows = _load_jsonl(data_dir / "agent_runs.jsonl")
-        report = aggregate(rows, days=days)
-        return {"ok": True, "report": report}
+    def _exec_agent_recommend(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.recommend.run(data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")), days=max(1, int(kwargs.get("days", 30)))).to_dict()
 
-    def _recommend(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        from scripts.agent_profile_recommender import recommend
+    def _exec_agent_slo(self, **kwargs: Any) -> Dict[str, Any]:
+        cfg = kwargs.get("cfg", {}) if isinstance(kwargs.get("cfg", {}), dict) else {}
+        return self.slo.run(data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")), cfg=cfg).to_dict()
 
-        data_dir = Path(str(kwargs.get("data_dir", self.root / "日志/agent_os")))
-        days = max(1, int(kwargs.get("days", 30)))
-        rows = _load_jsonl(data_dir / "agent_runs.jsonl")
-        feedback_rows = _load_jsonl(data_dir / "feedback.jsonl")
-        report = recommend(rows, days=days, feedback_rows=feedback_rows)
-        return {"ok": True, "report": report}
-
-    def _slo(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        from scripts.agent_slo_guard import evaluate
-
-        data_dir = Path(str(kwargs.get("data_dir", self.root / "日志/agent_os")))
-        cfg = kwargs.get("cfg", {})
-        if not isinstance(cfg, dict):
-            cfg = {}
-        rows = _load_jsonl(data_dir / "agent_runs.jsonl")
-        report = evaluate(rows, cfg if cfg else {"defaults": {}})
-        return {"ok": True, "report": report}
-
-    def _pending_feedback(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        from scripts.agent_feedback import list_pending_feedback
-
-        data_dir = Path(str(kwargs.get("data_dir", self.root / "日志/agent_os")))
-        limit = max(1, int(kwargs.get("limit", 10)))
-        rows = list_pending_feedback(
-            runs_file=data_dir / "agent_runs.jsonl",
-            feedback_file=data_dir / "feedback.jsonl",
-            limit=limit,
-            task_kind=str(kwargs.get("task_kind", "")),
-            profile=str(kwargs.get("profile", "")),
-        )
-        return {"ok": True, "rows": rows}
-
-    def _feedback_add(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        from scripts.agent_feedback import add_feedback
-
-        data_dir = Path(str(kwargs.get("data_dir", self.root / "日志/agent_os")))
-        item = add_feedback(
-            feedback_file=data_dir / "feedback.jsonl",
-            runs_file=data_dir / "agent_runs.jsonl",
+    def _exec_agent_feedback_add(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.feedback.add(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
             run_id=str(kwargs.get("run_id", "")),
             rating=int(kwargs.get("rating", 0)),
             note=str(kwargs.get("note", "")),
             profile=str(kwargs.get("profile", "")),
             task_kind=str(kwargs.get("task_kind", "")),
-        )
-        return {"ok": True, "item": item}
+        ).to_dict()
 
-    def _feedback_stats(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        from scripts.agent_feedback import summarize
+    def _exec_agent_feedback_stats(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.feedback.stats(data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os"))).to_dict()
 
-        data_dir = Path(str(kwargs.get("data_dir", self.root / "日志/agent_os")))
-        rows = _load_jsonl(data_dir / "feedback.jsonl")
-        return {"ok": True, "summary": summarize(rows)}
+    def _exec_agent_feedback_pending(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.feedback.pending(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            limit=max(1, int(kwargs.get("limit", 10))),
+            task_kind=str(kwargs.get("task_kind", "")),
+            profile=str(kwargs.get("profile", "")),
+        ).to_dict()
+
+    def _exec_mcp_run(self, **kwargs: Any) -> Dict[str, Any]:
+        text = str(kwargs.get("text", "")).strip()
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        if not text:
+            return error_response("mcp.run", "missing_text", code="missing_text").to_dict()
+        return self.mcp.run(text, params).to_dict()
+
+    def _exec_ppt_generate(self, **kwargs: Any) -> Dict[str, Any]:
+        text = str(kwargs.get("text", "")).strip()
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        if not text:
+            return error_response("ppt.generate", "missing_text", code="missing_text").to_dict()
+        return self.ppt.run(text, params).to_dict()
+
+    def _exec_image_generate(self, **kwargs: Any) -> Dict[str, Any]:
+        text = str(kwargs.get("text", "")).strip()
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        if not text:
+            return error_response("image.generate", "missing_text", code="missing_text").to_dict()
+        return self.image.run(text, params).to_dict()
+
+    def _exec_market_report(self, **kwargs: Any) -> Dict[str, Any]:
+        text = str(kwargs.get("text", "")).strip()
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        if not text and not str(params.get("query", "")).strip():
+            return error_response("market.report", "missing_text", code="missing_text").to_dict()
+        return self.market.run(text, params).to_dict()
+
+    def _exec_data_query(self, **kwargs: Any) -> Dict[str, Any]:
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        return self.data.query(params).to_dict()

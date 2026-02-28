@@ -14,6 +14,11 @@ class AgentServiceRegistryTest(unittest.TestCase):
         names = {x["name"] for x in rows}
         self.assertIn("agent.run", names)
         self.assertIn("agent.feedback.pending", names)
+        self.assertIn("mcp.run", names)
+        self.assertIn("ppt.generate", names)
+        self.assertIn("image.generate", names)
+        self.assertIn("market.report", names)
+        self.assertIn("data.query", names)
 
     def test_execute_agent_run(self):
         with tempfile.TemporaryDirectory() as td:
@@ -80,6 +85,12 @@ class AgentServiceRegistryTest(unittest.TestCase):
             summary = stats.get("summary", {})
             self.assertEqual(summary.get("total"), 1)
             self.assertEqual(summary.get("positive"), 1)
+
+    def test_execute_data_query_missing_spec(self):
+        reg = AgentServiceRegistry()
+        out = reg.execute("data.query", params={})
+        self.assertFalse(out.get("ok", True))
+        self.assertEqual(out.get("error_code"), "missing_query_spec")
 
 
 if __name__ == "__main__":

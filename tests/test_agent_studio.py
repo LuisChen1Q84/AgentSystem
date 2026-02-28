@@ -20,6 +20,10 @@ class AgentStudioTest(unittest.TestCase):
         a2 = parser.parse_args(["feedback-stats"])
         self.assertEqual(a2.cmd, "feedback-stats")
 
+        a3 = parser.parse_args(["call", "--service", "agent.feedback.stats"])
+        self.assertEqual(a3.cmd, "call")
+        self.assertEqual(a3.service, "agent.feedback.stats")
+
     def test_feedback_add_and_stats_cmd(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -65,6 +69,23 @@ class AgentStudioTest(unittest.TestCase):
             summary = stats_payload.get("summary", {})
             self.assertEqual(summary.get("total"), 1)
             self.assertEqual(summary.get("positive"), 1)
+
+    def test_call_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._call_cmd(
+                    reg,
+                    service="agent.feedback.stats",
+                    params_json=json.dumps({"data_dir": str(root)}, ensure_ascii=False),
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("summary", payload)
 
 
 if __name__ == "__main__":
