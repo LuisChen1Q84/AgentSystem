@@ -14,7 +14,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.stock_market_hub import CFG_DEFAULT, load_cfg, pick_symbols, run_report
+from scripts.stock_market_hub import CFG_DEFAULT, load_cfg, pick_symbols, run_committee, run_report
 
 
 class MarketHubApp:
@@ -30,3 +30,13 @@ class MarketHubApp:
         universe = str(params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
         symbols = pick_symbols(cfg, query, str(params.get("symbols", "")))
         return run_report(cfg, query, universe, symbols, bool(params.get("no_sync", False)))
+
+    def run_committee(self, text: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        cfg_path = Path(str(params.get("cfg", CFG_DEFAULT)))
+        if not cfg_path.is_absolute():
+            cfg_path = self.root / cfg_path
+        cfg = load_cfg(cfg_path)
+        query = str(params.get("query", text)).strip() or text
+        universe = str(params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
+        symbols = pick_symbols(cfg, query, str(params.get("symbols", "")))
+        return run_committee(cfg, query, universe, symbols, bool(params.get("no_sync", False)))

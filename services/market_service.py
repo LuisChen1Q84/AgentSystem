@@ -31,3 +31,11 @@ class MarketService:
             payload=annotate_payload("market.report", payload, entrypoint="apps.market_hub"),
             meta={"entrypoint": "apps.market_hub"},
         )
+
+    def committee(self, text: str, params: Dict[str, Any]) -> ServiceEnvelope:
+        payload = self.app.run_committee(text, params)
+        return ok_response(
+            "market.committee",
+            payload=annotate_payload("market.committee", payload, entrypoint="apps.market_hub"),
+            meta={"entrypoint": "apps.market_hub"},
+        )

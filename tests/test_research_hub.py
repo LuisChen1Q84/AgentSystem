@@ -8,6 +8,25 @@ from scripts.research_hub import run_deck_request, run_request
 
 
 class ResearchHubTest(unittest.TestCase):
+    def test_systematic_search_generates_review_objects(self):
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = Path(td)
+            out = run_request(
+                "请为数字疗法主题制定系统文献搜索策略，并输出 PRISMA 方案",
+                {
+                    "playbook": "systematic_search",
+                    "research_question": "数字疗法在慢病管理中的效果",
+                },
+                out_dir=out_dir,
+            )
+            self.assertTrue(out.get("ok", False))
+            self.assertEqual(out.get("playbook"), "systematic_search")
+            analysis = out.get("analysis_objects", {})
+            self.assertIn("search_strategy", analysis)
+            self.assertIn("database_coverage", analysis)
+            self.assertIn("prisma_flow", analysis)
+            self.assertTrue(any(item.get("severity") == "high" for item in out.get("peer_review_findings", [])))
+
     def test_market_sizing_generates_structured_outputs(self):
         with tempfile.TemporaryDirectory() as td:
             out_dir = Path(td)

@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.stock_market_hub import evaluate_quality_gate, pick_symbols, run_report
+from scripts.stock_market_hub import evaluate_quality_gate, pick_symbols, run_committee, run_report
 
 
 class StockMarketHubTest(unittest.TestCase):
@@ -61,6 +61,33 @@ class StockMarketHubTest(unittest.TestCase):
             self.assertEqual(out["delivery_protocol"]["service"], "market.report")
             self.assertTrue(Path(out["report_md"]).exists())
             self.assertTrue(Path(out["report_json"]).exists())
+
+    def test_run_committee_emits_multi_role_payload(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            root = Path(td)
+            cfg = {
+                "defaults": {
+                    "report_dir": str(root / "reports"),
+                    "stock_quant_config": str(root / "stock_quant.toml"),
+                    "enforce_coverage_gate": False,
+                }
+            }
+            with patch("scripts.stock_market_hub.stock_quant.load_cfg", return_value={}), \
+                patch("scripts.stock_market_hub.stock_quant.cmd_sync", return_value={"ok": True}), \
+                patch("scripts.stock_market_hub.stock_quant.cmd_analyze", return_value={"count": 2, "items": [{"symbol": "SPY", "signal": "BUY", "factor_score": 70, "close": 500, "support_20d": 480, "resistance_20d": 520, "rsi14": 55}, {"symbol": "QQQ", "signal": "HOLD", "factor_score": 58, "close": 430, "support_20d": 410, "resistance_20d": 450, "rsi14": 53}]}), \
+                patch("scripts.stock_market_hub.stock_quant.cmd_backtest", return_value={"count": 1, "items": [{"symbol": "SPY", "total_return_pct": 12.5, "trades": 8, "win_rate": 62, "max_drawdown_pct": -9.0, "sharpe": 1.1}]}), \
+                patch("scripts.stock_market_hub.stock_quant.build_portfolio", return_value={"ok": True, "items": [{"symbol": "SPY", "weight": 1.0}]}), \
+                patch("scripts.stock_market_hub.stock_quant.cmd_portfolio_backtest", return_value={"portfolio_backtest": {"ok": True, "strategy": {"total_return_pct": 9.1, "max_drawdown_pct": -8.0, "sharpe": 1.05}}}), \
+                patch("scripts.stock_market_hub.mcp_freefirst_hub.load_cfg", return_value={}), \
+                patch("scripts.stock_market_hub.mcp_freefirst_hub.run_sync", return_value={"topic": "market", "attempted": 2, "succeeded": 2, "coverage_rate": 100.0, "ssl_mode_counts": {}, "error_class_counts": {}}):
+                out = run_committee(cfg, "分析SPY和QQQ", "global_core", ["SPY", "QQQ"], False)
+            self.assertEqual(out["delivery_protocol"]["service"], "market.committee")
+            committee = out.get("market_committee", {})
+            self.assertEqual(committee.get("decision", {}).get("stance"), "accumulate_small")
+            roles = {item.get("role") for item in committee.get("participants", [])}
+            self.assertIn("bull_researcher", roles)
+            self.assertIn("bear_researcher", roles)
+            self.assertIn("risk_committee", roles)
 
 
 if __name__ == "__main__":

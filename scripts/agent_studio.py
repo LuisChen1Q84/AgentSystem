@@ -173,6 +173,28 @@ def _research_lookup_cmd(reg: AgentServiceRegistry, text: str, params_json: str)
     return 0 if bool(out.get("ok", False)) else 1
 
 
+def _market_report_cmd(reg: AgentServiceRegistry, text: str, params_json: str) -> int:
+    try:
+        params = _parse_params_json(params_json)
+    except Exception as e:
+        _print_json({"ok": False, "error": f"invalid params-json: {e}"})
+        return 2
+    out = reg.execute("market.report", text=text, params=params)
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _market_committee_cmd(reg: AgentServiceRegistry, text: str, params_json: str) -> int:
+    try:
+        params = _parse_params_json(params_json)
+    except Exception as e:
+        _print_json({"ok": False, "error": f"invalid params-json: {e}"})
+        return 2
+    out = reg.execute("market.committee", text=text, params=params)
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
 def _repair_observe_cmd(reg: AgentServiceRegistry, limit: int, data_dir: str, out_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -560,7 +582,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
-        "research-report <text>, research-deck <text>, research-lookup <text>, "
+        "research-report <text>, research-deck <text>, research-lookup <text>, market-report <text>, market-committee <text>, "
         "governance [days] [limit], failure-review [days], repair-observe [limit], repair-apply [days] [min_score] [max_actions], "
         "repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], "
         "repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, object-view <run_id>, "
@@ -620,6 +642,20 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 print("usage: research-lookup <query>")
                 continue
             _research_lookup_cmd(reg, text=text, params_json="{}")
+            continue
+        if cmd == "market-report":
+            text = " ".join(args).strip()
+            if not text:
+                print("usage: market-report <query>")
+                continue
+            _market_report_cmd(reg, text=text, params_json="{}")
+            continue
+        if cmd == "market-committee":
+            text = " ".join(args).strip()
+            if not text:
+                print("usage: market-committee <query>")
+                continue
+            _market_committee_cmd(reg, text=text, params_json="{}")
             continue
         if cmd == "governance":
             _governance_cmd(reg, days=int(args[0]) if args else 14, limit=int(args[1]) if len(args) > 1 else 10, data_dir=data_dir, out_dir="")
@@ -836,6 +872,14 @@ def build_cli() -> argparse.ArgumentParser:
     research_lookup.add_argument("--text", required=True)
     research_lookup.add_argument("--params-json", default="{}")
 
+    market_report = sp.add_parser("market-report")
+    market_report.add_argument("--text", required=True)
+    market_report.add_argument("--params-json", default="{}")
+
+    market_committee = sp.add_parser("market-committee")
+    market_committee.add_argument("--text", required=True)
+    market_committee.add_argument("--params-json", default="{}")
+
     gov = sp.add_parser("governance")
     gov.add_argument("--days", type=int, default=14)
     gov.add_argument("--limit", type=int, default=10)
@@ -1016,6 +1060,10 @@ def main() -> int:
         return _research_deck_cmd(reg, text=str(args.text), params_json=str(args.params_json), data_dir=data_dir)
     if args.cmd == "research-lookup":
         return _research_lookup_cmd(reg, text=str(args.text), params_json=str(args.params_json))
+    if args.cmd == "market-report":
+        return _market_report_cmd(reg, text=str(args.text), params_json=str(args.params_json))
+    if args.cmd == "market-committee":
+        return _market_committee_cmd(reg, text=str(args.text), params_json=str(args.params_json))
     if args.cmd == "governance":
         return _governance_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "failure-review":

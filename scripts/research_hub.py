@@ -26,6 +26,16 @@ from scripts.research_source_adapters import lookup_sources
 
 PLAYBOOKS_PATH = ROOT / "config" / "research_playbooks.json"
 METHODS_PATH = ROOT / "references" / "research_hub" / "methods.md"
+SYSTEMATIC_REVIEW_PLAYBOOKS = {
+    "systematic_search",
+    "research_landscape",
+    "critical_appraisal",
+    "thematic_synthesis",
+    "meta_analysis_plan",
+    "research_gap_analysis",
+    "citation_graph_manager",
+    "systematic_review_writer",
+}
 
 
 def _language(text: str) -> str:
@@ -84,6 +94,14 @@ def _infer_playbook(text: str, values: Dict[str, Any]) -> str:
         return explicit
     hay = f"{text} {json.dumps(values, ensure_ascii=False)}".lower()
     rules = [
+        ("systematic_search", ["systematic search", "literature search", "prisma", "boolean", "mesh", "系统文献搜索", "检索策略", "文献搜索"]),
+        ("research_landscape", ["research landscape", "knowledge landscape", "citation network", "bibliometric", "研究景观", "知识图谱", "引文网络"]),
+        ("critical_appraisal", ["critical appraisal", "risk of bias", "grade", "casp", "cochrane", "批判性评价", "质量评估", "证据分级"]),
+        ("thematic_synthesis", ["thematic synthesis", "qualitative synthesis", "cerqual", "coding framework", "主题综合", "质性综合", "编码框架"]),
+        ("meta_analysis_plan", ["meta analysis", "forest plot", "heterogeneity", "egger", "荟萃分析", "异质性", "森林图"]),
+        ("research_gap_analysis", ["research gap", "knowledge gap", "replication gap", "研究空白", "知识缺口", "方法固化"]),
+        ("citation_graph_manager", ["citation graph", "reference manager", "zotero", "vosviewer", "bibliometrix", "引文图谱", "参考文献管理"]),
+        ("systematic_review_writer", ["systematic review writer", "structured abstract", "prisma checklist", "系统综述撰写", "结构化摘要", "prisma清单"]),
         ("market_sizing", ["tam", "sam", "som", "market size", "市场规模"]),
         ("competitor_teardown", ["competitor", "竞争", "对手", "teardown"]),
         ("profit_pool_value_chain", ["profit pool", "value chain", "利润池", "价值链"]),
@@ -224,6 +242,27 @@ def _merge_retrieved_sources(
 
 
 def _assumption_register(req: Dict[str, Any], playbook: str, lang: str) -> List[Dict[str, Any]]:
+    if playbook == "systematic_search":
+        return [
+            {"name": "database_coverage", "value": "优先覆盖 PubMed/Scopus/Web of Science，并补灰色文献" if lang == "zh" else "Prioritize PubMed/Scopus/Web of Science and backfill grey literature", "risk": "medium"},
+            {"name": "search_sensitivity", "value": "布尔检索以高召回为优先，再通过筛选收紧范围" if lang == "zh" else "Search strategy favors recall first and narrows via screening", "risk": "medium"},
+            {"name": "dedup_accuracy", "value": "跨库去重依赖 DOI/标题/作者联合规则" if lang == "zh" else "Deduplication relies on DOI/title/author matching across databases", "risk": "high"},
+        ]
+    if playbook in {"research_landscape", "citation_graph_manager"}:
+        return [
+            {"name": "citation_recency", "value": "最近12个月文献需单独审计，避免景观过时" if lang == "zh" else "Recent 12-month literature requires a dedicated audit to avoid stale maps", "risk": "medium"},
+            {"name": "database_bias", "value": "不同数据库对学科和地区覆盖不均衡" if lang == "zh" else "Database coverage is uneven across disciplines and geographies", "risk": "medium"},
+        ]
+    if playbook in {"critical_appraisal", "meta_analysis_plan"}:
+        return [
+            {"name": "study_design_mix", "value": "不同研究设计混合时需先分层再评价" if lang == "zh" else "Mixed study designs must be stratified before scoring", "risk": "high"},
+            {"name": "effect_estimate_comparability", "value": "只有结局和对照定义一致时才能合并效应量" if lang == "zh" else "Effect sizes should only be pooled when outcomes and controls are comparable", "risk": "high"},
+        ]
+    if playbook in {"thematic_synthesis", "research_gap_analysis", "systematic_review_writer"}:
+        return [
+            {"name": "coding_consistency", "value": "主题编码需保留一级-二级-三级映射链" if lang == "zh" else "Theme coding should preserve first/second/third-order traceability", "risk": "medium"},
+            {"name": "review_scope", "value": "结果写作必须与纳入标准、质量评估口径一致" if lang == "zh" else "Review writing must stay aligned with eligibility and appraisal criteria", "risk": "medium"},
+        ]
     if playbook == "market_sizing":
         return [
             {"name": "pricing", "value": "基于公开报价与平均折扣" if lang == "zh" else "Based on list price and implied discount", "risk": "high"},
@@ -258,6 +297,203 @@ def _report_body(playbook: str, req: Dict[str, Any], lang: str) -> Dict[str, Any
     competitors = req.get("competitors", []) if isinstance(req.get("competitors", []), list) else []
     comp_names = competitors[:3] or (["Competitor A", "Competitor B", "Competitor C"] if lang == "en" else ["对手A", "对手B", "对手C"])
     features = req.get("features", []) if isinstance(req.get("features", []), list) else []
+
+    if playbook == "systematic_search":
+        return {
+            "sections": [
+                {"title": "Search Architecture", "body": "Design a high-recall search strategy with Boolean logic, synonym clusters, MeSH terms, and database-specific syntax."},
+                {"title": "Screening & PRISMA", "body": "Document inclusion, exclusion, de-duplication, and title/abstract/full-text screening as a PRISMA-ready workflow."},
+                {"title": "Grey Literature & Snowballing", "body": "Extend beyond indexed databases with preprints, theses, institutional reports, and forward/backward citation tracking."},
+            ],
+            "claims": [
+                {"claim": "A defendable systematic search depends on recall-oriented search design before tight screening.", "implication": "Separate query sensitivity from downstream eligibility decisions."},
+                {"claim": "Grey literature and citation snowballing are necessary to reduce publication and indexing bias.", "implication": "Search coverage should be audited beyond canonical databases."},
+            ],
+            "analysis_objects": {
+                "search_strategy": {
+                    "boolean_logic": ["(concept A OR synonym A1 OR synonym A2)", "AND", "(population OR setting)", "NOT (non-eligible designs)"],
+                    "mesh_terms": ["MeSH terms", "author keywords", "free-text synonyms"],
+                    "synonym_clusters": ["topic terms", "population terms", "method terms"],
+                },
+                "database_coverage": [
+                    {"database": "PubMed", "priority": "high", "why": "biomedical and health research"},
+                    {"database": "Scopus", "priority": "high", "why": "broad citation coverage"},
+                    {"database": "Web of Science", "priority": "high", "why": "citation pedigree and landmark studies"},
+                    {"database": "Grey literature", "priority": "medium", "why": "reduce publication bias"},
+                ],
+                "inclusion_criteria": ["publication year range", "eligible study designs", "target language set", "methodological relevance"],
+                "exclusion_criteria": ["editorials without data", "duplicate records", "non-target population", "insufficient methodological detail"],
+                "grey_literature_sources": ["conference proceedings", "theses", "preprints", "institutional reports"],
+                "search_volume_benchmarks": {"retrieved": "200-2,000", "screened": "60-300", "full_text": "20-120", "included": "10-60"},
+                "prisma_flow": ["database retrieval", "de-duplication", "title/abstract screen", "full-text review", "final inclusion"],
+                "dedup_strategy": ["DOI exact match", "normalized title match", "title+author fuzzy review"],
+                "snowballing": ["backward reference mining", "forward citation tracking"],
+            },
+        }
+    if playbook == "research_landscape":
+        return {
+            "sections": [
+                {"title": "Field Scale & Momentum", "body": "Estimate publication volume, growth curve, and inflection periods to establish how mature and active the field is."},
+                {"title": "Knowledge Lineage & Clusters", "body": "Identify foundational papers, major clusters, and the citation bridges that connect schools of thought."},
+                {"title": "People, Places, and Journals", "body": "Map top authors, institutions, countries, and journals to reveal the field's power structure."},
+            ],
+            "claims": [
+                {"claim": "Research landscapes are shaped by a small set of foundational hubs and later cluster splits.", "implication": "Anchor synthesis on canonical papers before chasing recent noise."},
+                {"claim": "Emerging voices matter most when they bridge clusters rather than repeat the dominant school.", "implication": "Track citation momentum, not just total citations."},
+            ],
+            "analysis_objects": {
+                "field_overview": {"scale": "medium-to-large", "growth_trend": "accelerating", "periodization": ["foundational period", "expansion period", "recent diversification"]},
+                "foundational_papers": ["paper 1", "paper 2", "paper 3", "paper 4", "paper 5"],
+                "research_clusters": ["dominant paradigm", "applied/implementation cluster", "critical or alternative framework"],
+                "citation_network": {"hub_papers": ["hub 1", "hub 2"], "bridges": ["bridge author / bridge paper"]},
+                "top_authors": ["author A", "author B", "author C"],
+                "journals": ["journal 1", "journal 2", "journal 3", "journal 4", "journal 5", "journal 6", "journal 7", "journal 8"],
+                "geography_map": ["US", "UK", "China", "EU institutions"],
+                "adjacent_fields": ["economics", "information systems", "policy studies"],
+                "emerging_voices": ["new scholar 1", "new scholar 2"],
+                "theoretical_divides": ["causal vs interpretive", "micro vs macro", "efficacy vs implementation"],
+            },
+        }
+    if playbook == "critical_appraisal":
+        return {
+            "sections": [
+                {"title": "Appraisal Frameworks", "body": "Match study designs with appraisal tools such as CASP, Cochrane RoB, GRADE, or MMAT before scoring."},
+                {"title": "Validity & Statistical Quality", "body": "Evaluate internal validity, external validity, sample adequacy, and effect-estimation integrity."},
+                {"title": "Bias Detection & Evidence Grading", "body": "Document publication bias, methodological red flags, and the final evidence grade or certainty level."},
+            ],
+            "claims": [
+                {"claim": "Appraisal quality collapses when different study designs are forced into one scoring frame.", "implication": "Score by design family first, then compare."},
+                {"claim": "Weak external validity can invalidate apparently strong internal results.", "implication": "Generalizability deserves explicit scoring, not a footnote."},
+            ],
+            "analysis_objects": {
+                "quality_frameworks": ["CASP", "Cochrane RoB", "GRADE", "MMAT", "Oxford levels of evidence"],
+                "internal_validity": ["randomization", "blinding", "confounding control", "selection bias"],
+                "external_validity": ["sample representativeness", "ecological validity", "transferability"],
+                "methodological_red_flags": ["small sample", "no control group", "self-report only", "unclear attrition"],
+                "statistical_checks": ["appropriate tests", "effect sizes", "confidence intervals", "assumption checks"],
+                "qualitative_rigor": ["credibility", "transferability", "reflexivity", "thick description"],
+                "publication_bias": ["funnel plot", "Egger test", "file drawer risk"],
+                "quality_scorecard": ["study id", "tool", "score", "risk of bias", "grade"],
+            },
+        }
+    if playbook == "thematic_synthesis":
+        return {
+            "sections": [
+                {"title": "Coding Architecture", "body": "Start from first-order line-by-line coding, then consolidate into second-order themes and third-order synthesis."},
+                {"title": "Translation & Contradiction", "body": "Map reciprocal concepts across studies and explicitly model refutational findings."},
+                {"title": "Narrative Structure & CERQual", "body": "Present convergences, divergences, and confidence levels in a defensible narrative sequence."},
+            ],
+            "claims": [
+                {"claim": "High-quality thematic synthesis preserves traceability from quotations or findings to abstract themes.", "implication": "Do not skip first-order coding even when themes look obvious."},
+                {"claim": "Contradictions are analytically valuable, not noise to be removed.", "implication": "Refutational synthesis should shape final interpretation."},
+            ],
+            "analysis_objects": {
+                "coding_framework": ["first-order codes", "memo rules", "study context tags"],
+                "second_order_themes": ["theme A", "theme B", "theme C"],
+                "third_order_synthesis": ["analytic synthesis 1", "analytic synthesis 2"],
+                "reciprocal_translation": ["concept x = concept y across papers"],
+                "refutational_synthesis": ["contradiction 1 and plausible explanations"],
+                "convergence_divergence": {"agreement": ["shared finding"], "contested": ["disputed claim"]},
+                "theory_fit": ["best-fit framework or borrowed theory"],
+                "theme_matrix": ["theme x study design", "theme x geography", "theme x population"],
+                "cerqual": ["methodological limitations", "coherence", "adequacy", "relevance"],
+            },
+        }
+    if playbook == "meta_analysis_plan":
+        return {
+            "sections": [
+                {"title": "Effect Sizes & Model Choice", "body": "Choose outcome-aligned effect measures and decide between fixed and random effects using pre-declared rules."},
+                {"title": "Heterogeneity, Bias, and Sensitivity", "body": "Plan heterogeneity thresholds, subgroup analyses, sensitivity analyses, and publication-bias checks before synthesis."},
+                {"title": "Software, Reporting, and Failure Modes", "body": "Specify software, PRISMA-MA reporting, and the main errors that would invalidate pooling."},
+            ],
+            "claims": [
+                {"claim": "Meta-analysis quality depends more on comparability rules than on pooling mechanics.", "implication": "Define comparability and exclusion logic before touching software."},
+                {"claim": "Sensitivity analyses are mandatory when low-quality or heterogeneous studies drive the pooled effect.", "implication": "Robustness checks belong in the protocol, not as post-hoc salvage."},
+            ],
+            "analysis_objects": {
+                "effect_size_plan": ["OR", "RR", "SMD", "MD"],
+                "heterogeneity_assessment": {"i2_thresholds": ["low", "moderate", "substantial", "considerable"], "tests": ["Cochran Q", "forest plot review"]},
+                "model_selection": ["fixed effects when clinically/statistically homogeneous", "random effects when heterogeneity is expected"],
+                "subgroup_plan": ["study design", "population", "intervention intensity"],
+                "sensitivity_protocol": ["remove high-risk studies", "leave-one-out", "alternative outcome coding"],
+                "publication_bias": ["funnel plot", "Egger regression", "trim-and-fill"],
+                "grade_criteria": ["risk of bias", "inconsistency", "indirectness", "imprecision", "publication bias"],
+                "software_reporting": ["R", "RevMan", "Stata", "PRISMA-MA checklist"],
+                "common_errors": ["double counting participants", "pooling incomparable outcomes", "ignoring cluster design"],
+            },
+        }
+    if playbook == "research_gap_analysis":
+        return {
+            "sections": [
+                {"title": "Gap Taxonomy", "body": "Classify evidence, population, methodological, contextual, theoretical, and replication gaps explicitly."},
+                {"title": "Magnitude & Conflict", "body": "Assess which gaps are large, urgent, feasible, and tied to unresolved contradictions or outdated evidence."},
+                {"title": "Research Questions & Justification", "body": "Translate validated gaps into concrete research questions and grant- or manuscript-ready justification language."},
+            ],
+            "claims": [
+                {"claim": "Not every absence is a strategic gap; some are low-value blind spots.", "implication": "Prioritize gaps by importance, tractability, and decision relevance."},
+                {"claim": "Conflict between studies is often the clearest sign of a high-value gap.", "implication": "Resolution potential should factor into gap ranking."},
+            ],
+            "analysis_objects": {
+                "gap_classes": ["evidence gap", "population gap", "method gap", "context gap", "theory gap", "replication gap"],
+                "gap_magnitude": ["importance", "recognition", "feasibility"],
+                "conflict_map": ["conflicting result 1", "conflicting result 2"],
+                "outdated_evidence": ["areas dominated by older evidence base"],
+                "method_lock_in": ["overused methods / underused alternatives"],
+                "understudied_groups": ["excluded group 1", "excluded group 2"],
+                "theory_underdevelopment": ["borrowed theory not fully tested"],
+                "practice_knowledge_gap": ["academic insight not translated into practice"],
+                "research_questions": ["RQ1", "RQ2", "RQ3"],
+                "justification_templates": ["manuscript framing", "grant framing"],
+            },
+        }
+    if playbook == "citation_graph_manager":
+        return {
+            "sections": [
+                {"title": "Reference Infrastructure", "body": "Define folder/tag structures, standardized annotations, and audit routines for a defensible citation base."},
+                {"title": "Citation Tracking & Visualization", "body": "Use backward/forward citation tracking and graph tools to uncover clusters, hubs, and missing recent studies."},
+                {"title": "Living Review Operations", "body": "Set alerts, recency audits, and self-citation/cartel checks to keep the evidence base current."},
+            ],
+            "claims": [
+                {"claim": "Reference management quality determines whether a review remains reproducible after the first draft.", "implication": "Build annotation and tracking discipline before scaling the corpus."},
+                {"claim": "Recency drift is a major failure mode in fast-moving topics.", "implication": "A living-review cadence should be part of the citation protocol."},
+            ],
+            "analysis_objects": {
+                "reference_system": {"tools": ["Zotero", "Mendeley", "EndNote"], "folders": ["screened-in", "screened-out", "high-priority", "methods"], "tags": ["topic", "design", "quality", "theory"]},
+                "annotation_protocol": ["key claim", "sample", "method", "finding", "limitations"],
+                "forward_tracking": ["Google Scholar", "Semantic Scholar"],
+                "backward_tracking": ["reference mining of foundational papers"],
+                "foundational_paper_rules": ["early citation hub", "concept origin", "method standard-setter"],
+                "citation_clusters": ["cluster map", "hub identification", "bridge authors"],
+                "recency_audit": ["last 12 months scan", "alert review cadence"],
+                "cartel_checks": ["self-citation concentration", "closed citation loops"],
+                "reference_styles": ["APA 7", "Vancouver"],
+                "living_review_strategy": ["alerts", "monthly triage", "quarterly refresh"],
+            },
+        }
+    if playbook == "systematic_review_writer":
+        return {
+            "sections": [
+                {"title": "Manuscript Spine", "body": "Build a publication-grade structure from abstract through conclusion with PRISMA-aligned methods and results."},
+                {"title": "Results & Discussion Logic", "body": "Sequence PRISMA counts, study tables, quality appraisal, synthesis, limitations, and implications in a board-clean narrative."},
+                {"title": "Submission Readiness", "body": "Anticipate reviewer criticism, complete the PRISMA checklist, and shortlist target journals that match topic and method."},
+            ],
+            "claims": [
+                {"claim": "Systematic reviews fail publication less on findings than on reporting discipline.", "implication": "Write against PRISMA and reviewer objections from the start."},
+                {"claim": "A publishable discussion explains significance, comparison, limitations, and future work in one coherent arc.", "implication": "Do not let synthesis, limitations, and implications drift into separate essays."},
+            ],
+            "analysis_objects": {
+                "structured_abstract": ["background", "objective", "methods", "results", "conclusion"],
+                "introduction_outline": ["importance", "field status", "problem", "gap", "review objective"],
+                "methods_section": ["PICO", "databases", "screening", "quality appraisal"],
+                "results_structure": ["PRISMA flow", "study characteristics", "quality summary", "synthesis findings"],
+                "discussion_architecture": ["main findings", "comparison to literature", "limitations", "implications"],
+                "conclusion_elements": ["value add", "stakeholders", "future work"],
+                "tables_figures": ["PRISMA flow chart", "study characteristics table", "quality table"],
+                "reviewer_response": ["scope critique", "bias critique", "novelty critique"],
+                "prisma_checklist": ["item-by-item page mapping"],
+                "journal_targets": ["journal A", "journal B", "journal C", "journal D", "journal E"],
+            },
+        }
 
     if playbook == "market_sizing":
         tam = "50-80 亿元" if lang == "zh" else "USD 0.7B-1.1B"
@@ -513,6 +749,14 @@ def _peer_review_findings(playbook: str, evidence: List[Dict[str, Any]], assumpt
                 "action": "做乐观/基准/保守三档敏感性分析" if lang == "zh" else "Run optimistic/base/conservative sensitivity bands",
             }
         )
+    if playbook in SYSTEMATIC_REVIEW_PLAYBOOKS:
+        findings.append(
+            {
+                "severity": "high",
+                "finding": "系统综述类交付必须保证检索、筛选和质量评估口径一致" if lang == "zh" else "Systematic review outputs require aligned search, screening, and appraisal criteria",
+                "action": "在最终交付前交叉核对 PRISMA、纳排标准和质量评分表" if lang == "zh" else "Cross-check PRISMA flow, eligibility criteria, and quality scorecards before finalizing",
+            }
+        )
     if any(str(item.get("risk", "")).strip() == "high" for item in assumptions):
         findings.append(
             {
@@ -555,9 +799,10 @@ def _ppt_bridge(req: Dict[str, Any], playbook: str, sections: List[Dict[str, Any
         ]
     else:
         slide_titles = [item.get("title", f"Section {idx + 1}") for idx, item in enumerate(sections[:5])]
+    premium_themes = {"market_sizing", "pestle_risk", "economic_moat"} | SYSTEMATIC_REVIEW_PLAYBOOKS
     return {
         "deck_title": deck_title,
-        "recommended_theme": "ivory-ledger" if playbook in {"market_sizing", "pestle_risk", "economic_moat"} else "boardroom-signal",
+        "recommended_theme": "ivory-ledger" if playbook in premium_themes else "boardroom-signal",
         "slide_titles": slide_titles,
         "slide_bodies": [item.get("body", "") for item in sections[:5]],
         "ppt_params": {

@@ -71,6 +71,54 @@
       "category": "executive",
       "preferred_sources": ["research synthesis", "financial implications", "competitor economics", "operating constraints"],
       "required_outputs": ["five_slide_text_deck", "pivotal_tradeoff", "ppt_bridge"]
+    },
+    "systematic_search": {
+      "label": "Systematic Literature Search",
+      "category": "systematic_review",
+      "preferred_sources": ["PubMed", "Scopus", "Web of Science", "grey literature", "preprints"],
+      "required_outputs": ["search_strategy", "database_coverage", "inclusion_criteria", "exclusion_criteria", "prisma_flow", "dedup_strategy"]
+    },
+    "research_landscape": {
+      "label": "Research Landscape Mapper",
+      "category": "systematic_review",
+      "preferred_sources": ["OpenAlex", "Crossref", "Scopus", "Web of Science", "Google Scholar"],
+      "required_outputs": ["field_overview", "foundational_papers", "research_clusters", "citation_network", "journals", "geography_map"]
+    },
+    "critical_appraisal": {
+      "label": "Critical Appraisal Engine",
+      "category": "systematic_review",
+      "preferred_sources": ["included studies", "protocols", "supplementary appendices", "risk of bias tools"],
+      "required_outputs": ["quality_frameworks", "internal_validity", "external_validity", "statistical_checks", "bias_detection", "quality_scorecard"]
+    },
+    "thematic_synthesis": {
+      "label": "Thematic Synthesis Builder",
+      "category": "systematic_review",
+      "preferred_sources": ["qualitative studies", "coding memos", "conceptual frameworks", "field notes"],
+      "required_outputs": ["coding_framework", "second_order_themes", "third_order_synthesis", "reciprocal_translation", "refutational_synthesis", "cerqual"]
+    },
+    "meta_analysis_plan": {
+      "label": "Meta Analysis Framework",
+      "category": "systematic_review",
+      "preferred_sources": ["effect estimates", "study characteristics", "protocols", "statistical guidance"],
+      "required_outputs": ["effect_size_plan", "heterogeneity_assessment", "model_selection", "subgroup_plan", "sensitivity_protocol", "publication_bias"]
+    },
+    "research_gap_analysis": {
+      "label": "Research Gap Identifier",
+      "category": "systematic_review",
+      "preferred_sources": ["evidence maps", "recent reviews", "practice guidelines", "under-studied cohorts"],
+      "required_outputs": ["gap_classes", "gap_magnitude", "conflicts", "outdated_evidence", "replication_gaps", "research_questions"]
+    },
+    "citation_graph_manager": {
+      "label": "Citation Graph & Reference Manager",
+      "category": "systematic_review",
+      "preferred_sources": ["Zotero", "EndNote", "Google Scholar", "Semantic Scholar", "VOSviewer"],
+      "required_outputs": ["reference_system", "annotation_protocol", "forward_tracking", "backward_tracking", "citation_clusters", "living_review_strategy"]
+    },
+    "systematic_review_writer": {
+      "label": "Systematic Review Writer",
+      "category": "systematic_review",
+      "preferred_sources": ["PRISMA checklist", "review protocol", "study tables", "quality assessments", "journal guidance"],
+      "required_outputs": ["structured_abstract", "introduction_outline", "methods_section", "results_structure", "discussion_architecture", "journal_targets"]
     }
   }
 }

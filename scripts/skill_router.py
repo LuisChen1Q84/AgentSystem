@@ -25,6 +25,7 @@ try:
     from scripts.image_creator_hub import load_cfg as load_image_hub_cfg
     from scripts.image_creator_hub import run_request as run_image_hub_request
     from scripts.research_hub import run_request as run_research_hub_request
+    from scripts.stock_market_hub import run_committee as run_stock_hub_committee
     from scripts.stock_market_hub import run_report as run_stock_hub_report
     from scripts.stock_market_hub import load_cfg as load_stock_hub_cfg
     from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
@@ -39,6 +40,7 @@ except ModuleNotFoundError:  # direct script execution
     from image_creator_hub import load_cfg as load_image_hub_cfg  # type: ignore
     from image_creator_hub import run_request as run_image_hub_request  # type: ignore
     from research_hub import run_request as run_research_hub_request  # type: ignore
+    from stock_market_hub import run_committee as run_stock_hub_committee  # type: ignore
     from stock_market_hub import run_report as run_stock_hub_report  # type: ignore
     from stock_market_hub import load_cfg as load_stock_hub_cfg  # type: ignore
     from stock_market_hub import pick_symbols as pick_stock_symbols  # type: ignore
@@ -129,6 +131,21 @@ RESEARCH_WORDS = {
     "情景推演",
     "蓝海",
     "定价策略",
+    "systematic review",
+    "literature search",
+    "prisma",
+    "mesh",
+    "critical appraisal",
+    "meta analysis",
+    "thematic synthesis",
+    "citation graph",
+    "文献搜索",
+    "系统综述",
+    "prisma流程",
+    "批判性评价",
+    "荟萃分析",
+    "主题综合",
+    "引文图谱",
 }
 
 
@@ -407,16 +424,17 @@ def execute_route(text: str, params_json: str) -> Dict[str, Any]:
             hub_cfg.get("defaults", {}).get("default_universe", "global_core")
         )
         no_sync = bool(user_params.get("no_sync", False))
+        committee_mode = bool(user_params.get("committee_mode", False)) or any(token in text.lower() for token in ["committee", "bull case", "bear case", "debate", "投委会", "多空"])
         exec_start = time.time()
         try:
-            hub = run_stock_hub_report(hub_cfg, text, universe, symbols, no_sync)
+            hub = run_stock_hub_committee(hub_cfg, text, universe, symbols, no_sync) if committee_mode else run_stock_hub_report(hub_cfg, text, universe, symbols, no_sync)
             TRACER.record_execution(trace_id, skill, True, duration_ms=int((time.time() - exec_start) * 1000))
             result = {
                 "route": route,
-                "execute": {"type": "stock-market-hub", "symbols": symbols, "universe": universe, "no_sync": no_sync},
+                "execute": {"type": "stock-market-hub", "symbols": symbols, "universe": universe, "no_sync": no_sync, "committee_mode": committee_mode},
                 "result": hub,
                 "meta": {
-                    "mode": "free-first-global-stock",
+                    "mode": "committee-market-review" if committee_mode else "free-first-global-stock",
                     "risk_tags": ["non_realtime", "public_web_sources_only", "not_investment_advice"],
                     "next_actions": [
                         "make stock-hub q='你的问题'",

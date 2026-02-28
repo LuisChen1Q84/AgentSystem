@@ -37,6 +37,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("ppt.generate", names)
         self.assertIn("image.generate", names)
         self.assertIn("market.report", names)
+        self.assertIn("market.committee", names)
         self.assertIn("research.deck", names)
         self.assertIn("research.lookup", names)
         self.assertIn("research.report", names)
@@ -282,6 +283,18 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(deck.get("ok", False))
             self.assertEqual(deck.get("mode"), "research-deck-generated")
             self.assertIn("pptx_path", deck)
+
+    def test_execute_market_committee(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            with patch("apps.market_hub.app.load_cfg", return_value={"defaults": {"default_universe": "global_core"}}), \
+                patch("apps.market_hub.app.pick_symbols", return_value=["SPY"]), \
+                patch("apps.market_hub.app.run_committee", return_value={"ok": True, "market_committee": {"participants": [{"role": "risk_committee"}]}, "delivery_protocol": {"service": "market.committee"}}):
+                out = reg.execute("market.committee", text="分析SPY", params={})
+            self.assertTrue(out.get("ok", False))
+            self.assertIn("service_diagnostics", out)
+            self.assertEqual(out.get("delivery_protocol", {}).get("service"), "market.committee")
 
     def test_feedback_services(self):
         with tempfile.TemporaryDirectory() as td:

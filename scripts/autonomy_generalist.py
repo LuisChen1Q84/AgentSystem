@@ -72,6 +72,20 @@ RESEARCH_WORDS = {
     "定价策略",
     "研报",
     "研究报告",
+    "systematic review",
+    "literature search",
+    "prisma",
+    "critical appraisal",
+    "meta analysis",
+    "thematic synthesis",
+    "citation graph",
+    "文献搜索",
+    "系统综述",
+    "prisma流程",
+    "批判性评价",
+    "荟萃分析",
+    "主题综合",
+    "引文图谱",
 }
 
 
@@ -284,7 +298,8 @@ def _exec_strategy(executor: str, text: str, params: Dict[str, Any], cfg: Dict[s
         out = creative_app.generate_ppt(text, params)
         return {"ok": bool(out.get("ok", False)), "mode": "ppt", "result": out}
     if executor == "stock":
-        out = market_app.run_report(text, params)
+        committee_mode = bool(params.get("committee_mode", False)) or any(token in text.lower() for token in ["committee", "bull case", "bear case", "debate", "投委会", "多空"])
+        out = market_app.run_committee(text, params) if committee_mode else market_app.run_report(text, params)
         return {"ok": True, "mode": "stock", "result": out}
     if executor == "research":
         out = research_app.run_report(text, params)

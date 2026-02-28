@@ -83,6 +83,152 @@ def signal_note(row: Dict[str, Any]) -> str:
     return f"中性震荡。区间参考 {sup} - {res}，等待突破后再加仓。"
 
 
+def _to_float(value: Any) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _avg(values: List[float | None]) -> float:
+    nums = [x for x in values if x is not None]
+    return round(sum(nums) / len(nums), 2) if nums else 0.0
+
+
+def _committee_payload(
+    query: str,
+    universe: str,
+    analyze: Dict[str, Any],
+    backtest: Dict[str, Any],
+    portfolio: Dict[str, Any],
+    portfolio_backtest: Dict[str, Any],
+    freefirst: Dict[str, Any],
+    quality_gate: Dict[str, Any],
+) -> Dict[str, Any]:
+    rows = analyze.get("items", []) if isinstance(analyze.get("items", []), list) else []
+    bt_rows = backtest.get("items", []) if isinstance(backtest.get("items", []), list) else []
+    buy_rows = [row for row in rows if str(row.get("signal", "")).upper() == "BUY"]
+    sell_rows = [row for row in rows if str(row.get("signal", "")).upper() == "SELL"]
+    top_buys = [str(row.get("symbol", "")).strip() for row in buy_rows[:3] if str(row.get("symbol", "")).strip()]
+    avg_factor = _avg([_to_float(row.get("factor_score")) for row in rows])
+    avg_rsi = _avg([_to_float(row.get("rsi14")) for row in rows])
+    avg_return = _avg([_to_float(row.get("total_return_pct")) for row in bt_rows])
+    coverage = float(freefirst.get("coverage_rate", 0.0) or 0.0)
+    sharpe = _to_float((portfolio_backtest.get("strategy", {}) if isinstance(portfolio_backtest.get("strategy", {}), dict) else {}).get("sharpe"))
+    total_return = _to_float((portfolio_backtest.get("strategy", {}) if isinstance(portfolio_backtest.get("strategy", {}), dict) else {}).get("total_return_pct"))
+    drawdown = _to_float((portfolio_backtest.get("strategy", {}) if isinstance(portfolio_backtest.get("strategy", {}), dict) else {}).get("max_drawdown_pct"))
+    risk_flags: List[str] = []
+    if not quality_gate.get("passed", True):
+        risk_flags.append("coverage_gate_failed")
+    if drawdown is not None and drawdown <= -20:
+        risk_flags.append("deep_drawdown")
+    if avg_factor < 45:
+        risk_flags.append("weak_factor_signal")
+    if coverage < float(quality_gate.get("min_coverage_rate", 60.0) or 60.0):
+        risk_flags.append("thin_external_coverage")
+    if not portfolio.get("ok", False):
+        risk_flags.append("portfolio_generation_failed")
+
+    fundamental_stance = "bullish" if avg_factor >= 60 else ("neutral" if avg_factor >= 45 else "bearish")
+    technical_stance = "bullish" if len(buy_rows) > len(sell_rows) else ("neutral" if len(buy_rows) == len(sell_rows) else "bearish")
+    macro_stance = "neutral" if quality_gate.get("passed", True) else "cautious"
+    bull_points = [
+        "Top factor names still show positive signal concentration.",
+        "Backtest direction is acceptable enough to keep a watchlist alive." if bt_rows else "Technical breadth suggests some upside optionality.",
+        "Portfolio construction remains feasible under current constraints." if portfolio.get("ok", False) else "At least a partial long list exists despite noise.",
+    ]
+    bear_points = [
+        "Coverage quality limits conviction and should cap size.",
+        "Estimated drawdown and risk-off history argue against full-risk deployment." if portfolio_backtest.get("ok", False) else "Backtest support is incomplete or blocked.",
+        "Signal quality is not broad enough to justify aggressive concentration.",
+    ]
+    vote_score = 0
+    vote_score += 1 if fundamental_stance == "bullish" else (-1 if fundamental_stance == "bearish" else 0)
+    vote_score += 1 if technical_stance == "bullish" else (-1 if technical_stance == "bearish" else 0)
+    vote_score += 0 if macro_stance == "neutral" else -1
+    decision = "accumulate_small" if vote_score >= 2 and not risk_flags else ("watchlist_only" if vote_score >= 0 else "defensive")
+    conviction = "high" if decision == "accumulate_small" and len(risk_flags) == 0 else ("medium" if decision == "watchlist_only" else "low")
+    return {
+        "query": query,
+        "universe": universe,
+        "participants": [
+            {
+                "role": "fundamental_analyst",
+                "stance": fundamental_stance,
+                "thesis": f"Average factor score={avg_factor}; strongest names={', '.join(top_buys) or 'n/a'}.",
+                "evidence": ["factor_score", "portfolio feasibility", "quality gate"],
+            },
+            {
+                "role": "technical_analyst",
+                "stance": technical_stance,
+                "thesis": f"BUY={len(buy_rows)} / SELL={len(sell_rows)}; avg RSI={avg_rsi}.",
+                "evidence": ["signal distribution", "support/resistance", "rsi14"],
+            },
+            {
+                "role": "news_macro_analyst",
+                "stance": macro_stance,
+                "thesis": f"External coverage={coverage}% with topic={freefirst.get('topic', 'market')}.",
+                "evidence": ["free-first coverage", "error class counts", "quality gate"],
+            },
+            {
+                "role": "bull_researcher",
+                "stance": "bullish",
+                "thesis": "The opportunity is tradable only if current leaders retain signal breadth and execution discipline.",
+                "evidence": bull_points,
+            },
+            {
+                "role": "bear_researcher",
+                "stance": "bearish",
+                "thesis": "Data quality and concentration risk can erase theoretical upside faster than expected.",
+                "evidence": bear_points,
+            },
+            {
+                "role": "risk_committee",
+                "stance": "cautious" if risk_flags else "open",
+                "thesis": "Risk gating should dominate until coverage, drawdown, and portfolio quality are all acceptable.",
+                "evidence": risk_flags or ["no_material_risk_flags"],
+            },
+            {
+                "role": "portfolio_manager",
+                "stance": decision,
+                "thesis": f"Decision={decision}; conviction={conviction}; estimated sharpe={sharpe if sharpe is not None else 'n/a'}.",
+                "evidence": ["committee votes", "portfolio backtest", "risk flags"],
+            },
+        ],
+        "debate_summary": {
+            "bull_case": "Supportive signals exist, but only a subset of names deserves capital.",
+            "bear_case": "Coverage and drawdown risks make full-size deployment premature.",
+            "resolved_tension": "Keep exposure small and conditional until evidence quality improves." if decision != "defensive" else "Preserve capital and wait for stronger confirmation.",
+        },
+        "decision": {
+            "stance": decision,
+            "conviction": conviction,
+            "position_sizing_note": "Start small (25-40% of normal size) and expand only after confirmation." if decision == "accumulate_small" else ("Maintain watchlist, no full allocation yet." if decision == "watchlist_only" else "Stay defensive and preserve capital."),
+            "guardrails": [
+                "Require quality gate pass before scaling.",
+                "Do not override drawdown controls.",
+                "Avoid single-name concentration until breadth improves.",
+            ],
+        },
+        "risk_gate": {
+            "risk_level": "high" if risk_flags else ("medium" if decision == "watchlist_only" else "low"),
+            "risk_flags": risk_flags,
+            "quality_gate_passed": bool(quality_gate.get("passed", False)),
+            "coverage_rate": round(coverage, 2),
+            "estimated_drawdown_pct": drawdown,
+            "estimated_total_return_pct": total_return,
+            "avg_backtest_return_pct": avg_return,
+        },
+        "evidence_sources": [
+            {"source": "stock_quant.analyze", "count": len(rows)},
+            {"source": "stock_quant.backtest", "count": len(bt_rows)},
+            {"source": "mcp_freefirst_hub", "coverage_rate": round(coverage, 2)},
+        ],
+    }
+
+
 def evaluate_quality_gate(cfg: Dict[str, Any], freefirst: Dict[str, Any]) -> Dict[str, Any]:
     defaults = cfg.get("defaults", {})
     enabled = bool(defaults.get("enforce_coverage_gate", True))
@@ -204,6 +350,7 @@ def render_md(payload: Dict[str, Any]) -> str:
         lines.append("- 数据不足，未生成组合级回测。")
 
     ff = payload.get("freefirst", {})
+    committee = payload.get("market_committee", {}) if isinstance(payload.get("market_committee", {}), dict) else {}
     lines.extend([
         "",
         "## MCP Free-First 抓取",
@@ -221,10 +368,38 @@ def render_md(payload: Dict[str, Any]) -> str:
         "- 覆盖全球市场依赖 symbol 映射正确性，建议先跑小样本校验。",
         "",
     ])
+    if committee:
+        decision = committee.get("decision", {}) if isinstance(committee.get("decision", {}), dict) else {}
+        debate = committee.get("debate_summary", {}) if isinstance(committee.get("debate_summary", {}), dict) else {}
+        risk_gate = committee.get("risk_gate", {}) if isinstance(committee.get("risk_gate", {}), dict) else {}
+        lines.extend([
+            "## Market Committee",
+            "",
+            f"- stance: {decision.get('stance', '')} | conviction: {decision.get('conviction', '')}",
+            f"- sizing: {decision.get('position_sizing_note', '')}",
+            f"- bull case: {debate.get('bull_case', '')}",
+            f"- bear case: {debate.get('bear_case', '')}",
+            f"- resolved tension: {debate.get('resolved_tension', '')}",
+            f"- risk level: {risk_gate.get('risk_level', '')} | flags: {risk_gate.get('risk_flags', [])}",
+            "",
+            "| Role | Stance | Thesis |",
+            "|---|---|---|",
+        ])
+        for item in committee.get("participants", []):
+            lines.append(f"| {item.get('role','')} | {item.get('stance','')} | {item.get('thesis','')} |")
+        lines.extend(["", ""])
     return "\n".join(lines)
 
 
-def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str], no_sync: bool) -> Dict[str, Any]:
+def _run_report(
+    cfg: Dict[str, Any],
+    query: str,
+    universe: str,
+    symbols: List[str],
+    no_sync: bool,
+    service_name: str,
+    committee_mode: bool,
+) -> Dict[str, Any]:
     defaults = cfg.get("defaults", {})
     sq_cfg = Path(str(defaults.get("stock_quant_config", ROOT / "config/stock_quant.toml")))
     if not sq_cfg.is_absolute():
@@ -278,6 +453,7 @@ def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str
         "query": query,
         "universe": universe,
         "symbols": symbols,
+        "mode": "market-committee" if committee_mode else "market-report",
         "sync": sync_out,
         "analyze": analyze,
         "backtest": backtest,
@@ -312,13 +488,24 @@ def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str
         },
         next_actions=["覆盖率不足时先扩充 symbols 再回测", "高波动阶段建议降低 leverage"],
     )
-    payload.update(build_output_objects("market.report", payload, entrypoint="scripts.stock_market_hub"))
+    if committee_mode:
+        payload["market_committee"] = _committee_payload(query, universe, analyze, backtest, portfolio, portfolio_backtest, freefirst, quality_gate)
+        payload["summary"] = f"Market committee completed a multi-role review for {query or universe}."
+    payload.update(build_output_objects(service_name, payload, entrypoint="scripts.stock_market_hub"))
     out_md.write_text(render_md(payload), encoding="utf-8")
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     latest = report_dir / "latest.json"
     latest.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return payload
+
+
+def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str], no_sync: bool) -> Dict[str, Any]:
+    return _run_report(cfg, query, universe, symbols, no_sync, service_name="market.report", committee_mode=False)
+
+
+def run_committee(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str], no_sync: bool) -> Dict[str, Any]:
+    return _run_report(cfg, query, universe, symbols, no_sync, service_name="market.committee", committee_mode=True)
 
 
 def build_cli() -> argparse.ArgumentParser:
@@ -328,6 +515,7 @@ def build_cli() -> argparse.ArgumentParser:
     p.add_argument("--universe", default="")
     p.add_argument("--symbols", default="")
     p.add_argument("--no-sync", action="store_true")
+    p.add_argument("--committee-mode", action="store_true")
     return p
 
 
@@ -341,7 +529,7 @@ def main() -> int:
     universe = args.universe.strip() or str(cfg.get("defaults", {}).get("default_universe", "global_core"))
     symbols = pick_symbols(cfg, args.query, args.symbols)
 
-    out = run_report(cfg, args.query, universe, symbols, args.no_sync)
+    out = run_committee(cfg, args.query, universe, symbols, args.no_sync) if args.committee_mode else run_report(cfg, args.query, universe, symbols, args.no_sync)
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
 

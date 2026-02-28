@@ -44,6 +44,12 @@ class AgentStudioTest(unittest.TestCase):
         a4rl = parser.parse_args(["research-lookup", "--text", "Microsoft strategy"])
         self.assertEqual(a4rl.cmd, "research-lookup")
 
+        a4mr = parser.parse_args(["market-report", "--text", "分析SPY"])
+        self.assertEqual(a4mr.cmd, "market-report")
+
+        a4mc = parser.parse_args(["market-committee", "--text", "分析SPY"])
+        self.assertEqual(a4mc.cmd, "market-committee")
+
         a41 = parser.parse_args(["governance", "--limit", "12"])
         self.assertEqual(a41.cmd, "governance")
         self.assertEqual(a41.limit, 12)
@@ -275,6 +281,19 @@ class AgentStudioTest(unittest.TestCase):
             self.assertTrue(payload.get("ok", False))
             self.assertEqual(payload.get("mode"), "research-deck-generated")
             self.assertIn("pptx_path", payload)
+
+    def test_market_committee_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with patch.object(reg, "execute", return_value={"ok": True, "delivery_bundle": {"summary": "committee"}, "market_committee": {"participants": [{"role": "risk_committee"}]}}):
+                with redirect_stdout(buf):
+                    code = agent_studio._market_committee_cmd(reg, text="分析SPY", params_json="{}")
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("market_committee", payload)
 
     def test_research_lookup_cmd(self):
         reg = AgentServiceRegistry(root=Path(tempfile.mkdtemp()))

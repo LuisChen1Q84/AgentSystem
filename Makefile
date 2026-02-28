@@ -16,7 +16,7 @@ ROOT ?= $(CURDIR)
 	mcp-doctor mcp-route-smart mcp-run mcp-replay mcp-pipeline \
 	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
 	stock-env-check stock-health-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
-	skill-route skill-execute autonomous agent agent-studio agent-research-report agent-research-deck agent-research-lookup agent-observe agent-recommend agent-state-sync agent-state-stats agent-failure-review agent-repair-observe agent-repair-apply agent-repair-approve agent-repair-list agent-repair-presets agent-repair-compare agent-repair-rollback agent-run-inspect agent-object-view agent-run-replay agent-policy agent-policy-apply agent-preferences agent-governance agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
+	skill-route skill-execute autonomous agent agent-studio agent-research-report agent-research-deck agent-research-lookup agent-market-report agent-market-committee agent-observe agent-recommend agent-state-sync agent-state-stats agent-failure-review agent-repair-observe agent-repair-apply agent-repair-approve agent-repair-list agent-repair-presets agent-repair-compare agent-repair-rollback agent-run-inspect agent-object-view agent-run-replay agent-policy agent-policy-apply agent-preferences agent-governance agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
 
 help:
 	@echo "Available targets:"
@@ -27,7 +27,7 @@ help:
 	@echo "  make stock-env-check [root='$(ROOT)']"
 	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
-	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|state-sync|state-stats|diagnostics|research-report|research-deck|research-lookup|governance|failure-review|repair-observe|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|object-view|run-replay|slo|policy|policy-apply|preferences|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|research.report|research.deck|research.lookup|data.query|agent.diagnostics|agent.governance.console|agent.failures.review|agent.repairs.observe|agent.repairs.apply|agent.repairs.approve|agent.repairs.list|agent.repairs.presets|agent.repairs.compare|agent.repairs.rollback|agent.run.inspect|agent.object.view|agent.run.replay|agent.policy.tune|agent.policy.apply|agent.state.sync|agent.state.stats|agent.preferences.learn'] [params='{\"k\":\"v\"}']"
+	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|state-sync|state-stats|diagnostics|research-report|research-deck|research-lookup|market-report|market-committee|governance|failure-review|repair-observe|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|object-view|run-replay|slo|policy|policy-apply|preferences|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|market.committee|research.report|research.deck|research.lookup|data.query|agent.diagnostics|agent.governance.console|agent.failures.review|agent.repairs.observe|agent.repairs.apply|agent.repairs.approve|agent.repairs.list|agent.repairs.presets|agent.repairs.compare|agent.repairs.rollback|agent.run.inspect|agent.object.view|agent.run.replay|agent.policy.tune|agent.policy.apply|agent.state.sync|agent.state.stats|agent.preferences.learn'] [params='{\"k\":\"v\"}']"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
@@ -885,6 +885,14 @@ agent-research-deck:
 agent-research-lookup:
 	@if [ -z "$(text)" ]; then echo "Usage: make agent-research-lookup text='<query>' [params='{\"source_connectors\":[\"openalex\",\"sec\"]}']"; exit 2; fi
 	@$(ROOT)/scripts/agentsys.sh agent-studio research-lookup --text "$(text)" $(if $(params),--params-json '$(params)',)
+
+agent-market-report:
+	@if [ -z "$(text)" ]; then echo "Usage: make agent-market-report text='<query>' [params='{\"universe\":\"global_core\"}']"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh agent-studio market-report --text "$(text)" $(if $(params),--params-json '$(params)',)
+
+agent-market-committee:
+	@if [ -z "$(text)" ]; then echo "Usage: make agent-market-committee text='<query>' [params='{\"universe\":\"global_core\"}']"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh agent-studio market-committee --text "$(text)" $(if $(params),--params-json '$(params)',)
 
 agent-observe:
 	@$(ROOT)/scripts/agentsys.sh agent-observe $(if $(days),--days $(days),) $(if $(out_json),--out-json "$(out_json)",) $(if $(out_md),--out-md "$(out_md)",)

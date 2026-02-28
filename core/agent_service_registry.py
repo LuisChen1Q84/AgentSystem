@@ -99,6 +99,7 @@ class AgentServiceRegistry:
             "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
             "image.generate": ServiceSpec("image.generate", "creative", "Generate image assets through image hub", "medium"),
             "market.report": ServiceSpec("market.report", "domain", "Generate stock market strategy report", "high"),
+            "market.committee": ServiceSpec("market.committee", "domain", "Run committee-style market analysis with bull/bear/risk debate", "high"),
             "research.deck": ServiceSpec("research.deck", "domain", "Generate research report plus executive deck in one run", "medium"),
             "research.lookup": ServiceSpec("research.lookup", "domain", "Lookup official research sources from OpenAlex and SEC", "medium"),
             "research.report": ServiceSpec("research.report", "domain", "Generate evidence-led research report with citations and PPT bridge", "medium"),
@@ -371,6 +372,13 @@ class AgentServiceRegistry:
         if not text and not str(params.get("query", "")).strip():
             return error_response("market.report", "missing_text", code="missing_text").to_dict()
         return self.market.run(text, params).to_dict()
+
+    def _exec_market_committee(self, **kwargs: Any) -> Dict[str, Any]:
+        text = str(kwargs.get("text", "")).strip()
+        params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
+        if not text and not str(params.get("query", "")).strip():
+            return error_response("market.committee", "missing_text", code="missing_text").to_dict()
+        return self.market.committee(text, params).to_dict()
 
     def _exec_research_report(self, **kwargs: Any) -> Dict[str, Any]:
         params = kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {}
