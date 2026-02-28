@@ -19,6 +19,7 @@ from services.image_service import ImageService
 from services.market_service import MarketService
 from services.mcp_service import MCPService
 from services.observability_service import ObservabilityService
+from services.policy_service import PolicyService
 from services.ppt_service import PPTService
 from services.recommendation_service import RecommendationService
 from services.slo_service import SLOService
@@ -33,6 +34,7 @@ class AgentServiceRegistry:
         self.diagnostics = DiagnosticsService(root=self.root)
         self.recommend = RecommendationService(root=self.root)
         self.slo = SLOService(root=self.root)
+        self.policy = PolicyService(root=self.root)
         self.mcp = MCPService(root=self.root)
         self.ppt = PPTService(root=self.root)
         self.image = ImageService(root=self.root)
@@ -44,6 +46,7 @@ class AgentServiceRegistry:
             "agent.observe": ServiceSpec("agent.observe", "observability", "Build agent observability report", "low"),
             "agent.recommend": ServiceSpec("agent.recommend", "optimization", "Recommend profile by task kind", "low"),
             "agent.slo": ServiceSpec("agent.slo", "governance", "Evaluate SLO guard", "low"),
+            "agent.policy.tune": ServiceSpec("agent.policy.tune", "governance", "Tune agent policy from recent runs", "low"),
             "agent.feedback.add": ServiceSpec("agent.feedback.add", "feedback", "Append feedback for a run", "low"),
             "agent.feedback.stats": ServiceSpec("agent.feedback.stats", "feedback", "Summarize collected feedback", "low"),
             "agent.feedback.pending": ServiceSpec("agent.feedback.pending", "feedback", "List runs pending feedback", "low"),
@@ -82,6 +85,13 @@ class AgentServiceRegistry:
     def _exec_agent_slo(self, **kwargs: Any) -> Dict[str, Any]:
         cfg = kwargs.get("cfg", {}) if isinstance(kwargs.get("cfg", {}), dict) else {}
         return self.slo.run(data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")), cfg=cfg).to_dict()
+
+    def _exec_agent_policy_tune(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.policy.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            memory_file=str(kwargs.get("memory_file", "")),
+        ).to_dict()
 
     def _exec_agent_feedback_add(self, **kwargs: Any) -> Dict[str, Any]:
         return self.feedback.add(

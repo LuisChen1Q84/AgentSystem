@@ -27,6 +27,9 @@ class AgentStudioTest(unittest.TestCase):
         a4 = parser.parse_args(["diagnostics"])
         self.assertEqual(a4.cmd, "diagnostics")
 
+        a5 = parser.parse_args(["policy"])
+        self.assertEqual(a5.cmd, "policy")
+
     def test_feedback_add_and_stats_cmd(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -115,6 +118,53 @@ class AgentStudioTest(unittest.TestCase):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 code = agent_studio._diagnostics_cmd(reg, days=14, data_dir=str(root), out_dir=str(root / "out"))
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("report", payload)
+
+    def test_policy_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": True,
+                        "profile": "strict",
+                        "task_kind": "report",
+                        "duration_ms": 10,
+                        "selected_strategy": "mcp-generalist",
+                        "attempt_count": 1,
+                        "clarify_needed": False,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "success": True,
+                        "quality_score": 0.91,
+                        "selected_strategy": "mcp-generalist",
+                        "selection_confidence": 0.82,
+                        "stability_score": 0.88,
+                        "policy_recommendations": [],
+                        "ts": "2026-02-28 10:00:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._policy_cmd(reg, days=14, data_dir=str(root), memory_file="")
             self.assertEqual(code, 0)
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))

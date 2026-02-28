@@ -132,3 +132,9 @@ class EvaluationRecord(KernelModel):
     manual_takeover: bool
     eval_reason: str
     ts: str
+    selected_strategy: str = ""
+    selection_confidence: float = 0.0
+    efficiency_score: float = 0.0
+    stability_score: float = 0.0
+    policy_signals: List[str] = field(default_factory=list)
+    policy_recommendations: List[str] = field(default_factory=list)

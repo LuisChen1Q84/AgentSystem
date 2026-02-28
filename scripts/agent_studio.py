@@ -105,6 +105,18 @@ def _slo_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
     return 0
 
 
+def _policy_cmd(reg: AgentServiceRegistry, days: int, data_dir: str, memory_file: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.policy.tune",
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            days=days,
+            memory_file=memory_file,
+        )
+    )
+    return 0
+
+
 def _pending_cmd(reg: AgentServiceRegistry, limit: int, task_kind: str, profile: str, data_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -165,7 +177,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -194,6 +206,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "diagnostics":
             _diagnostics_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="")
+            continue
+        if cmd == "policy":
+            _policy_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, memory_file="")
             continue
         if cmd == "pending":
             _pending_cmd(reg, limit=int(args[0]) if args else 10, task_kind="", profile="", data_dir=data_dir)
@@ -250,6 +265,10 @@ def build_cli() -> argparse.ArgumentParser:
 
     sp.add_parser("slo")
 
+    pol = sp.add_parser("policy")
+    pol.add_argument("--days", type=int, default=14)
+    pol.add_argument("--memory-file", default="")
+
     pend = sp.add_parser("pending")
     pend.add_argument("--limit", type=int, default=10)
     pend.add_argument("--task-kind", default="")
@@ -288,6 +307,8 @@ def main() -> int:
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "slo":
         return _slo_cmd(reg, data_dir=data_dir)
+    if args.cmd == "policy":
+        return _policy_cmd(reg, days=int(args.days), data_dir=data_dir, memory_file=str(args.memory_file))
     if args.cmd == "pending":
         return _pending_cmd(reg, limit=int(args.limit), task_kind=str(args.task_kind), profile=str(args.profile), data_dir=data_dir)
     if args.cmd == "feedback-add":

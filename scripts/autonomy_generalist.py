@@ -21,16 +21,12 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from apps.creative_studio.app import CreativeStudioApp
+from apps.market_hub.app import MarketHubApp
+from apps.tooling_hub.app import ToolingHubApp
+from core.kernel.memory_store import load_memory, memory_rate, memory_snapshot, save_memory, update_strategy
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
-from scripts import mckinsey_ppt_engine
-from scripts.image_creator_hub import CFG_DEFAULT as IMAGE_CFG_DEFAULT
-from scripts.image_creator_hub import load_cfg as load_image_cfg
-from scripts.image_creator_hub import run_request as run_image_hub_request
-from scripts.mcp_cli import cmd_run as mcp_cmd_run
 from scripts.skill_parser import SkillMeta, parse_all_skills
-from scripts.stock_market_hub import load_cfg as load_stock_cfg
-from scripts.stock_market_hub import pick_symbols as pick_stock_symbols
-from scripts.stock_market_hub import run_report as run_stock_hub_report
 
 
 CFG_DEFAULT = ROOT / "config" / "autonomy_generalist.toml"
@@ -95,19 +91,6 @@ def _load_cfg(path: Path = CFG_DEFAULT) -> Dict[str, Any]:
         return tomllib.load(f)
 
 
-def _load_memory(path: Path) -> Dict[str, Any]:
-    if not path.exists():
-        return {"strategies": {}, "updated_at": _now()}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {"strategies": {}, "updated_at": _now()}
-
-
-def _save_memory(path: Path, payload: Dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
 
 def _append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -129,24 +112,6 @@ def _strategy_priority(strategy: str) -> int:
     }
     return int(order.get(strategy, 999))
 
-
-def _memory_rate(memory: Dict[str, Any], key: str, prior: float) -> float:
-    rec = memory.get("strategies", {}).get(key, {})
-    succ = float(rec.get("success", 0))
-    fail = float(rec.get("fail", 0))
-    return (succ + 0.5 * prior) / (succ + fail + prior)
-
-
-def _update_memory(memory: Dict[str, Any], key: str, ok: bool) -> Dict[str, Any]:
-    strategies = memory.setdefault("strategies", {})
-    rec = strategies.setdefault(key, {"success": 0, "fail": 0, "last_ts": ""})
-    if ok:
-        rec["success"] = int(rec.get("success", 0)) + 1
-    else:
-        rec["fail"] = int(rec.get("fail", 0)) + 1
-    rec["last_ts"] = _now()
-    memory["updated_at"] = _now()
-    return memory
 
 
 def _skill_score(text: str, skill: SkillMeta) -> Tuple[float, Dict[str, Any]]:
@@ -189,7 +154,7 @@ def _plan_candidates(
         if s.name not in SUPPORTED_SKILLS:
             continue
         base, details = _skill_score(text, s)
-        mem = _memory_rate(memory, s.name, prior=prior)
+        mem = memory_rate(memory, s.name, prior=prior)
         final = round(base * base_weight + mem * memory_weight, 4)
         if final < min_skill_score:
             continue
@@ -207,7 +172,7 @@ def _plan_candidates(
             }
         )
 
-    mcp_mem = _memory_rate(memory, "mcp-generalist", prior=prior)
+    mcp_mem = memory_rate(memory, "mcp-generalist", prior=prior)
     rows.append(
         {
             "strategy": "mcp-generalist",
@@ -249,37 +214,23 @@ def _exec_digest(text: str) -> Dict[str, Any]:
 
 
 def _exec_strategy(executor: str, text: str, params: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
-    defaults = cfg.get("defaults", {})
+    creative_app = CreativeStudioApp(root=ROOT)
+    market_app = MarketHubApp(root=ROOT)
+    tooling_app = ToolingHubApp(root=ROOT)
     if executor == "image":
-        image_cfg = load_image_cfg(Path(IMAGE_CFG_DEFAULT))
-        out = run_image_hub_request(image_cfg, text, params)
+        out = creative_app.generate_image(text, params)
         return {"ok": bool(out.get("ok", False)), "mode": "image", "result": out}
     if executor == "ppt":
-        out = mckinsey_ppt_engine.run_request(text, params)
+        out = creative_app.generate_ppt(text, params)
         return {"ok": bool(out.get("ok", False)), "mode": "ppt", "result": out}
     if executor == "stock":
-        stock_cfg = load_stock_cfg(ROOT / "config" / "stock_market_hub.toml")
-        symbols = pick_stock_symbols(stock_cfg, text, str(params.get("symbols", "")))
-        universe = str(params.get("universe", "")).strip() or str(
-            stock_cfg.get("defaults", {}).get("default_universe", "global_core")
-        )
-        no_sync = bool(params.get("no_sync", False))
-        out = run_stock_hub_report(stock_cfg, text, universe, symbols, no_sync)
+        out = market_app.run_report(text, params)
         return {"ok": True, "mode": "stock", "result": out}
     if executor == "digest":
         out = _exec_digest(text)
         return {"ok": bool(out.get("ok", False)), "mode": "digest", "result": out}
 
-    mcp_out = mcp_cmd_run(
-        text=text,
-        override_params=params,
-        top_k=int(defaults.get("mcp_top_k", 3)),
-        max_attempts=int(defaults.get("mcp_max_attempts", 2)),
-        cooldown_sec=int(defaults.get("mcp_cooldown_sec", 300)),
-        failure_threshold=int(defaults.get("mcp_failure_threshold", 3)),
-        dry_run=bool(params.get("dry_run", False)),
-        metrics_days=int(defaults.get("mcp_metrics_days", 14)),
-    )
+    mcp_out = tooling_app.run_mcp(text, params)
     return {"ok": bool(mcp_out.get("ok", False)), "mode": "mcp", "result": mcp_out}
 
 
@@ -289,7 +240,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     memory_file = Path(str(values.get("memory_file", MEMORY_DEFAULT)))
     log_dir = Path(str(values.get("log_dir", defaults.get("log_dir", ROOT / "日志" / "autonomy"))))
     log_dir.mkdir(parents=True, exist_ok=True)
-    memory = _load_memory(memory_file)
+    memory = load_memory(memory_file)
     run_id = _run_id()
     trace_id = run_id
     execution_mode = str(values.get("execution_mode", defaults.get("execution_mode", "auto"))).strip().lower()
@@ -363,7 +314,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
             out = _exec_strategy(cand["executor"], text, values, cfg)
             ok = bool(out.get("ok", False))
             if learning_enabled:
-                memory = _update_memory(memory, strategy, ok)
+                memory = update_strategy(memory, strategy, ok, executor=str(cand.get("executor", "")), score=float(cand.get("score", 0.0)))
             attempt_payload = {
                 "run_id": run_id,
                 "trace_id": trace_id,
@@ -384,7 +335,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
                 break
         except Exception as e:
             if learning_enabled:
-                memory = _update_memory(memory, strategy, False)
+                memory = update_strategy(memory, strategy, False, executor=str(cand.get("executor", "")), score=float(cand.get("score", 0.0)))
             attempt_payload = {
                 "run_id": run_id,
                 "trace_id": trace_id,
@@ -400,7 +351,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
             attempts.append(attempt_payload)
             _append_jsonl(log_dir / ATTEMPTS_JSONL, attempt_payload)
 
-    _save_memory(memory_file, memory)
+    save_memory(memory_file, memory)
 
     payload = {
         "run_id": run_id,
@@ -425,6 +376,7 @@ def run_request(text: str, values: Dict[str, Any]) -> Dict[str, Any]:
         "selected": selected,
         "result": final.get("result") if final else {},
         "prompt_packet": prompt_packet,
+        "memory_snapshot": memory_snapshot(memory),
         "loop_closure": build_loop_closure(
             skill="autonomy-generalist",
             status="completed" if final is not None else "advisor",

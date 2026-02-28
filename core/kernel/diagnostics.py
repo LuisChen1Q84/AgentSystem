@@ -20,6 +20,8 @@ if str(ROOT) not in sys.path:
 
 from scripts.agent_feedback import list_pending_feedback
 from scripts.agent_os_observability import aggregate
+from core.kernel.memory_store import load_memory, memory_snapshot
+from core.kernel.policy_tuner import tune_policy
 
 
 
@@ -143,6 +145,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     eval_rows = _load_jsonl(data_dir / "agent_evaluations.jsonl")
     delivery_rows = _load_jsonl(data_dir / "agent_deliveries.jsonl")
     feedback_rows = _load_jsonl(data_dir / "feedback.jsonl")
+    memory = load_memory(data_dir / "memory.json")
 
     obs_report = aggregate(run_rows, days=max(1, int(days)))
     obs_summary = obs_report.get("summary", {}) if isinstance(obs_report.get("summary", {}), dict) else {}
@@ -160,6 +163,8 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     latest_feedback = feedback_rows[-1] if feedback_rows else {}
     avg_quality = float(eval_summary.get("avg_quality_score", 0.0) or 0.0)
     quality_band = _quality_band(avg_quality)
+    policy_tuning = tune_policy(run_rows=run_rows, evaluation_rows=eval_rows, memory=memory, days=max(1, int(days)))
+    mem_snapshot = memory_snapshot(memory)
 
     summary = {
         "window_days": max(1, int(days)),
@@ -178,16 +183,19 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "summary": summary,
         "observability": obs_report,
         "evaluation": eval_summary,
+        "memory_snapshot": mem_snapshot,
+        "policy_tuning": policy_tuning,
         "recent_failures": failures,
         "pending_feedback": pending,
         "recent_deliveries": deliveries,
         "strategy_top": [{"strategy": k, "runs": v} for k, v in strategy_dist.most_common(5)],
-        "recommendations": _recommendations(obs_summary, eval_summary, len(pending), failures),
+        "recommendations": _recommendations(obs_summary, eval_summary, len(pending), failures) + list(policy_tuning.get("recommendations", [])),
         "sources": {
             "runs": str(data_dir / "agent_runs.jsonl"),
             "evaluations": str(data_dir / "agent_evaluations.jsonl"),
             "deliveries": str(data_dir / "agent_deliveries.jsonl"),
             "feedback": str(data_dir / "feedback.jsonl"),
+            "memory": str(data_dir / "memory.json"),
         },
     }
     return report

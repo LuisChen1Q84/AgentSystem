@@ -18,9 +18,11 @@ if str(ROOT) not in sys.path:
 
 try:
     from core.kernel.models import DeliveryBundle, EvaluationRecord
+    from core.kernel.strategy_evaluator import evaluate_payload
     from scripts.agent_delivery_card import build_card, render_md as render_delivery_md
 except ModuleNotFoundError:  # direct
     from models import DeliveryBundle, EvaluationRecord  # type: ignore
+    from strategy_evaluator import evaluate_payload  # type: ignore
     from agent_delivery_card import build_card, render_md as render_delivery_md  # type: ignore
 
 
@@ -38,13 +40,8 @@ def build_delivery_bundle(payload: Dict[str, Any]) -> DeliveryBundle:
         selected = {}
     strategy = str(selected.get("strategy", ""))
     duration_ms = int(payload.get("duration_ms", 0) or 0)
-    clarification = payload.get("clarification", {}) if isinstance(payload.get("clarification", {}), dict) else {}
-    quality_score = 0.85 if bool(payload.get("ok", False)) else 0.35
-    if clarification.get("needed", False):
-        quality_score -= 0.05
-    if duration_ms > 5000:
-        quality_score -= 0.05
-    quality_score = round(max(0.0, min(1.0, quality_score)), 4)
+    eval_report = evaluate_payload(payload)
+    quality_score = float(eval_report.get("quality_score", 0.0) or 0.0)
     card = build_card(payload)
     summary = f"{payload.get('task_kind', 'general')} handled via {strategy or 'unknown-strategy'}"
     return DeliveryBundle(
@@ -52,21 +49,25 @@ def build_delivery_bundle(payload: Dict[str, Any]) -> DeliveryBundle:
         artifacts=[],
         evidence={
             "strategy": strategy,
-            "attempt_count": len(payload.get("result", {}).get("attempts", [])) if isinstance(payload.get("result", {}), dict) else 0,
+            "attempt_count": int(eval_report.get("attempt_count", 0) or 0),
             "duration_ms": duration_ms,
+            "selection_confidence": float(eval_report.get("selection_confidence", 0.0) or 0.0),
+            "stability_score": float(eval_report.get("stability_score", 0.0) or 0.0),
         },
         quality_score=quality_score,
         risk_notes=list(payload.get("strategy_controls", {}).get("blocked_details", []))[:3] if isinstance(payload.get("strategy_controls", {}), dict) else [],
         followups=[
             "Review delivery card for final polish",
             "Submit feedback if the result quality differs from expectation",
-        ],
+            *list(eval_report.get("recommendations", []))[:2],
+        ][:4],
         delivery_card=card,
     )
 
 
 
 def build_evaluation_record(payload: Dict[str, Any], quality_score: float) -> EvaluationRecord:
+    eval_report = evaluate_payload(payload)
     result = payload.get("result", {}) if isinstance(payload.get("result", {}), dict) else {}
     attempts = result.get("attempts", []) if isinstance(result.get("attempts", []), list) else []
     ok = bool(payload.get("ok", False))
@@ -80,6 +81,12 @@ def build_evaluation_record(payload: Dict[str, Any], quality_score: float) -> Ev
         manual_takeover=not ok,
         eval_reason="ok" if ok else "delegated_autonomy_failed",
         ts=str(payload.get("ts", "")),
+        selected_strategy=str(eval_report.get("selected_strategy", "")),
+        selection_confidence=float(eval_report.get("selection_confidence", 0.0) or 0.0),
+        efficiency_score=float(eval_report.get("efficiency_score", 0.0) or 0.0),
+        stability_score=float(eval_report.get("stability_score", 0.0) or 0.0),
+        policy_signals=list(eval_report.get("policy_signals", [])),
+        policy_recommendations=list(eval_report.get("recommendations", [])),
     )
 
 
@@ -127,6 +134,7 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
             "ts": payload.get("ts", ""),
             "summary": delivery_bundle.summary,
             "quality_score": delivery_bundle.quality_score,
+            "selected_strategy": _selected_strategy(payload),
             "artifacts": [str(card_json), str(card_md)],
         },
     )

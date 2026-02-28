@@ -15,6 +15,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.run", names)
         self.assertIn("agent.feedback.pending", names)
         self.assertIn("agent.diagnostics", names)
+        self.assertIn("agent.policy.tune", names)
         self.assertIn("mcp.run", names)
         self.assertIn("ppt.generate", names)
         self.assertIn("image.generate", names)
@@ -119,6 +120,49 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(out.get("ok", False))
             self.assertIn("report", out)
             self.assertIn("deliver_assets", out)
+
+    def test_execute_agent_policy_tune(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": True,
+                        "profile": "strict",
+                        "task_kind": "report",
+                        "duration_ms": 10,
+                        "selected_strategy": "mcp-generalist",
+                        "attempt_count": 1,
+                        "clarify_needed": False,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "success": True,
+                        "quality_score": 0.91,
+                        "selected_strategy": "mcp-generalist",
+                        "selection_confidence": 0.82,
+                        "stability_score": 0.88,
+                        "policy_recommendations": [],
+                        "ts": "2026-02-28 10:00:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            out = reg.execute("agent.policy.tune", data_dir=str(root), days=14)
+            self.assertTrue(out.get("ok", False))
+            self.assertIn("report", out)
 
 
 if __name__ == "__main__":

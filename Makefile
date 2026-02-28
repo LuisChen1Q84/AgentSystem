@@ -16,7 +16,7 @@ ROOT ?= $(CURDIR)
 	mcp-doctor mcp-route-smart mcp-run mcp-replay mcp-pipeline \
 	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
 	stock-env-check stock-health-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
-	skill-route skill-execute autonomous agent agent-studio agent-observe agent-recommend agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
+	skill-route skill-execute autonomous agent agent-studio agent-observe agent-recommend agent-policy agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
 
 help:
 	@echo "Available targets:"
@@ -27,7 +27,7 @@ help:
 	@echo "  make stock-env-check [root='$(ROOT)']"
 	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
-	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|diagnostics|slo|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|data.query|agent.diagnostics'] [params='{\"k\":\"v\"}'] | agent-observe [days=14] | agent-recommend [days=30] [apply=1] | agent-pack cmd='list|enable|disable' [name='finance'] | agent-slo-guard [enforce=1] | agent-golden [strict=1] | agent-fault [strict=1] | agent-feedback cmd='add|stats|pending' [run_id='...'] [rating='1|-1'] | agent-learn [apply=1] | capability-catalog | skill-contract-lint [strict=1] | autonomy-observe [days=14] | autonomy-eval | image-hub text='...' [params='{\"k\":\"v\"}'] | image-hub-observe [days=7]"
+	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|diagnostics|slo|policy|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|data.query|agent.diagnostics|agent.policy.tune'] [params='{\"k\":\"v\"}'] | agent-observe [days=14] | agent-recommend [days=30] [apply=1] | agent-policy [days=14] | agent-pack cmd='list|enable|disable' [name='finance'] | agent-slo-guard [enforce=1] | agent-golden [strict=1] | agent-fault [strict=1] | agent-feedback cmd='add|stats|pending' [run_id='...'] [rating='1|-1'] | agent-learn [apply=1] | capability-catalog | skill-contract-lint [strict=1] | autonomy-observe [days=14] | autonomy-eval | image-hub text='...' [params='{\"k\":\"v\"}'] | image-hub-observe [days=7]"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
@@ -879,6 +879,9 @@ agent-observe:
 
 agent-recommend:
 	@$(ROOT)/scripts/agentsys.sh agent-recommend $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(apply),--apply,) $(if $(overrides),--overrides-file "$(overrides)",) $(if $(feedback_file),--feedback-file "$(feedback_file)",) $(if $(out_json),--out-json "$(out_json)",) $(if $(out_md),--out-md "$(out_md)",)
+
+agent-policy:
+	@$(ROOT)/scripts/agentsys.sh agent-policy $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(memory_file),--memory-file "$(memory_file)",)
 
 agent-pack:
 	@$(ROOT)/scripts/agentsys.sh agent-pack "$(or $(cmd),list)" $(if $(name),--name "$(name)",) $(if $(cfg),--cfg "$(cfg)",)
