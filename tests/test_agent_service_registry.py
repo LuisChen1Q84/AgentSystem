@@ -357,6 +357,47 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("strategies"), ["mckinsey-ppt"])
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("task_kinds"), ["presentation"])
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("exclude_scopes"), ["feedback"])
+            auto_preview = reg.execute(
+                "agent.repairs.apply",
+                data_dir=str(root),
+                days=14,
+                limit=10,
+                selector_preset="auto",
+                selector_presets_file=str(presets_file),
+                apply=False,
+                profile_overrides_file=str(root / "profile_overrides.json"),
+                strategy_overrides_file=str(root / "strategy_overrides.json"),
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+            )
+            self.assertTrue(auto_preview.get("ok", False))
+            self.assertTrue(auto_preview.get("report", {}).get("selection", {}).get("selector_auto_mode"))
+            self.assertEqual(auto_preview.get("report", {}).get("selection", {}).get("selector_preset_requested"), "auto")
+            self.assertEqual(auto_preview.get("report", {}).get("selection", {}).get("selector_preset"), "presentation_recovery")
+            self.assertGreaterEqual(auto_preview.get("report", {}).get("selection", {}).get("selector_auto_candidate_count", 0), 1)
+            gated_auto_preview = reg.execute(
+                "agent.repairs.apply",
+                data_dir=str(root),
+                days=14,
+                limit=10,
+                selector_preset="auto",
+                selector_presets_file=str(presets_file),
+                min_effectiveness_score=5,
+                only_if_effective=True,
+                avoid_rolled_back=True,
+                apply=False,
+                profile_overrides_file=str(root / "profile_overrides.json"),
+                strategy_overrides_file=str(root / "strategy_overrides.json"),
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+            )
+            self.assertTrue(gated_auto_preview.get("ok", False))
+            self.assertEqual(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_preset"), "")
+            self.assertEqual(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_candidate_count"), 0)
+            self.assertEqual(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_min_effectiveness_score"), 5)
+            self.assertTrue(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_only_if_effective"))
+            self.assertTrue(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_avoid_rolled_back"))
+            self.assertIn("threshold 5", gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_reason", ""))
             approval_code = str(preview.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)
             denied = reg.execute(
@@ -391,6 +432,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 limit=10,
                 apply=True,
                 approve_code=approval_code,
+                snapshot_id=str(preview.get("report", {}).get("targets", {}).get("snapshot_id", "")),
                 profile_overrides_file=str(root / "profile_overrides.json"),
                 strategy_overrides_file=str(root / "strategy_overrides.json"),
                 backup_dir=str(root / "backups"),
@@ -414,8 +456,11 @@ class AgentServiceRegistryTest(unittest.TestCase):
             )
             self.assertTrue(listed.get("ok", False))
             self.assertIn("delivery_bundle", listed)
-            self.assertEqual(listed.get("report", {}).get("count"), 1)
-            self.assertTrue(listed.get("report", {}).get("rows", [])[0].get("approval_recorded", False))
+            self.assertGreaterEqual(listed.get("report", {}).get("count", 0), 3)
+            rows = listed.get("report", {}).get("rows", [])
+            matched = [row for row in rows if row.get("snapshot_id") == out.get("applied_files", {}).get("snapshot_id")]
+            self.assertTrue(matched)
+            self.assertTrue(matched[0].get("approval_recorded", False))
 
             compared = reg.execute(
                 "agent.repairs.compare",

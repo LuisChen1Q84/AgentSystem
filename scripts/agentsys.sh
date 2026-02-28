@@ -1137,6 +1137,9 @@ run_agent_repair_apply() {
   local max_actions=""
   local selector_preset=""
   local selector_presets_file=""
+  local min_effectiveness_score=""
+  local only_if_effective_flag=0
+  local avoid_rolled_back_flag=0
   local scopes=""
   local strategies=""
   local task_kinds=""
@@ -1201,6 +1204,18 @@ run_agent_repair_apply() {
       --selector-presets-file)
         selector_presets_file="${2:-}"
         shift 2 || true
+        ;;
+      --min-effectiveness-score)
+        min_effectiveness_score="${2:-}"
+        shift 2 || true
+        ;;
+      --only-if-effective)
+        only_if_effective_flag=1
+        shift || true
+        ;;
+      --avoid-rolled-back)
+        avoid_rolled_back_flag=1
+        shift || true
         ;;
       --scopes)
         scopes="${2:-}"
@@ -1288,6 +1303,15 @@ run_agent_repair_apply() {
   if [ -n "${selector_presets_file}" ]; then
     cmd+=(--selector-presets-file "${selector_presets_file}")
   fi
+  if [ -n "${min_effectiveness_score}" ]; then
+    cmd+=(--min-effectiveness-score "${min_effectiveness_score}")
+  fi
+  if [ "${only_if_effective_flag}" -eq 1 ]; then
+    cmd+=(--only-if-effective)
+  fi
+  if [ "${avoid_rolled_back_flag}" -eq 1 ]; then
+    cmd+=(--avoid-rolled-back)
+  fi
   if [ -n "${scopes}" ]; then
     cmd+=(--scopes "${scopes}")
   fi
@@ -1334,6 +1358,9 @@ run_agent_repair_approve() {
   local max_actions=""
   local selector_preset=""
   local selector_presets_file=""
+  local min_effectiveness_score=""
+  local only_if_effective_flag=0
+  local avoid_rolled_back_flag=0
   local scopes=""
   local strategies=""
   local task_kinds=""
@@ -1397,6 +1424,18 @@ run_agent_repair_approve() {
       --selector-presets-file)
         selector_presets_file="${2:-}"
         shift 2 || true
+        ;;
+      --min-effectiveness-score)
+        min_effectiveness_score="${2:-}"
+        shift 2 || true
+        ;;
+      --only-if-effective)
+        only_if_effective_flag=1
+        shift || true
+        ;;
+      --avoid-rolled-back)
+        avoid_rolled_back_flag=1
+        shift || true
         ;;
       --scopes)
         scopes="${2:-}"
@@ -1476,6 +1515,15 @@ run_agent_repair_approve() {
   fi
   if [ -n "${selector_presets_file}" ]; then
     cmd+=(--selector-presets-file "${selector_presets_file}")
+  fi
+  if [ -n "${min_effectiveness_score}" ]; then
+    cmd+=(--min-effectiveness-score "${min_effectiveness_score}")
+  fi
+  if [ "${only_if_effective_flag}" -eq 1 ]; then
+    cmd+=(--only-if-effective)
+  fi
+  if [ "${avoid_rolled_back_flag}" -eq 1 ]; then
+    cmd+=(--avoid-rolled-back)
   fi
   if [ -n "${scopes}" ]; then
     cmd+=(--scopes "${scopes}")
@@ -2073,8 +2121,8 @@ Usage:
   scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
   scripts/agentsys.sh agent-failure-review [--days N --limit N --data-dir <path> --out-dir <path>]
-  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery --selector-presets-file <path> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
-  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery --selector-presets-file <path> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery|auto --selector-presets-file <path> --min-effectiveness-score <n> --only-if-effective --avoid-rolled-back --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery|auto --selector-presets-file <path> --min-effectiveness-score <n> --only-if-effective --avoid-rolled-back --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-list [--limit N --data-dir <path> --backup-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-presets [--mode list|recommend|save --days N --limit N --top-n N --presets-file <path> --allow-update --include-review-only --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-compare [--snapshot-id <id> --base-snapshot-id <id> --data-dir <path> --backup-dir <path>]

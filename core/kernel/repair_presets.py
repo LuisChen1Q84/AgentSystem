@@ -93,6 +93,18 @@ def _selector_specificity(selector: Dict[str, List[str]]) -> int:
     return sum(len(_unique_strings(selector.get(key, []))) for key in SELECTOR_KEYS)
 
 
+def _parse_ts(text: str) -> dt.datetime | None:
+    raw = str(text).strip()
+    if not raw:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return dt.datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def default_selector_presets_file() -> Path:
     return ROOT / "config/agent_repair_selector_presets.json"
 
@@ -271,6 +283,145 @@ def _auto_save_safe(action: Dict[str, Any], status: str) -> bool:
     return int(action.get("priority_score", 0) or 0) >= 16
 
 
+def _selector_matches_run(selector: Dict[str, Any], run_row: Dict[str, Any]) -> bool:
+    allowed_scopes = set(_unique_strings(selector.get("scopes", [])))
+    allowed_strategies = set(_unique_strings(selector.get("strategies", [])))
+    allowed_task_kinds = set(_unique_strings(selector.get("task_kinds", [])))
+    blocked_scopes = set(_unique_strings(selector.get("exclude_scopes", [])))
+    blocked_strategies = set(_unique_strings(selector.get("exclude_strategies", [])))
+    blocked_task_kinds = set(_unique_strings(selector.get("exclude_task_kinds", [])))
+    strategy = str(run_row.get("selected_strategy", "")).strip()
+    task_kind = str(run_row.get("task_kind", "")).strip()
+    if "strategy" in blocked_scopes and strategy:
+        return False
+    if "task_kind" in blocked_scopes and task_kind:
+        return False
+    if strategy and strategy in blocked_strategies:
+        return False
+    if task_kind and task_kind in blocked_task_kinds:
+        return False
+    if allowed_scopes:
+        if "strategy" in allowed_scopes and allowed_strategies and strategy not in allowed_strategies:
+            return False
+        if "task_kind" in allowed_scopes and allowed_task_kinds and task_kind not in allowed_task_kinds:
+            return False
+        if allowed_scopes == {"strategy"}:
+            return bool(not allowed_strategies or strategy in allowed_strategies)
+        if allowed_scopes == {"task_kind"}:
+            return bool(not allowed_task_kinds or task_kind in allowed_task_kinds)
+        return True
+    if allowed_strategies and strategy not in allowed_strategies:
+        return False
+    if allowed_task_kinds and task_kind not in allowed_task_kinds:
+        return False
+    return bool(allowed_strategies or allowed_task_kinds)
+
+
+def _evaluation_map(data_dir: Path) -> Dict[str, Dict[str, Any]]:
+    path = data_dir / "agent_evaluations.jsonl"
+    rows = []
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    item = json.loads(line)
+                    if isinstance(item, dict):
+                        rows.append(item)
+        except Exception:
+            rows = []
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        run_id = str(row.get("run_id", "")).strip()
+        if run_id:
+            out[run_id] = row
+    return out
+
+
+def _observed_outcome_metrics(
+    *,
+    data_dir: Path,
+    selector: Dict[str, List[str]],
+    snapshot_ts: str,
+) -> Dict[str, Any]:
+    runs_path = data_dir / "agent_runs.jsonl"
+    if not runs_path.exists():
+        return {
+            "baseline_runs": 0,
+            "followup_runs": 0,
+            "baseline_avg_quality": 0.0,
+            "followup_avg_quality": 0.0,
+            "baseline_success_rate": 0.0,
+            "followup_success_rate": 0.0,
+            "quality_delta": 0.0,
+            "success_delta": 0.0,
+        }
+    run_rows: List[Dict[str, Any]] = []
+    try:
+        with runs_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                item = json.loads(line)
+                if isinstance(item, dict):
+                    run_rows.append(item)
+    except Exception:
+        run_rows = []
+    eval_map = _evaluation_map(data_dir)
+    pivot = _parse_ts(snapshot_ts)
+    if pivot is None:
+        return {
+            "baseline_runs": 0,
+            "followup_runs": 0,
+            "baseline_avg_quality": 0.0,
+            "followup_avg_quality": 0.0,
+            "baseline_success_rate": 0.0,
+            "followup_success_rate": 0.0,
+            "quality_delta": 0.0,
+            "success_delta": 0.0,
+        }
+    baseline_rows: List[Dict[str, Any]] = []
+    followup_rows: List[Dict[str, Any]] = []
+    for row in run_rows:
+        if not isinstance(row, dict) or not _selector_matches_run(selector, row):
+            continue
+        row_ts = _parse_ts(str(row.get("ts", "")))
+        if row_ts is None:
+            continue
+        eval_row = eval_map.get(str(row.get("run_id", "")).strip(), {})
+        enriched = {
+            "ok": bool(row.get("ok", False)),
+            "quality_score": float(eval_row.get("quality_score", 0.0) or 0.0),
+        }
+        if row_ts < pivot:
+            baseline_rows.append(enriched)
+        elif row_ts >= pivot:
+            followup_rows.append(enriched)
+    baseline_rows = baseline_rows[-10:]
+    followup_rows = followup_rows[:10]
+    def _avg_quality(rows: List[Dict[str, Any]]) -> float:
+        return round(sum(float(item.get("quality_score", 0.0) or 0.0) for item in rows) / max(1, len(rows)), 4) if rows else 0.0
+    def _success_rate(rows: List[Dict[str, Any]]) -> float:
+        return round(sum(1 for item in rows if bool(item.get("ok", False))) / max(1, len(rows)), 4) if rows else 0.0
+    baseline_avg_quality = _avg_quality(baseline_rows)
+    followup_avg_quality = _avg_quality(followup_rows)
+    baseline_success_rate = _success_rate(baseline_rows)
+    followup_success_rate = _success_rate(followup_rows)
+    return {
+        "baseline_runs": len(baseline_rows),
+        "followup_runs": len(followup_rows),
+        "baseline_avg_quality": baseline_avg_quality,
+        "followup_avg_quality": followup_avg_quality,
+        "baseline_success_rate": baseline_success_rate,
+        "followup_success_rate": followup_success_rate,
+        "quality_delta": round(followup_avg_quality - baseline_avg_quality, 4),
+        "success_delta": round(followup_success_rate - baseline_success_rate, 4),
+    }
+
+
 def build_repair_preset_inventory(
     *,
     data_dir: Path,
@@ -318,7 +469,26 @@ def build_repair_preset_inventory(
             lifecycle_counts["applied"] / max(1, lifecycle_counts["applied"] + lifecycle_counts["rolled_back"]),
             4,
         ) if usage_count else 0.0
-        effectiveness_score = governance_score + int(persisted_row.get("manual_bonus", 0) or 0)
+        observed = _observed_outcome_metrics(
+            data_dir=data_dir,
+            selector=selector,
+            snapshot_ts=str(last_row.get("ts", "")),
+        ) if last_row else {
+            "baseline_runs": 0,
+            "followup_runs": 0,
+            "baseline_avg_quality": 0.0,
+            "followup_avg_quality": 0.0,
+            "baseline_success_rate": 0.0,
+            "followup_success_rate": 0.0,
+            "quality_delta": 0.0,
+            "success_delta": 0.0,
+        }
+        effectiveness_score = (
+            governance_score
+            + int(round(float(observed.get("quality_delta", 0.0) or 0.0) * 20))
+            + int(round(float(observed.get("success_delta", 0.0) or 0.0) * 10))
+            + int(persisted_row.get("manual_bonus", 0) or 0)
+        )
         items.append(
             {
                 "preset_name": name,
@@ -328,6 +498,7 @@ def build_repair_preset_inventory(
                 "last_lifecycle": str(last_row.get("lifecycle", "")),
                 "last_used_ts": str(last_row.get("ts", "")),
                 "success_rate": success_rate,
+                "observed_outcomes": observed,
                 "governance_score": governance_score,
                 "effectiveness_score": effectiveness_score,
                 "manual_bonus": int(persisted_row.get("manual_bonus", 0) or 0),
@@ -357,6 +528,9 @@ def recommend_selector_preset_for_failure_report(
     failure_report: Dict[str, Any],
     presets_file: Path | None = None,
     effectiveness_file: Path | None = None,
+    min_effectiveness_score: int = 0,
+    only_if_effective: bool = False,
+    avoid_rolled_back: bool = False,
 ) -> Dict[str, Any]:
     inventory = build_repair_preset_inventory(
         data_dir=data_dir,
@@ -367,6 +541,8 @@ def recommend_selector_preset_for_failure_report(
     candidates: List[Dict[str, Any]] = []
     for item in inventory.get("items", []):
         if not isinstance(item, dict):
+            continue
+        if bool(avoid_rolled_back) and str(item.get("last_lifecycle", "")).strip() == "rolled_back":
             continue
         selector = item.get("selector", {}) if isinstance(item.get("selector", {}), dict) else {}
         matched = [action for action in actions if _selector_matches_action(selector, action)]
@@ -395,6 +571,9 @@ def recommend_selector_preset_for_failure_report(
                 "total_score": total_score,
             }
         )
+    threshold = max(1 if only_if_effective else 0, int(min_effectiveness_score or 0))
+    if threshold > 0:
+        candidates = [item for item in candidates if int(item.get("effectiveness_score", 0) or 0) >= threshold]
     candidates.sort(
         key=lambda item: (
             -int(item.get("total_score", 0) or 0),
@@ -410,10 +589,17 @@ def recommend_selector_preset_for_failure_report(
         "selected_selector": dict(selected.get("selector", {})) if isinstance(selected.get("selector", {}), dict) else {},
         "candidate_count": len(candidates),
         "candidates": candidates[:5],
+        "min_effectiveness_score": threshold,
+        "only_if_effective": bool(only_if_effective),
+        "avoid_rolled_back": bool(avoid_rolled_back),
         "selection_reason": (
             f"Selected preset {selected.get('preset_name', '')} with total_score={selected.get('total_score', 0)}"
             if selected
-            else "No preset matched current repair actions."
+            else (
+                f"No preset matched current repair actions after effectiveness threshold {threshold}."
+                if threshold > 0
+                else "No preset matched current repair actions."
+            )
         ),
     }
 
@@ -511,7 +697,7 @@ def render_repair_preset_report_md(report: Dict[str, Any]) -> str:
         if not isinstance(item, dict):
             continue
         lines.append(
-            f"- [#{item.get('effectiveness_rank', 0)}|score={item.get('effectiveness_score', 0)}] {item.get('preset_name', '')} | uses={item.get('usage_count', 0)} | last={item.get('last_lifecycle', '')} | success_rate={item.get('success_rate', 0.0)}"
+            f"- [#{item.get('effectiveness_rank', 0)}|score={item.get('effectiveness_score', 0)}] {item.get('preset_name', '')} | uses={item.get('usage_count', 0)} | last={item.get('last_lifecycle', '')} | success_rate={item.get('success_rate', 0.0)} | quality_delta={item.get('observed_outcomes', {}).get('quality_delta', 0.0)}"
         )
     lines += [
         "",

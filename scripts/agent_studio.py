@@ -129,6 +129,9 @@ def _repair_apply_cmd(
     max_actions: int,
     selector_preset: str,
     selector_presets_file: str,
+    min_effectiveness_score: int,
+    only_if_effective: bool,
+    avoid_rolled_back: bool,
     scopes: str,
     strategies: str,
     task_kinds: str,
@@ -154,6 +157,9 @@ def _repair_apply_cmd(
         max_actions=max_actions,
         selector_preset=selector_preset,
         selector_presets_file=selector_presets_file,
+        min_effectiveness_score=min_effectiveness_score,
+        only_if_effective=only_if_effective,
+        avoid_rolled_back=avoid_rolled_back,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -182,6 +188,9 @@ def _repair_approve_cmd(
     max_actions: int,
     selector_preset: str,
     selector_presets_file: str,
+    min_effectiveness_score: int,
+    only_if_effective: bool,
+    avoid_rolled_back: bool,
     scopes: str,
     strategies: str,
     task_kinds: str,
@@ -206,6 +215,9 @@ def _repair_approve_cmd(
         max_actions=max_actions,
         selector_preset=selector_preset,
         selector_presets_file=selector_presets_file,
+        min_effectiveness_score=min_effectiveness_score,
+        only_if_effective=only_if_effective,
+        avoid_rolled_back=avoid_rolled_back,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -443,6 +455,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 max_actions=max_actions,
                 selector_preset="",
                 selector_presets_file="",
+                min_effectiveness_score=0,
+                only_if_effective=False,
+                avoid_rolled_back=False,
                 scopes="",
                 strategies="",
                 task_kinds="",
@@ -472,6 +487,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 max_actions=max_actions,
                 selector_preset="",
                 selector_presets_file="",
+                min_effectiveness_score=0,
+                only_if_effective=False,
+                avoid_rolled_back=False,
                 scopes="",
                 strategies="",
                 task_kinds="",
@@ -600,6 +618,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--max-actions", type=int, default=0)
     rapply.add_argument("--selector-preset", default="")
     rapply.add_argument("--selector-presets-file", default="")
+    rapply.add_argument("--min-effectiveness-score", type=int, default=0)
+    rapply.add_argument("--only-if-effective", action="store_true")
+    rapply.add_argument("--avoid-rolled-back", action="store_true")
     rapply.add_argument("--scopes", default="")
     rapply.add_argument("--strategies", default="")
     rapply.add_argument("--task-kinds", default="")
@@ -622,6 +643,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapprove.add_argument("--max-actions", type=int, default=0)
     rapprove.add_argument("--selector-preset", default="")
     rapprove.add_argument("--selector-presets-file", default="")
+    rapprove.add_argument("--min-effectiveness-score", type=int, default=0)
+    rapprove.add_argument("--only-if-effective", action="store_true")
+    rapprove.add_argument("--avoid-rolled-back", action="store_true")
     rapprove.add_argument("--scopes", default="")
     rapprove.add_argument("--strategies", default="")
     rapprove.add_argument("--task-kinds", default="")
@@ -723,6 +747,9 @@ def main() -> int:
             max_actions=int(args.max_actions),
             selector_preset=str(args.selector_preset),
             selector_presets_file=str(args.selector_presets_file),
+            min_effectiveness_score=int(args.min_effectiveness_score),
+            only_if_effective=bool(args.only_if_effective),
+            avoid_rolled_back=bool(args.avoid_rolled_back),
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),
@@ -748,6 +775,9 @@ def main() -> int:
             max_actions=int(args.max_actions),
             selector_preset=str(args.selector_preset),
             selector_presets_file=str(args.selector_presets_file),
+            min_effectiveness_score=int(args.min_effectiveness_score),
+            only_if_effective=bool(args.only_if_effective),
+            avoid_rolled_back=bool(args.avoid_rolled_back),
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),

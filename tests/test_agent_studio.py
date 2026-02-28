@@ -34,9 +34,13 @@ class AgentStudioTest(unittest.TestCase):
             [
                 "repair-apply",
                 "--selector-preset",
-                "presentation_recovery",
+                "auto",
                 "--selector-presets-file",
                 "/tmp/presets.json",
+                "--min-effectiveness-score",
+                "5",
+                "--only-if-effective",
+                "--avoid-rolled-back",
                 "--scopes",
                 "strategy,task_kind",
                 "--strategies",
@@ -53,8 +57,11 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a43.snapshot_id, "")
         self.assertEqual(a43.min_priority_score, 0)
         self.assertEqual(a43.max_actions, 0)
-        self.assertEqual(a43.selector_preset, "presentation_recovery")
+        self.assertEqual(a43.selector_preset, "auto")
         self.assertEqual(a43.selector_presets_file, "/tmp/presets.json")
+        self.assertEqual(a43.min_effectiveness_score, 5)
+        self.assertTrue(a43.only_if_effective)
+        self.assertTrue(a43.avoid_rolled_back)
         self.assertEqual(a43.scopes, "strategy,task_kind")
         self.assertEqual(a43.strategies, "mckinsey-ppt")
         self.assertEqual(a43.task_kinds, "presentation")
@@ -64,7 +71,11 @@ class AgentStudioTest(unittest.TestCase):
             [
                 "repair-approve",
                 "--selector-preset",
-                "tooling_stabilize",
+                "auto",
+                "--min-effectiveness-score",
+                "7",
+                "--only-if-effective",
+                "--avoid-rolled-back",
                 "--min-priority-score",
                 "50",
                 "--max-actions",
@@ -77,7 +88,10 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a431.plan_file, "")
         self.assertEqual(a431.min_priority_score, 50)
         self.assertEqual(a431.max_actions, 2)
-        self.assertEqual(a431.selector_preset, "tooling_stabilize")
+        self.assertEqual(a431.selector_preset, "auto")
+        self.assertEqual(a431.min_effectiveness_score, 7)
+        self.assertTrue(a431.only_if_effective)
+        self.assertTrue(a431.avoid_rolled_back)
         self.assertEqual(a431.scopes, "")
         self.assertEqual(a431.exclude_strategies, "mcp-generalist")
 
@@ -341,6 +355,9 @@ class AgentStudioTest(unittest.TestCase):
                     max_actions=0,
                     selector_preset="",
                     selector_presets_file="",
+                    min_effectiveness_score=0,
+                    only_if_effective=False,
+                    avoid_rolled_back=False,
                     scopes="",
                     strategies="",
                     task_kinds="",
@@ -607,6 +624,9 @@ class AgentStudioTest(unittest.TestCase):
                     max_actions=0,
                     selector_preset="presentation_recovery",
                     selector_presets_file="",
+                    min_effectiveness_score=0,
+                    only_if_effective=False,
+                    avoid_rolled_back=False,
                     scopes="strategy",
                     strategies="mckinsey-ppt",
                     task_kinds="",
@@ -643,6 +663,9 @@ class AgentStudioTest(unittest.TestCase):
                     max_actions=0,
                     selector_preset="presentation_recovery",
                     selector_presets_file="",
+                    min_effectiveness_score=0,
+                    only_if_effective=False,
+                    avoid_rolled_back=False,
                     scopes="strategy",
                     strategies="mckinsey-ppt",
                     task_kinds="",
@@ -713,6 +736,9 @@ class AgentStudioTest(unittest.TestCase):
                     max_actions=0,
                     selector_preset="",
                     selector_presets_file="",
+                    min_effectiveness_score=0,
+                    only_if_effective=False,
+                    avoid_rolled_back=False,
                     scopes="",
                     strategies="",
                     task_kinds="",
@@ -857,6 +883,9 @@ class AgentStudioTest(unittest.TestCase):
                     max_actions=0,
                     selector_preset="",
                     selector_presets_file="",
+                    min_effectiveness_score=0,
+                    only_if_effective=False,
+                    avoid_rolled_back=False,
                     scopes="",
                     strategies="",
                     task_kinds="",
@@ -890,6 +919,9 @@ class AgentStudioTest(unittest.TestCase):
                     max_actions=0,
                     selector_preset="",
                     selector_presets_file="",
+                    min_effectiveness_score=0,
+                    only_if_effective=False,
+                    avoid_rolled_back=False,
                     scopes="",
                     strategies="",
                     task_kinds="",

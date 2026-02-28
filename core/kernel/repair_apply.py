@@ -156,6 +156,9 @@ def _resolve_auto_selector_preset(
     failure_report: Dict[str, Any],
     selector_preset: str,
     selector_presets_file: Path | None,
+    min_effectiveness_score: int = 0,
+    only_if_effective: bool = False,
+    avoid_rolled_back: bool = False,
 ) -> Dict[str, Any]:
     requested = str(selector_preset).strip()
     if requested != "auto":
@@ -164,6 +167,9 @@ def _resolve_auto_selector_preset(
             "selected_preset": requested,
             "auto_mode": False,
             "candidate_count": 0,
+            "min_effectiveness_score": max(0, int(min_effectiveness_score)),
+            "only_if_effective": bool(only_if_effective),
+            "avoid_rolled_back": bool(avoid_rolled_back),
             "selection_reason": "",
             "candidates": [],
         }
@@ -175,6 +181,9 @@ def _resolve_auto_selector_preset(
             "selected_preset": "",
             "auto_mode": True,
             "candidate_count": 0,
+            "min_effectiveness_score": max(0, int(min_effectiveness_score)),
+            "only_if_effective": bool(only_if_effective),
+            "avoid_rolled_back": bool(avoid_rolled_back),
             "selection_reason": f"auto preset unavailable: {exc}",
             "candidates": [],
         }
@@ -182,12 +191,18 @@ def _resolve_auto_selector_preset(
         data_dir=data_dir,
         failure_report=failure_report,
         presets_file=selector_presets_file,
+        min_effectiveness_score=max(0, int(min_effectiveness_score)),
+        only_if_effective=bool(only_if_effective),
+        avoid_rolled_back=bool(avoid_rolled_back),
     )
     return {
         "requested_preset": requested,
         "selected_preset": str(choice.get("selected_preset", "")),
         "auto_mode": True,
         "candidate_count": int(choice.get("candidate_count", 0) or 0),
+        "min_effectiveness_score": int(choice.get("min_effectiveness_score", 0) or 0),
+        "only_if_effective": bool(choice.get("only_if_effective", False)),
+        "avoid_rolled_back": bool(choice.get("avoid_rolled_back", False)),
         "selection_reason": str(choice.get("selection_reason", "")),
         "candidates": list(choice.get("candidates", [])) if isinstance(choice.get("candidates", []), list) else [],
     }
@@ -297,7 +312,10 @@ def _diff_rows(before: Any, after: Any, prefix: str = "") -> List[Dict[str, Any]
 
 
 def _snapshot_id(ts: str) -> str:
-    compact = str(ts).replace("-", "").replace(":", "").replace(" ", "_")
+    raw = str(ts).strip()
+    if "." not in raw:
+        raw = f"{raw}.{dt.datetime.now().strftime('%f')}"
+    compact = raw.replace("-", "").replace(":", "").replace(" ", "_").replace(".", "")
     return f"repair_snapshot_{compact}"
 
 
@@ -594,6 +612,9 @@ def build_repair_apply_plan(
     max_actions: int = 0,
     selector_preset: str = "",
     selector_presets_file: Path | None = None,
+    min_effectiveness_score: int = 0,
+    only_if_effective: bool = False,
+    avoid_rolled_back: bool = False,
     scopes: List[str] | None = None,
     strategies: List[str] | None = None,
     task_kinds: List[str] | None = None,
@@ -613,6 +634,9 @@ def build_repair_apply_plan(
         failure_report=failure_report,
         selector_preset=selector_preset,
         selector_presets_file=selector_presets_file,
+        min_effectiveness_score=max(0, int(min_effectiveness_score)),
+        only_if_effective=bool(only_if_effective),
+        avoid_rolled_back=bool(avoid_rolled_back),
     )
     resolved_preset_name = (
         str(auto_selector.get("selected_preset", ""))
@@ -706,6 +730,9 @@ def build_repair_apply_plan(
             "selector_presets_file": str(selector_meta.get("presets_file", "")),
             "selector_auto_mode": bool(auto_selector.get("auto_mode", False)),
             "selector_auto_candidate_count": int(auto_selector.get("candidate_count", 0) or 0),
+            "selector_auto_min_effectiveness_score": int(auto_selector.get("min_effectiveness_score", 0) or 0),
+            "selector_auto_only_if_effective": bool(auto_selector.get("only_if_effective", False)),
+            "selector_auto_avoid_rolled_back": bool(auto_selector.get("avoid_rolled_back", False)),
             "selector_auto_reason": str(auto_selector.get("selection_reason", "")),
             "selector_auto_candidates": list(auto_selector.get("candidates", []))[:5],
             "selected_scopes": sorted(selected_scopes),
@@ -820,6 +847,8 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
     for snapshot_id in sorted(snapshot_ids, reverse=True)[: max(1, int(limit))]:
         plan = plan_map.get(snapshot_id, {})
         snapshot = snapshot_map.get(snapshot_id, {})
+        plan_selection = dict(plan.get("selection", {})) if isinstance(plan.get("selection", {}), dict) else {}
+        snapshot_selection = dict(snapshot.get("selection", {})) if isinstance(snapshot.get("selection", {}), dict) else {}
         approval_receipt = approvals.get(snapshot_id, {})
         preview_diff = {}
         if isinstance(plan.get("preview_diff", {}), dict):
@@ -864,11 +893,7 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
                 "latest_event": latest_event_name,
                 "latest_event_ts": str(latest_event.get("ts", "")) if latest_event else "",
                 "changed_components": _changed_components(preview_diff),
-                "selection": (
-                    dict(plan.get("selection", {}))
-                    if isinstance(plan.get("selection", {}), dict)
-                    else (dict(snapshot.get("selection", {})) if isinstance(snapshot.get("selection", {}), dict) else {})
-                ),
+                "selection": plan_selection or snapshot_selection,
             }
         )
     for idx, row in enumerate(rows):
@@ -1025,6 +1050,9 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- selector_presets_file: {selection.get('selector_presets_file', '')}",
         f"- selector_auto_mode: {selection.get('selector_auto_mode', False)}",
         f"- selector_auto_candidate_count: {selection.get('selector_auto_candidate_count', 0)}",
+        f"- selector_auto_min_effectiveness_score: {selection.get('selector_auto_min_effectiveness_score', 0)}",
+        f"- selector_auto_only_if_effective: {selection.get('selector_auto_only_if_effective', False)}",
+        f"- selector_auto_avoid_rolled_back: {selection.get('selector_auto_avoid_rolled_back', False)}",
         f"- selector_auto_reason: {selection.get('selector_auto_reason', '')}",
         f"- selector_scopes: {','.join(selector.get('scopes', []))}",
         f"- selector_strategies: {','.join(selector.get('strategies', []))}",

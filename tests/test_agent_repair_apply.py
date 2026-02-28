@@ -244,7 +244,32 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(auto_plan["selection"]["selector_preset_requested"], "auto")
             self.assertEqual(auto_plan["selection"]["selector_preset"], "presentation_recovery")
             self.assertGreaterEqual(auto_plan["selection"]["selector_auto_candidate_count"], 1)
+            self.assertEqual(auto_plan["selection"]["selector_auto_min_effectiveness_score"], 0)
+            self.assertFalse(auto_plan["selection"]["selector_auto_only_if_effective"])
+            self.assertFalse(auto_plan["selection"]["selector_auto_avoid_rolled_back"])
             self.assertEqual(auto_plan["selection"]["selector"]["strategies"], ["mckinsey-ppt"])
+
+            gated_auto_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                selector_preset="auto",
+                selector_presets_file=presets_path,
+                min_effectiveness_score=5,
+                only_if_effective=True,
+                avoid_rolled_back=True,
+            )
+            self.assertTrue(gated_auto_plan["selection"]["selector_auto_mode"])
+            self.assertEqual(gated_auto_plan["selection"]["selector_preset_requested"], "auto")
+            self.assertEqual(gated_auto_plan["selection"]["selector_preset"], "")
+            self.assertEqual(gated_auto_plan["selection"]["selector_auto_candidate_count"], 0)
+            self.assertEqual(gated_auto_plan["selection"]["selector_auto_min_effectiveness_score"], 5)
+            self.assertTrue(gated_auto_plan["selection"]["selector_auto_only_if_effective"])
+            self.assertTrue(gated_auto_plan["selection"]["selector_auto_avoid_rolled_back"])
+            self.assertIn("threshold 5", gated_auto_plan["selection"]["selector_auto_reason"])
 
             no_op_plan = build_repair_apply_plan(
                 data_dir=root,
