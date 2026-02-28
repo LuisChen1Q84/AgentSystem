@@ -131,6 +131,115 @@ def build_context_profile(context_dir: str | Path | None) -> Dict[str, Any]:
     }
 
 
+def _file_snippet_map(context_profile: Dict[str, Any]) -> Dict[str, str]:
+    rows = context_profile.get("files", []) if isinstance(context_profile.get("files", []), list) else []
+    out: Dict[str, str] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name", "")).strip()
+        snippet = str(row.get("snippet", "")).strip()
+        if name and snippet:
+            out[name] = snippet
+    return out
+
+
+def context_brief(context_profile: Dict[str, Any] | None) -> Dict[str, Any]:
+    context_profile = context_profile or {}
+    instructions = context_profile.get("instructions", {}) if isinstance(context_profile.get("instructions", {}), dict) else {}
+    snippets = _file_snippet_map(context_profile)
+    return {
+        "enabled": bool(context_profile.get("enabled", False)),
+        "project_name": str(context_profile.get("project_name", "")).strip(),
+        "summary": str(context_profile.get("summary", "")).strip(),
+        "audience": str(instructions.get("audience", "")).strip(),
+        "preferred_language": str(instructions.get("preferred_language", "")).strip(),
+        "default_deliverable": str(instructions.get("default_deliverable", "")).strip(),
+        "detail_level": str(instructions.get("detail_level", "")).strip(),
+        "ask_before_execute": bool(instructions.get("ask_before_execute", False)),
+        "quality_bar": list(instructions.get("quality_bar", [])) if isinstance(instructions.get("quality_bar", []), list) else [],
+        "connectors": list(instructions.get("connectors", [])) if isinstance(instructions.get("connectors", []), list) else [],
+        "notes": list(instructions.get("notes", [])) if isinstance(instructions.get("notes", []), list) else [],
+        "about_project": snippets.get("about-project.md", ""),
+        "working_style": snippets.get("working-style.md", ""),
+        "output_standards": snippets.get("output-standards.md", ""),
+        "domain_rules": snippets.get("domain-rules.md", ""),
+    }
+
+
+def apply_context_defaults(values: Dict[str, Any], context_profile: Dict[str, Any] | None, *, domain: str = "general") -> Dict[str, Any]:
+    payload = dict(values)
+    brief = context_brief(context_profile)
+    if not brief.get("enabled", False):
+        payload["context_inheritance"] = {
+            "enabled": False,
+            "project_name": "",
+            "applied_defaults": [],
+            "quality_bar": [],
+        }
+        return payload
+
+    applied_defaults: List[str] = []
+
+    def _fill(key: str, value: Any) -> None:
+        if value in ("", None, [], {}):
+            return
+        if payload.get(key) not in ("", None, [], {}):
+            return
+        payload[key] = value
+        applied_defaults.append(key)
+
+    _fill("audience", brief.get("audience", ""))
+    _fill("preferred_language", brief.get("preferred_language", ""))
+    _fill("detail_level", brief.get("detail_level", ""))
+    _fill("default_deliverable", brief.get("default_deliverable", ""))
+
+    connectors = brief.get("connectors", [])
+    if isinstance(connectors, list) and connectors:
+        current_connectors = payload.get("source_connectors", payload.get("connectors", []))
+        if current_connectors in ("", None, [], {}):
+            if domain in {"research", "market"}:
+                payload["source_connectors"] = list(connectors)
+                applied_defaults.append("source_connectors")
+            else:
+                payload["connectors"] = list(connectors)
+                applied_defaults.append("connectors")
+
+    if domain == "ppt":
+        if payload.get("tone") in ("", None):
+            payload["tone"] = "board" if str(brief.get("detail_level", "")).strip().lower() == "concise" else "executive"
+            applied_defaults.append("tone")
+        _fill("deliverable", brief.get("default_deliverable", ""))
+
+    if domain == "research":
+        if payload.get("objective") in ("", None) and brief.get("about_project", ""):
+            payload["objective"] = brief.get("about_project", "")
+            applied_defaults.append("objective")
+        if payload.get("citation_style") in ("", None):
+            payload["citation_style"] = "APA 7"
+            applied_defaults.append("citation_style")
+
+    if domain == "market" and payload.get("decision_style") in ("", None):
+        payload["decision_style"] = "risk_first"
+        applied_defaults.append("decision_style")
+
+    payload["context_inheritance"] = {
+        "enabled": True,
+        "domain": domain,
+        "project_name": brief.get("project_name", ""),
+        "summary": brief.get("summary", ""),
+        "applied_defaults": applied_defaults,
+        "quality_bar": brief.get("quality_bar", []),
+        "notes": brief.get("notes", []),
+        "about_project": brief.get("about_project", ""),
+        "working_style": brief.get("working_style", ""),
+        "output_standards": brief.get("output_standards", ""),
+        "domain_rules": brief.get("domain_rules", ""),
+        "preferred_language": brief.get("preferred_language", ""),
+        "audience": brief.get("audience", ""),
+    }
+    return payload
+
 
 def scaffold_context_folder(context_dir: str | Path, *, project_name: str = "", force: bool = False) -> Dict[str, Any]:
     base = resolve_context_dir(context_dir)

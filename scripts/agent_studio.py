@@ -46,12 +46,15 @@ def _print_run_summary(out: Dict[str, Any]) -> None:
     _print_json(
         {
             "ok": bool(out.get("ok", False)),
+            "status": out.get("status", ""),
             "run_id": out.get("run_id", ""),
             "profile": out.get("profile", ""),
             "task_kind": out.get("task_kind", ""),
             "selected_strategy": selected.get("strategy", ""),
             "duration_ms": out.get("duration_ms", 0),
             "clarification": out.get("clarification", {}),
+            "question_set_id": out.get("question_set_id", ""),
+            "resume_token": out.get("resume_token", ""),
             "deliver_assets": out.get("deliver_assets", {}),
             "delivery_bundle": out.get("delivery_bundle", {}),
         }
@@ -104,6 +107,54 @@ def _question_set_cmd(reg: AgentServiceRegistry, text: str, params_json: str, co
     out = reg.execute("agent.question_set", text=text, params=params)
     _print_json(out)
     return 0 if bool(out.get("ok", False)) else 1
+
+
+def _question_pending_cmd(reg: AgentServiceRegistry, data_dir: str, limit: int, status: str) -> int:
+    _print_json(reg.execute("agent.question_set.pending", data_dir=data_dir or str(ROOT / "日志/agent_os"), limit=limit, status=status))
+    return 0
+
+
+def _question_answer_cmd(reg: AgentServiceRegistry, data_dir: str, question_set_id: str, answers_json: str, note: str, resume: bool) -> int:
+    try:
+        answers = _parse_params_json(answers_json)
+    except Exception as e:
+        _print_json({"ok": False, "error": f"invalid answers-json: {e}"})
+        return 2
+    out = reg.execute(
+        "agent.question_set.answer",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        question_set_id=question_set_id,
+        answers=answers,
+        note=note,
+        resume=resume,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _run_resume_cmd(reg: AgentServiceRegistry, data_dir: str, question_set_id: str, resume_token: str) -> int:
+    out = reg.execute(
+        "agent.run.resume",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        question_set_id=question_set_id,
+        resume_token=resume_token,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _workbench_cmd(reg: AgentServiceRegistry, data_dir: str, context_dir: str, days: int, limit: int, out_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.workbench",
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            context_dir=context_dir,
+            days=days,
+            limit=limit,
+            out_dir=out_dir,
+        )
+    )
+    return 0
 
 
 def _observe_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
@@ -164,12 +215,14 @@ def _failure_review_cmd(reg: AgentServiceRegistry, days: int, limit: int, data_d
     return 0
 
 
-def _research_report_cmd(reg: AgentServiceRegistry, text: str, params_json: str, data_dir: str) -> int:
+def _research_report_cmd(reg: AgentServiceRegistry, text: str, params_json: str, data_dir: str, context_dir: str = "") -> int:
     try:
         params = _parse_params_json(params_json)
     except Exception as e:
         _print_json({"ok": False, "error": f"invalid params-json: {e}"})
         return 2
+    if context_dir.strip():
+        params["context_dir"] = context_dir.strip()
     if data_dir.strip():
         params.setdefault("out_dir", str(Path(data_dir) / "research_hub"))
     out = reg.execute("research.report", text=text, params=params)
@@ -177,12 +230,14 @@ def _research_report_cmd(reg: AgentServiceRegistry, text: str, params_json: str,
     return 0 if bool(out.get("ok", False)) else 1
 
 
-def _research_deck_cmd(reg: AgentServiceRegistry, text: str, params_json: str, data_dir: str) -> int:
+def _research_deck_cmd(reg: AgentServiceRegistry, text: str, params_json: str, data_dir: str, context_dir: str = "") -> int:
     try:
         params = _parse_params_json(params_json)
     except Exception as e:
         _print_json({"ok": False, "error": f"invalid params-json: {e}"})
         return 2
+    if context_dir.strip():
+        params["context_dir"] = context_dir.strip()
     if data_dir.strip():
         params.setdefault("out_dir", str(Path(data_dir) / "research_hub"))
     out = reg.execute("research.deck", text=text, params=params)
@@ -190,34 +245,40 @@ def _research_deck_cmd(reg: AgentServiceRegistry, text: str, params_json: str, d
     return 0 if bool(out.get("ok", False)) else 1
 
 
-def _research_lookup_cmd(reg: AgentServiceRegistry, text: str, params_json: str) -> int:
+def _research_lookup_cmd(reg: AgentServiceRegistry, text: str, params_json: str, context_dir: str = "") -> int:
     try:
         params = _parse_params_json(params_json)
     except Exception as e:
         _print_json({"ok": False, "error": f"invalid params-json: {e}"})
         return 2
+    if context_dir.strip():
+        params["context_dir"] = context_dir.strip()
     out = reg.execute("research.lookup", text=text, params=params)
     _print_json(out)
     return 0 if bool(out.get("ok", False)) else 1
 
 
-def _market_report_cmd(reg: AgentServiceRegistry, text: str, params_json: str) -> int:
+def _market_report_cmd(reg: AgentServiceRegistry, text: str, params_json: str, context_dir: str = "") -> int:
     try:
         params = _parse_params_json(params_json)
     except Exception as e:
         _print_json({"ok": False, "error": f"invalid params-json: {e}"})
         return 2
+    if context_dir.strip():
+        params["context_dir"] = context_dir.strip()
     out = reg.execute("market.report", text=text, params=params)
     _print_json(out)
     return 0 if bool(out.get("ok", False)) else 1
 
 
-def _market_committee_cmd(reg: AgentServiceRegistry, text: str, params_json: str) -> int:
+def _market_committee_cmd(reg: AgentServiceRegistry, text: str, params_json: str, context_dir: str = "") -> int:
     try:
         params = _parse_params_json(params_json)
     except Exception as e:
         _print_json({"ok": False, "error": f"invalid params-json: {e}"})
         return 2
+    if context_dir.strip():
+        params["context_dir"] = context_dir.strip()
     out = reg.execute("market.committee", text=text, params=params)
     _print_json(out)
     return 0 if bool(out.get("ok", False)) else 1
@@ -609,7 +670,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
-        "Agent Studio REPL. commands: run <text>, context-profile <dir>, question-set <text>, observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
+        "Agent Studio REPL. commands: run <text>, context-profile <dir>, question-set <text>, question-pending [limit], workbench [days limit], observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
         "research-report <text>, research-deck <text>, research-lookup <text>, market-report <text>, market-committee <text>, "
         "governance [days] [limit], failure-review [days], repair-observe [limit], repair-apply [days] [min_score] [max_actions], "
         "repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], "
@@ -648,6 +709,19 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 continue
             _question_set_cmd(reg, text=text, params_json="{}", context_dir="", task_kind="")
             continue
+        if cmd == "question-pending":
+            _question_pending_cmd(reg, data_dir=data_dir, limit=int(args[0]) if args else 10, status="pending")
+            continue
+        if cmd == "workbench":
+            _workbench_cmd(
+                reg,
+                data_dir=data_dir,
+                context_dir="",
+                days=int(args[0]) if args else 14,
+                limit=int(args[1]) if len(args) > 1 else 8,
+                out_dir="",
+            )
+            continue
         if cmd == "observe":
             _observe_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir)
             continue
@@ -668,35 +742,35 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             if not text:
                 print("usage: research-report <task text>")
                 continue
-            _research_report_cmd(reg, text=text, params_json="{}", data_dir=data_dir)
+            _research_report_cmd(reg, text=text, params_json="{}", data_dir=data_dir, context_dir="")
             continue
         if cmd == "research-deck":
             text = " ".join(args).strip()
             if not text:
                 print("usage: research-deck <task text>")
                 continue
-            _research_deck_cmd(reg, text=text, params_json="{}", data_dir=data_dir)
+            _research_deck_cmd(reg, text=text, params_json="{}", data_dir=data_dir, context_dir="")
             continue
         if cmd == "research-lookup":
             text = " ".join(args).strip()
             if not text:
                 print("usage: research-lookup <query>")
                 continue
-            _research_lookup_cmd(reg, text=text, params_json="{}")
+            _research_lookup_cmd(reg, text=text, params_json="{}", context_dir="")
             continue
         if cmd == "market-report":
             text = " ".join(args).strip()
             if not text:
                 print("usage: market-report <query>")
                 continue
-            _market_report_cmd(reg, text=text, params_json="{}")
+            _market_report_cmd(reg, text=text, params_json="{}", context_dir="")
             continue
         if cmd == "market-committee":
             text = " ".join(args).strip()
             if not text:
                 print("usage: market-committee <query>")
                 continue
-            _market_committee_cmd(reg, text=text, params_json="{}")
+            _market_committee_cmd(reg, text=text, params_json="{}", context_dir="")
             continue
         if cmd == "governance":
             _governance_cmd(reg, days=int(args[0]) if args else 14, limit=int(args[1]) if len(args) > 1 else 10, data_dir=data_dir, out_dir="")
@@ -903,6 +977,26 @@ def build_cli() -> argparse.ArgumentParser:
     question_set.add_argument("--context-dir", default="")
     question_set.add_argument("--task-kind", default="")
 
+    question_pending = sp.add_parser("question-pending")
+    question_pending.add_argument("--limit", type=int, default=10)
+    question_pending.add_argument("--status", default="pending")
+
+    question_answer = sp.add_parser("question-answer")
+    question_answer.add_argument("--question-set-id", required=True)
+    question_answer.add_argument("--answers-json", required=True)
+    question_answer.add_argument("--note", default="")
+    question_answer.add_argument("--resume", action="store_true")
+
+    run_resume = sp.add_parser("run-resume")
+    run_resume.add_argument("--question-set-id", default="")
+    run_resume.add_argument("--resume-token", default="")
+
+    workbench = sp.add_parser("workbench")
+    workbench.add_argument("--context-dir", default="")
+    workbench.add_argument("--days", type=int, default=14)
+    workbench.add_argument("--limit", type=int, default=8)
+    workbench.add_argument("--out-dir", default="")
+
     ob = sp.add_parser("observe")
     ob.add_argument("--days", type=int, default=14)
 
@@ -919,22 +1013,27 @@ def build_cli() -> argparse.ArgumentParser:
     research = sp.add_parser("research-report")
     research.add_argument("--text", required=True)
     research.add_argument("--params-json", default="{}")
+    research.add_argument("--context-dir", default="")
 
     research_deck = sp.add_parser("research-deck")
     research_deck.add_argument("--text", required=True)
     research_deck.add_argument("--params-json", default="{}")
+    research_deck.add_argument("--context-dir", default="")
 
     research_lookup = sp.add_parser("research-lookup")
     research_lookup.add_argument("--text", required=True)
     research_lookup.add_argument("--params-json", default="{}")
+    research_lookup.add_argument("--context-dir", default="")
 
     market_report = sp.add_parser("market-report")
     market_report.add_argument("--text", required=True)
     market_report.add_argument("--params-json", default="{}")
+    market_report.add_argument("--context-dir", default="")
 
     market_committee = sp.add_parser("market-committee")
     market_committee.add_argument("--text", required=True)
     market_committee.add_argument("--params-json", default="{}")
+    market_committee.add_argument("--context-dir", default="")
 
     gov = sp.add_parser("governance")
     gov.add_argument("--days", type=int, default=14)
@@ -1106,6 +1205,28 @@ def main() -> int:
         return _context_scaffold_cmd(reg, context_dir=str(args.context_dir), project_name=str(args.project_name), force=bool(args.force))
     if args.cmd == "question-set":
         return _question_set_cmd(reg, text=str(args.text), params_json=str(args.params_json), context_dir=str(args.context_dir), task_kind=str(args.task_kind))
+    if args.cmd == "question-pending":
+        return _question_pending_cmd(reg, data_dir=data_dir, limit=int(args.limit), status=str(args.status))
+    if args.cmd == "question-answer":
+        return _question_answer_cmd(
+            reg,
+            data_dir=data_dir,
+            question_set_id=str(args.question_set_id),
+            answers_json=str(args.answers_json),
+            note=str(args.note),
+            resume=bool(args.resume),
+        )
+    if args.cmd == "run-resume":
+        return _run_resume_cmd(reg, data_dir=data_dir, question_set_id=str(args.question_set_id), resume_token=str(args.resume_token))
+    if args.cmd == "workbench":
+        return _workbench_cmd(
+            reg,
+            data_dir=data_dir,
+            context_dir=str(args.context_dir),
+            days=int(args.days),
+            limit=int(args.limit),
+            out_dir=str(args.out_dir),
+        )
     if args.cmd == "observe":
         return _observe_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "recommend":
@@ -1117,15 +1238,15 @@ def main() -> int:
     if args.cmd == "diagnostics":
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "research-report":
-        return _research_report_cmd(reg, text=str(args.text), params_json=str(args.params_json), data_dir=data_dir)
+        return _research_report_cmd(reg, text=str(args.text), params_json=str(args.params_json), data_dir=data_dir, context_dir=str(args.context_dir))
     if args.cmd == "research-deck":
-        return _research_deck_cmd(reg, text=str(args.text), params_json=str(args.params_json), data_dir=data_dir)
+        return _research_deck_cmd(reg, text=str(args.text), params_json=str(args.params_json), data_dir=data_dir, context_dir=str(args.context_dir))
     if args.cmd == "research-lookup":
-        return _research_lookup_cmd(reg, text=str(args.text), params_json=str(args.params_json))
+        return _research_lookup_cmd(reg, text=str(args.text), params_json=str(args.params_json), context_dir=str(args.context_dir))
     if args.cmd == "market-report":
-        return _market_report_cmd(reg, text=str(args.text), params_json=str(args.params_json))
+        return _market_report_cmd(reg, text=str(args.text), params_json=str(args.params_json), context_dir=str(args.context_dir))
     if args.cmd == "market-committee":
-        return _market_committee_cmd(reg, text=str(args.text), params_json=str(args.params_json))
+        return _market_committee_cmd(reg, text=str(args.text), params_json=str(args.params_json), context_dir=str(args.context_dir))
     if args.cmd == "governance":
         return _governance_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "failure-review":

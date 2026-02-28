@@ -11,6 +11,12 @@ class MarketHubAppTest(unittest.TestCase):
     def test_run_committee_attaches_source_intel(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            context_dir = root / "ctx"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "project-instructions.json").write_text(
+                '{"project_name":"Market Ops","connectors":["knowledge","sec"],"audience":"investment committee"}\n',
+                encoding="utf-8",
+            )
             app = MarketHubApp(root=root)
             base_committee = {
                 "participants": [{"role": "portfolio_manager", "stance": "accumulate_small", "thesis": "base", "evidence": []}],
@@ -36,8 +42,10 @@ class MarketHubAppTest(unittest.TestCase):
                         "errors": [],
                     },
                 ):
-                out = app.run_committee("分析SPY", {"ticker": "SPY"})
+                out = app.run_committee("分析SPY", {"ticker": "SPY", "context_dir": str(context_dir)})
             self.assertTrue(out.get("ok", False))
+            self.assertEqual(out.get("context_profile", {}).get("project_name"), "Market Ops")
+            self.assertEqual(out.get("context_inheritance", {}).get("project_name"), "Market Ops")
             self.assertEqual(out.get("source_intel", {}).get("connectors"), ["knowledge", "sec"])
             self.assertEqual(out.get("market_committee", {}).get("source_item_count"), 2)
             self.assertEqual(out.get("source_evidence_map", {}).get("by_connector", {}).get("knowledge"), 1)

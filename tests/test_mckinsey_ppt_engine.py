@@ -104,6 +104,31 @@ class McKinseyPptEngineTest(unittest.TestCase):
         self.assertIn("export_manifest", out)
         self.assertTrue(Path(out["pptx_path"]).exists())
 
+    def test_context_profile_flows_into_ppt_outputs(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            root = Path(td)
+            context_dir = root / "ctx"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "project-instructions.json").write_text(
+                json.dumps(
+                    {
+                        "project_name": "Board Narrative",
+                        "audience": "board",
+                        "preferred_language": "zh",
+                        "default_deliverable": "slide_spec",
+                        "detail_level": "concise",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            out = run_request("帮我做战略汇报", {"context_dir": str(context_dir)}, root)
+            self.assertTrue(out["ok"])
+            self.assertEqual(out["context_profile"]["project_name"], "Board Narrative")
+            self.assertIn("audience", out["context_inheritance"]["applied_defaults"])
+            self.assertEqual(out["request"]["audience"], "board")
+
     def test_structured_business_data_flows_into_visual_payload_and_pptx(self):
         with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
             out = run_request(

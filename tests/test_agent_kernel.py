@@ -52,6 +52,32 @@ class AgentKernelTest(unittest.TestCase):
             self.assertIn("candidate_count", latest)
             self.assertIn("selection_confidence", latest)
 
+    def test_run_can_pause_for_pending_questions(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            context_dir = root / "ctx"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "project-instructions.json").write_text(
+                '{"project_name":"Board Pack","audience":"","preferred_language":"zh","default_deliverable":"markdown_report","detail_level":"concise","ask_before_execute":true}\n',
+                encoding="utf-8",
+            )
+            kernel = AgentKernel(root=Path("/Volumes/Luis_MacData/AgentSystem"))
+            out = kernel.run(
+                "请做一份汇报",
+                {
+                    "profile": "strict",
+                    "context_dir": str(context_dir),
+                    "agent_log_dir": str(root / "agent"),
+                    "autonomy_log_dir": str(root / "autonomy"),
+                    "memory_file": str(root / "memory.json"),
+                },
+            )
+            self.assertTrue(out.get("ok", False))
+            self.assertEqual(out.get("status"), "needs_input")
+            self.assertTrue(out.get("awaiting_input"))
+            self.assertTrue(out.get("question_set_id"))
+            self.assertTrue((root / "agent" / "pending_question_sets.jsonl").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

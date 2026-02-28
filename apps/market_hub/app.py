@@ -15,6 +15,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.kernel.context_profile import apply_context_defaults, build_context_profile
 from scripts.stock_market_hub import CFG_DEFAULT, load_cfg, pick_symbols, run_committee, run_report
 from scripts.research_source_adapters import lookup_sources
 
@@ -276,29 +277,51 @@ class MarketHubApp:
         self.root = Path(root)
 
     def run_report(self, text: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        context_profile = build_context_profile(params.get("context_dir", params.get("project_dir", "")))
+        resolved_params = apply_context_defaults(params, context_profile, domain="market")
         cfg_path = Path(str(params.get("cfg", CFG_DEFAULT)))
         if not cfg_path.is_absolute():
             cfg_path = self.root / cfg_path
         cfg = load_cfg(cfg_path)
-        query = str(params.get("query", text)).strip() or text
-        universe = str(params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
-        symbols = pick_symbols(cfg, query, str(params.get("symbols", "")))
-        return run_report(cfg, query, universe, symbols, bool(params.get("no_sync", False)))
+        query = str(resolved_params.get("query", text)).strip() or text
+        universe = str(resolved_params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
+        symbols = pick_symbols(cfg, query, str(resolved_params.get("symbols", "")))
+        return run_report(
+            cfg,
+            query,
+            universe,
+            symbols,
+            bool(resolved_params.get("no_sync", False)),
+            context_profile=context_profile,
+            context_inheritance=resolved_params.get("context_inheritance", {}),
+        )
 
     def run_committee(self, text: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        context_profile = build_context_profile(params.get("context_dir", params.get("project_dir", "")))
+        resolved_params = apply_context_defaults(params, context_profile, domain="market")
         cfg_path = Path(str(params.get("cfg", CFG_DEFAULT)))
         if not cfg_path.is_absolute():
             cfg_path = self.root / cfg_path
         cfg = load_cfg(cfg_path)
-        query = str(params.get("query", text)).strip() or text
-        universe = str(params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
-        symbols = pick_symbols(cfg, query, str(params.get("symbols", "")))
-        payload = run_committee(cfg, query, universe, symbols, bool(params.get("no_sync", False)))
-        lookup_params = dict(params)
+        query = str(resolved_params.get("query", text)).strip() or text
+        universe = str(resolved_params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
+        symbols = pick_symbols(cfg, query, str(resolved_params.get("symbols", "")))
+        payload = run_committee(
+            cfg,
+            query,
+            universe,
+            symbols,
+            bool(resolved_params.get("no_sync", False)),
+            context_profile=context_profile,
+            context_inheritance=resolved_params.get("context_inheritance", {}),
+        )
+        lookup_params = dict(resolved_params)
         if not lookup_params.get("source_connectors"):
-            lookup_params["source_connectors"] = ["knowledge"] + (["sec"] if str(params.get("ticker", "")).strip() or str(params.get("company", "")).strip() else [])
+            lookup_params["source_connectors"] = ["knowledge"] + (["sec"] if str(resolved_params.get("ticker", "")).strip() or str(resolved_params.get("company", "")).strip() else [])
         source_intel = lookup_sources(query, lookup_params)
         payload["source_intel"] = source_intel
+        payload["context_profile"] = context_profile
+        payload["context_inheritance"] = resolved_params.get("context_inheritance", {})
         payload["source_evidence_map"] = _source_summary(source_intel.get("items", []) if isinstance(source_intel.get("items", []), list) else [])
         requested_connectors = source_intel.get("connectors", []) if isinstance(source_intel.get("connectors", []), list) else []
         payload["source_risk_gate"] = _source_risk_gate(payload["source_evidence_map"], requested_connectors)

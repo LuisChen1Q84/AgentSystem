@@ -29,6 +29,18 @@ class QuestionSetTest(unittest.TestCase):
         self.assertIn("market_scope", out.get("missing_dimensions", []))
         self.assertGreaterEqual(out.get("question_count", 0), 1)
 
+    def test_build_question_set_hides_answered_dimensions(self):
+        out = build_question_set(
+            "请做一份汇报",
+            task_kind="presentation",
+            context_profile={},
+            answers={"answers": {"presentation_audience": "board", "page_budget": "6"}},
+        )
+        self.assertTrue(out.get("needed", False))
+        self.assertNotIn("audience", out.get("missing_dimensions", []))
+        self.assertNotIn("page_count", out.get("missing_dimensions", []))
+        self.assertEqual(out.get("answered_dimensions", {}).get("audience"), "board")
+
 
 if __name__ == "__main__":
     unittest.main()

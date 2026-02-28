@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from core.kernel.context_profile import context_brief
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 CFG_DEFAULT = ROOT / "config" / "stock_market_hub.toml"
@@ -473,6 +474,8 @@ def _run_report(
     no_sync: bool,
     service_name: str,
     committee_mode: bool,
+    context_profile: Dict[str, Any] | None = None,
+    context_inheritance: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     defaults = cfg.get("defaults", {})
     sq_cfg = Path(str(defaults.get("stock_quant_config", ROOT / "config/stock_quant.toml")))
@@ -522,6 +525,7 @@ def _run_report(
     out_md = report_dir / f"stock_market_{universe}_{ts}.md"
     out_json = report_dir / f"stock_market_{universe}_{ts}.json"
 
+    context_meta = context_brief(context_profile or {})
     payload = {
         "ts": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "query": query,
@@ -538,16 +542,19 @@ def _run_report(
         "prompt_packet": compose_prompt_v2(
             objective="Build global market strategy brief",
             language="zh",
-            context={"query": query, "universe": universe, "symbols": symbols},
+            context={"query": query, "universe": universe, "symbols": symbols, "context_profile": context_meta},
             references=["stock_quant analyze/backtest", "mcp_freefirst coverage"],
             constraints=[
                 "Do not provide investment advice",
                 "Mark low-coverage output as limited mode",
                 "Expose support/resistance and risk notes",
+                *[str(item).strip() for item in context_meta.get("quality_bar", []) if str(item).strip()],
             ],
             output_contract=["Include quality gate status", "Include backtest summary", "Include portfolio constraints"],
             negative_constraints=["Do not hide data quality issues", "Do not claim real-time accuracy when coverage is low"],
         ),
+        "context_profile": context_profile or {},
+        "context_inheritance": context_inheritance or {"enabled": False},
         "report_md": str(out_md),
         "report_json": str(out_json),
     }
@@ -574,12 +581,50 @@ def _run_report(
     return payload
 
 
-def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str], no_sync: bool) -> Dict[str, Any]:
-    return _run_report(cfg, query, universe, symbols, no_sync, service_name="market.report", committee_mode=False)
+def run_report(
+    cfg: Dict[str, Any],
+    query: str,
+    universe: str,
+    symbols: List[str],
+    no_sync: bool,
+    *,
+    context_profile: Dict[str, Any] | None = None,
+    context_inheritance: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    return _run_report(
+        cfg,
+        query,
+        universe,
+        symbols,
+        no_sync,
+        service_name="market.report",
+        committee_mode=False,
+        context_profile=context_profile,
+        context_inheritance=context_inheritance,
+    )
 
 
-def run_committee(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str], no_sync: bool) -> Dict[str, Any]:
-    return _run_report(cfg, query, universe, symbols, no_sync, service_name="market.committee", committee_mode=True)
+def run_committee(
+    cfg: Dict[str, Any],
+    query: str,
+    universe: str,
+    symbols: List[str],
+    no_sync: bool,
+    *,
+    context_profile: Dict[str, Any] | None = None,
+    context_inheritance: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    return _run_report(
+        cfg,
+        query,
+        universe,
+        symbols,
+        no_sync,
+        service_name="market.committee",
+        committee_mode=True,
+        context_profile=context_profile,
+        context_inheritance=context_inheritance,
+    )
 
 
 def build_cli() -> argparse.ArgumentParser:

@@ -26,6 +26,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 try:
+    from core.kernel.question_flow import apply_answer_packet
     from core.kernel.context_profile import build_context_profile
     from core.kernel.models import ExecutionPlan, RunContext, RunRequest, TaskSpec
     from core.kernel.question_set import build_question_set
@@ -33,6 +34,7 @@ try:
     from scripts.capability_catalog import load_cfg as load_catalog_cfg
     from scripts.capability_catalog import scan as scan_catalog
 except ModuleNotFoundError:  # direct
+    from question_flow import apply_answer_packet  # type: ignore
     from context_profile import build_context_profile  # type: ignore
     from models import ExecutionPlan, RunContext, RunRequest, TaskSpec  # type: ignore
     from question_set import build_question_set  # type: ignore
@@ -167,7 +169,8 @@ def _expected_outputs(task_kind: str) -> List[str]:
 
 
 def build_task_spec(text: str, values: Dict[str, Any], task_kind: str | None = None) -> TaskSpec:
-    actual_kind = task_kind or task_kind_for_text(text)
+    explicit_kind = str(values.get("task_kind", "")).strip()
+    actual_kind = explicit_kind or task_kind or task_kind_for_text(text)
     return TaskSpec(
         task_id=new_id("task"),
         text=text,
@@ -202,12 +205,13 @@ def resolve_profile(
     text: str,
     overrides_file: Path,
     preferences_file: Path | None = None,
+    task_kind_hint: str = "",
 ) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
     defaults = cfg.get("defaults", {})
     profiles = cfg.get("profiles", {})
     default_profile = str(defaults.get("profile", "strict"))
     requested_clean = requested.strip()
-    task_kind = task_kind_for_text(text)
+    task_kind = task_kind_hint.strip() or task_kind_for_text(text)
     profile_source = "request"
 
     profile_name = requested_clean or default_profile
@@ -425,45 +429,58 @@ def build_execution_plan(request: RunRequest, clarification: Dict[str, Any], str
 
 
 def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, Any]:
+    resolved_values = apply_answer_packet(values, values.get("answer_packet", {}))
     defaults = cfg.get("defaults", {})
     overrides_file = resolve_path(
-        str(values.get("profile_overrides_file", defaults.get("profile_overrides_file", str(PROFILE_OVERRIDES_DEFAULT)))),
+        str(resolved_values.get("profile_overrides_file", defaults.get("profile_overrides_file", str(PROFILE_OVERRIDES_DEFAULT)))),
         ROOT,
     )
     strategy_overrides_file = resolve_path(
-        str(values.get("strategy_overrides_file", defaults.get("strategy_overrides_file", str(STRATEGY_OVERRIDES_DEFAULT)))),
+        str(resolved_values.get("strategy_overrides_file", defaults.get("strategy_overrides_file", str(STRATEGY_OVERRIDES_DEFAULT)))),
         ROOT,
     )
-    log_dir = resolve_path(values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), ROOT)
+    log_dir = resolve_path(resolved_values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), ROOT)
     preferences_file = resolve_path(
-        str(values.get("preferences_file", log_dir / "agent_user_preferences.json")),
+        str(resolved_values.get("preferences_file", log_dir / "agent_user_preferences.json")),
         ROOT,
     )
+    task_kind_hint = str(resolved_values.get("task_kind", "")).strip()
     profile_name, governor, profile_meta = resolve_profile(
         cfg,
-        str(values.get("profile", "")),
+        str(resolved_values.get("profile", "")),
         text,
         overrides_file,
         preferences_file=preferences_file,
+        task_kind_hint=task_kind_hint,
     )
-    task = build_task_spec(text, values, task_kind=str(profile_meta.get("task_kind", "general")))
-    context_profile = build_context_profile(values.get("context_dir", values.get("project_dir", "")))
-    clarification = build_question_set(text, task_kind=task.task_kind, context_profile=context_profile)
-    capability = capability_report(values, cfg)
+    task = build_task_spec(text, resolved_values, task_kind=str(profile_meta.get("task_kind", "general")))
+    context_profile = build_context_profile(resolved_values.get("context_dir", resolved_values.get("project_dir", "")))
+    clarification = build_question_set(
+        text,
+        task_kind=task.task_kind,
+        context_profile=context_profile,
+        answers=resolved_values.get("answer_packet", {}),
+    )
+    capability = capability_report(resolved_values, cfg)
     cap_snapshot = capability_snapshot(capability)
-    strategy_controls = build_strategy_controls(profile_name, values, cfg, capability, strategy_overrides_file)
+    strategy_controls = build_strategy_controls(profile_name, resolved_values, cfg, capability, strategy_overrides_file)
     run_request = RunRequest(
         run_id=new_id("agent"),
         task=task,
-        requested_profile=str(values.get("profile", "")),
+        requested_profile=str(resolved_values.get("profile", "")),
         resolved_profile=profile_name,
         mode="personal-agent-os",
-        allow_high_risk=bool(values.get("allow_high_risk", False)),
-        dry_run=bool(values.get("dry_run", False)),
-        context={"profile_meta": profile_meta, "context_profile": context_profile, "question_set": clarification},
-        runtime_overrides=dict(values),
+        allow_high_risk=bool(resolved_values.get("allow_high_risk", False)),
+        dry_run=bool(resolved_values.get("dry_run", False)),
+        context={
+            "profile_meta": profile_meta,
+            "context_profile": context_profile,
+            "question_set": clarification,
+            "answer_packet": resolved_values.get("answer_packet", {}),
+        },
+        runtime_overrides=dict(resolved_values),
     )
-    run_context = build_run_context(values, strategy_controls, capability, context_profile)
+    run_context = build_run_context(resolved_values, strategy_controls, capability, context_profile)
     plan = build_execution_plan(run_request, clarification, strategy_controls, governor)
     return {
         "run_request": run_request,
@@ -477,4 +494,5 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
         "capability_report": capability,
         "capability_snapshot": cap_snapshot,
         "strategy_controls": strategy_controls,
+        "resolved_values": resolved_values,
     }

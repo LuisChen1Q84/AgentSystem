@@ -27,7 +27,7 @@ from services.policy_action_service import PolicyActionService
 from services.policy_service import PolicyService
 from services.preference_learning_service import PreferenceLearningService
 from services.ppt_service import PPTService
-from services.question_service import QuestionSetService
+from services.question_service import AnswerQuestionSetService, PendingQuestionSetService, QuestionSetService, ResumeRunService
 from services.recommendation_service import RecommendationService
 from services.research_service import ResearchService
 from services.repair_apply_service import RepairApplyService, RepairApproveService, RepairCompareService, RepairListService, RepairRollbackService
@@ -37,6 +37,7 @@ from services.replay_service import ReplayService
 from services.run_diagnostics_service import RunDiagnosticsService
 from services.slo_service import SLOService
 from services.state_store_service import StateStoreService
+from services.workbench_service import WorkbenchService
 
 
 class AgentServiceRegistry:
@@ -64,9 +65,13 @@ class AgentServiceRegistry:
         self.policy_apply = PolicyActionService(root=self.root)
         self.preferences = PreferenceLearningService(root=self.root)
         self.question_set = QuestionSetService(root=self.root)
+        self.pending_question_set = PendingQuestionSetService(root=self.root)
+        self.answer_question_set = AnswerQuestionSetService(root=self.root)
+        self.resume_run = ResumeRunService(root=self.root)
         self.run_diagnostics = RunDiagnosticsService(root=self.root)
         self.object_view = ObjectViewService(root=self.root)
         self.replay = ReplayService(root=self.root)
+        self.workbench = WorkbenchService(root=self.root)
         self.mcp = MCPService(root=self.root)
         self.ppt = PPTService(root=self.root)
         self.image = ImageService(root=self.root)
@@ -81,6 +86,10 @@ class AgentServiceRegistry:
             "agent.observe": ServiceSpec("agent.observe", "observability", "Build agent observability report", "low"),
             "agent.recommend": ServiceSpec("agent.recommend", "optimization", "Recommend profile by task kind", "low"),
             "agent.question_set": ServiceSpec("agent.question_set", "runtime", "Build structured clarification questions for a task", "low"),
+            "agent.question_set.pending": ServiceSpec("agent.question_set.pending", "runtime", "List pending structured clarification sets", "low"),
+            "agent.question_set.answer": ServiceSpec("agent.question_set.answer", "runtime", "Record answers for a pending clarification set", "low"),
+            "agent.run.resume": ServiceSpec("agent.run.resume", "runtime", "Resume a paused run from a saved answer packet", "medium"),
+            "agent.workbench": ServiceSpec("agent.workbench", "runtime", "Build the unified day-to-day workbench", "low"),
             "agent.state.sync": ServiceSpec("agent.state.sync", "observability", "Sync runtime objects into sqlite state store", "low"),
             "agent.state.stats": ServiceSpec("agent.state.stats", "observability", "Inspect sqlite state store counts", "low"),
             "agent.slo": ServiceSpec("agent.slo", "governance", "Evaluate SLO guard", "low"),
@@ -190,6 +199,38 @@ class AgentServiceRegistry:
         return self.question_set.run(
             text=str(kwargs.get("text", "")),
             params=kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {},
+        ).to_dict()
+
+    def _exec_agent_question_set_pending(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.pending_question_set.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            limit=max(1, int(kwargs.get("limit", 10))),
+            status=str(kwargs.get("status", "pending")),
+        ).to_dict()
+
+    def _exec_agent_question_set_answer(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.answer_question_set.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            question_set_id=str(kwargs.get("question_set_id", "")),
+            answers=kwargs.get("answers", {}) if isinstance(kwargs.get("answers", {}), dict) else {},
+            note=str(kwargs.get("note", "")),
+            resume=bool(kwargs.get("resume", False)),
+        ).to_dict()
+
+    def _exec_agent_run_resume(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.resume_run.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            question_set_id=str(kwargs.get("question_set_id", "")),
+            resume_token=str(kwargs.get("resume_token", "")),
+        ).to_dict()
+
+    def _exec_agent_workbench(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.workbench.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            context_dir=str(kwargs.get("context_dir", "")),
+            days=max(1, int(kwargs.get("days", 14))),
+            limit=max(1, int(kwargs.get("limit", 8))),
+            out_dir=str(kwargs.get("out_dir", "")),
         ).to_dict()
 
     def _exec_agent_governance_console(self, **kwargs: Any) -> Dict[str, Any]:

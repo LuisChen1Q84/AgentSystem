@@ -116,6 +116,7 @@ class ResearchHubTest(unittest.TestCase):
             self.assertIn("deck", out)
             self.assertTrue(Path(out["pptx_path"]).exists())
             self.assertIn("research_payload", out.get("deck_seed", {}))
+            self.assertIn("context_inheritance", out)
 
     def test_systematic_review_assets_flow_into_deck_seed(self):
         with tempfile.TemporaryDirectory() as td:
@@ -132,6 +133,34 @@ class ResearchHubTest(unittest.TestCase):
             self.assertIn("systematic_review", research_payload)
             self.assertTrue(research_payload.get("systematic_review", {}).get("prisma_flow"))
             self.assertTrue(research_payload.get("appendix_assets", []))
+
+    def test_context_profile_flows_into_research_outputs(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            context_dir = root / "ctx"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "project-instructions.json").write_text(
+                json.dumps(
+                    {
+                        "project_name": "Research Board Pack",
+                        "audience": "board",
+                        "preferred_language": "zh",
+                        "default_deliverable": "markdown_report",
+                        "connectors": ["knowledge", "openalex"],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            out = run_request(
+                "请做支付SaaS市场规模研究",
+                {"playbook": "market_sizing", "context_dir": str(context_dir)},
+                out_dir=root / "out",
+            )
+            self.assertTrue(out.get("ok", False))
+            self.assertEqual(out.get("context_profile", {}).get("project_name"), "Research Board Pack")
+            self.assertIn("source_connectors", out.get("context_inheritance", {}).get("applied_defaults", []))
 
 
 if __name__ == "__main__":

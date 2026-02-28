@@ -19,6 +19,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.kernel.context_profile import apply_context_defaults, build_context_profile, context_brief
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 from scripts.mckinsey_ppt_html_renderer import render_deck_html
@@ -1643,8 +1644,11 @@ def _markdown_report(req: Dict[str, Any], payload: Dict[str, Any]) -> str:
 
 
 def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) -> Dict[str, Any]:
-    lang = _language(text)
-    req = _extract_values(text, values, lang)
+    context_profile = build_context_profile(values.get("context_dir", values.get("project_dir", "")))
+    resolved_values = apply_context_defaults(values, context_profile, domain="ppt")
+    context_meta = context_brief(context_profile)
+    lang = str(resolved_values.get("preferred_language", "")).strip() or _language(text)
+    req = _extract_values(text, resolved_values, lang)
     layout_catalog = _load_layout_catalog()
     design_reference = _read_reference_points(DESIGN_RULES_PATH)
     story_reference = _read_reference_points(STORY_PATTERNS_PATH)
@@ -1658,13 +1662,15 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     prompt_packet = compose_prompt_v2(
         objective=f"Build premium strategy deck for {req['topic']}",
         language=lang,
-        context=req,
+        context={**req, "context_profile": context_meta},
         references=[
             "SCQA",
             "Pyramid Principle",
             "Decision-oriented charts",
             *design_reference[:3],
             *story_reference[:3],
+            str(context_meta.get("output_standards", "")).strip(),
+            str(context_meta.get("domain_rules", "")).strip(),
         ],
         constraints=[
             "Every slide title must be an assertion",
@@ -1672,6 +1678,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             "No decorative charts without board-level meaning",
             "Keep executive readability within 10 seconds per slide",
             "Use whitespace and section rhythm to make hierarchy obvious",
+            *[str(item).strip() for item in context_meta.get("quality_bar", []) if str(item).strip()],
         ],
         output_contract=[
             "Return slide-by-slide JSON spec",
@@ -1703,6 +1710,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "design_handoff": design_handoff,
         "slides": slides,
         "prompt_packet": prompt_packet,
+        "context_profile": context_profile,
+        "context_inheritance": resolved_values.get("context_inheritance", {}),
     }
 
     out_root = out_dir or (ROOT / "日志" / "mckinsey_ppt")
@@ -1746,6 +1755,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             ]
         },
         "prompt_packet": prompt_packet,
+        "context_profile": context_profile,
+        "context_inheritance": resolved_values.get("context_inheritance", {}),
         "loop_closure": build_loop_closure(
             skill="mckinsey-ppt",
             status="completed",

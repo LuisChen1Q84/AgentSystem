@@ -36,6 +36,24 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(aq.context_dir, "/tmp/ctx")
         self.assertEqual(aq.task_kind, "presentation")
 
+        aqp = parser.parse_args(["question-pending", "--limit", "5", "--status", "answered"])
+        self.assertEqual(aqp.cmd, "question-pending")
+        self.assertEqual(aqp.status, "answered")
+
+        aqa = parser.parse_args(["question-answer", "--question-set-id", "qs_1", "--answers-json", '{"page_budget":"6"}', "--resume"])
+        self.assertEqual(aqa.cmd, "question-answer")
+        self.assertEqual(aqa.question_set_id, "qs_1")
+        self.assertTrue(aqa.resume)
+
+        arr = parser.parse_args(["run-resume", "--question-set-id", "qs_1"])
+        self.assertEqual(arr.cmd, "run-resume")
+        self.assertEqual(arr.question_set_id, "qs_1")
+
+        awb = parser.parse_args(["workbench", "--context-dir", "/tmp/ctx", "--days", "7", "--limit", "6"])
+        self.assertEqual(awb.cmd, "workbench")
+        self.assertEqual(awb.context_dir, "/tmp/ctx")
+        self.assertEqual(awb.limit, 6)
+
         a2 = parser.parse_args(["feedback-stats"])
         self.assertEqual(a2.cmd, "feedback-stats")
 
@@ -279,6 +297,69 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertEqual(payload.get("task_kind"), "presentation")
             self.assertIn("question_set", payload)
+
+    def test_question_answer_resume_and_workbench_commands(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            context_dir = root / "ctx"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "project-instructions.json").write_text(
+                '{"project_name":"Board Pack","ask_before_execute":true}\n',
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            paused = reg.execute(
+                "agent.run",
+                text="请做一份汇报",
+                params={
+                    "context_dir": str(context_dir),
+                    "agent_log_dir": str(root / "agent"),
+                    "autonomy_log_dir": str(root / "aut"),
+                    "memory_file": str(root / "memory.json"),
+                    "dry_run": True,
+                    "question_mode": "required",
+                },
+            )
+            question_set_id = paused.get("question_set_id", "")
+            self.assertTrue(question_set_id)
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._question_pending_cmd(reg, data_dir=str(root / "agent"), limit=10, status="pending")
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertEqual(payload.get("report", {}).get("summary", {}).get("pending"), 1)
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._question_answer_cmd(
+                    reg,
+                    data_dir=str(root / "agent"),
+                    question_set_id=question_set_id,
+                    answers_json='{"presentation_audience":"board","page_budget":"6"}',
+                    note="董事会 6 页",
+                    resume=False,
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(payload.get("answer_packet", {}).get("answers", {}).get("page_budget"), "6")
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._run_resume_cmd(reg, data_dir=str(root / "agent"), question_set_id=question_set_id, resume_token="")
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertEqual(payload.get("source_question_set_id"), question_set_id)
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._workbench_cmd(reg, data_dir=str(root / "agent"), context_dir=str(context_dir), days=14, limit=5, out_dir="")
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertEqual(payload.get("report", {}).get("summary", {}).get("project_name"), "Board Pack")
 
     def test_research_report_cmd(self):
         with tempfile.TemporaryDirectory() as td:

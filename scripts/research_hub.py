@@ -20,6 +20,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.kernel.context_profile import apply_context_defaults, build_context_profile, context_brief
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 from openpyxl import Workbook
@@ -1141,20 +1142,23 @@ def _markdown_report(payload: Dict[str, Any]) -> str:
 
 
 def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) -> Dict[str, Any]:
-    lang = _language(text)
+    context_profile = build_context_profile(values.get("context_dir", values.get("project_dir", "")))
+    resolved_values = apply_context_defaults(values, context_profile, domain="research")
+    context_meta = context_brief(context_profile)
+    lang = str(resolved_values.get("preferred_language", "")).strip() or _language(text)
     playbooks = _load_playbooks()
-    playbook = _infer_playbook(text, values)
+    playbook = _infer_playbook(text, resolved_values)
     playbook_meta = (
         playbooks.get("playbooks", {}).get(playbook, {})
         if isinstance(playbooks.get("playbooks", {}), dict)
         else {}
     )
-    req = _extract_request(text, values, lang, playbook)
+    req = _extract_request(text, resolved_values, lang, playbook)
     plan = _source_plan(req, playbook_meta if isinstance(playbook_meta, dict) else {}, lang)
     evidence = _evidence_ledger(req, plan, lang)
     retrieved_sources = {"query": req["research_question"], "connectors": [], "items": [], "errors": []}
-    if bool(values.get("lookup", False)) or bool(values.get("fetch_sources", False)):
-        retrieved_sources = lookup_sources(req["research_question"], values)
+    if bool(resolved_values.get("lookup", False)) or bool(resolved_values.get("fetch_sources", False)):
+        retrieved_sources = lookup_sources(req["research_question"], resolved_values)
         evidence, plan = _merge_retrieved_sources(evidence, plan, retrieved_sources, lang)
     assumptions = _assumption_register(req, playbook, lang)
     body = _report_body(playbook, req, lang)
@@ -1169,13 +1173,19 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     prompt_packet = compose_prompt_v2(
         objective=f"Produce evidence-led research report via {playbook}",
         language=lang,
-        context=req,
-        references=[*methods[:5], *[str(x.get('title', '')) for x in evidence[:4]]],
+        context={**req, "context_profile": context_meta},
+        references=[
+            *methods[:5],
+            *[str(x.get("title", "")) for x in evidence[:4]],
+            str(context_meta.get("output_standards", "")).strip(),
+            str(context_meta.get("domain_rules", "")).strip(),
+        ],
         constraints=[
             "Separate evidence from assumptions",
             "Every major claim must map to one evidence reference or a marked assumption",
             "Keep output decision-oriented rather than descriptive",
             "Include peer review findings and citations",
+            *[str(item).strip() for item in context_meta.get("quality_bar", []) if str(item).strip()],
         ],
         output_contract=[
             "Return structured report sections",
@@ -1209,6 +1219,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "ppt_bridge": ppt_bridge,
         "prompt_packet": prompt_packet,
         "reference_digest": {"methods": methods[:6]},
+        "context_profile": context_profile,
+        "context_inheritance": resolved_values.get("context_inheritance", {}),
     }
 
     out_root = out_dir or (ROOT / "日志" / "research_hub")
@@ -1284,6 +1296,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             )
         },
         "prompt_packet": prompt_packet,
+        "context_profile": context_profile,
+        "context_inheritance": resolved_values.get("context_inheritance", {}),
         "loop_closure": build_loop_closure(
             skill="research-hub",
             status="completed",
@@ -1303,10 +1317,14 @@ def run_deck_request(text: str, values: Dict[str, Any], out_dir: Path | None = N
     out_root = out_dir or (ROOT / "日志" / "research_hub")
     report_out_dir = out_root / "report"
     deck_out_dir = out_root / "deck"
-    report = run_request(text, values, out_dir=report_out_dir)
+    context_profile = build_context_profile(values.get("context_dir", values.get("project_dir", "")))
+    resolved_values = apply_context_defaults(values, context_profile, domain="research")
+    report = run_request(text, resolved_values, out_dir=report_out_dir)
     deck_params = _deck_seed(report)
-    if isinstance(values.get("ppt_params", {}), dict):
-        deck_params.update(values.get("ppt_params", {}))
+    deck_params["context_dir"] = str(context_profile.get("context_dir", ""))
+    deck_params["context_profile"] = context_profile
+    if isinstance(resolved_values.get("ppt_params", {}), dict):
+        deck_params.update(resolved_values.get("ppt_params", {}))
     deck = run_ppt_request(str(deck_params.get("topic", text)).strip() or text, deck_params, out_dir=deck_out_dir)
     summary = f"Research deck ready for {report.get('request', {}).get('title', text)} with linked report and executive deck."
     result: Dict[str, Any] = {
@@ -1318,6 +1336,8 @@ def run_deck_request(text: str, values: Dict[str, Any], out_dir: Path | None = N
         "deck": deck,
         "deck_seed": deck_params,
         "ppt_bridge": report.get("ppt_bridge", {}),
+        "context_profile": context_profile,
+        "context_inheritance": resolved_values.get("context_inheritance", {}),
         "json_path": report.get("json_path", ""),
         "md_path": report.get("md_path", ""),
         "html_path": report.get("html_path", ""),

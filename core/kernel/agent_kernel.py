@@ -19,11 +19,13 @@ if str(ROOT) not in sys.path:
 try:
     from core.kernel.evaluator import persist_agent_payload
     from core.kernel.planner import build_run_blueprint, load_agent_cfg, now_ts, resolve_path
+    from core.kernel.question_flow import persist_pending_question_set, should_pause_for_questions
     from core.skill_intelligence import build_loop_closure
     from scripts import autonomy_generalist
 except ModuleNotFoundError:  # direct
     from evaluator import persist_agent_payload  # type: ignore
     from planner import build_run_blueprint, load_agent_cfg, now_ts, resolve_path  # type: ignore
+    from question_flow import persist_pending_question_set, should_pause_for_questions  # type: ignore
     from core.skill_intelligence import build_loop_closure  # type: ignore
     import autonomy_generalist  # type: ignore
 
@@ -48,11 +50,67 @@ class AgentKernel:
         cap_snapshot = blueprint["capability_snapshot"]
         strategy_controls = blueprint["strategy_controls"]
         context_profile = blueprint["context_profile"]
+        resolved_values = blueprint["resolved_values"]
 
         log_dir = resolve_path(values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), self.root)
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        aut_params = dict(values)
+        pause_check = should_pause_for_questions(resolved_values, context_profile, clarification)
+        if pause_check.get("pause", False):
+            pending = persist_pending_question_set(
+                data_dir=log_dir,
+                run_id=run_request.run_id,
+                text=text,
+                task_kind=run_request.task.task_kind,
+                profile=run_request.resolved_profile,
+                context_profile=context_profile,
+                question_set=clarification,
+                params=resolved_values,
+                pause_reason=str(pause_check.get("reason", "")),
+            )
+            return {
+                "run_id": run_request.run_id,
+                "ts": now_ts(),
+                "ok": True,
+                "status": "needs_input",
+                "awaiting_input": True,
+                "profile": run_request.resolved_profile,
+                "profile_meta": profile_meta,
+                "governor": governor,
+                "request": {"text": text, "params": resolved_values},
+                "task_kind": run_request.task.task_kind,
+                "clarification": clarification,
+                "context_profile": context_profile,
+                "duration_ms": int((dt.datetime.now() - started).total_seconds() * 1000),
+                "capability_snapshot": cap_snapshot,
+                "strategy_controls": strategy_controls,
+                "kernel": {
+                    "task": run_request.task.to_dict(),
+                    "run_request": run_request.to_dict(),
+                    "run_context": run_context.to_dict(),
+                    "execution_plan": execution_plan.to_dict(),
+                },
+                "question_set_id": pending.get("question_set_id", ""),
+                "resume_token": pending.get("resume_token", ""),
+                "pending_question_set": pending,
+                "loop_closure": build_loop_closure(
+                    skill="agent-os",
+                    status="advisor",
+                    reason=str(pause_check.get("reason", "needs_input")),
+                    evidence={
+                        "profile": run_request.resolved_profile,
+                        "task_kind": run_request.task.task_kind,
+                        "question_count": int(clarification.get("question_count", 0) or 0),
+                        "readiness_score": int(clarification.get("readiness_score", 0) or 0),
+                    },
+                    next_actions=[
+                        "Answer pending question set",
+                        "Resume the paused run with the answer packet",
+                    ],
+                ),
+            }
+
+        aut_params = dict(resolved_values)
         aut_params["execution_mode"] = governor["execution_mode"]
         aut_params["deterministic"] = governor["deterministic"]
         aut_params["learning_enabled"] = governor["learning_enabled"]

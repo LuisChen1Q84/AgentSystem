@@ -24,6 +24,8 @@ TABLE_SPECS = {
     "repair_journal": ("event_id", "event_id TEXT PRIMARY KEY, ts TEXT, snapshot_id TEXT, event TEXT, payload_json TEXT NOT NULL"),
     "policy_actions": ("action_id", "action_id TEXT PRIMARY KEY, ts TEXT, status TEXT, payload_json TEXT NOT NULL"),
     "preferences": ("pref_key", "pref_key TEXT PRIMARY KEY, ts TEXT, payload_json TEXT NOT NULL"),
+    "pending_questions": ("question_set_id", "question_set_id TEXT PRIMARY KEY, ts TEXT, status TEXT, payload_json TEXT NOT NULL"),
+    "answer_packets": ("question_set_id", "question_set_id TEXT PRIMARY KEY, ts TEXT, payload_json TEXT NOT NULL"),
 }
 
 
@@ -61,6 +63,9 @@ class StateStore:
             cols.append("run_id")
             vals.append(str((extra or {}).get("run_id", "")).strip())
         elif table == "policy_actions":
+            cols.append("status")
+            vals.append(str((extra or {}).get("status", "")).strip())
+        elif table == "pending_questions":
             cols.append("status")
             vals.append(str((extra or {}).get("status", "")).strip())
         cols.append("payload_json")
@@ -188,6 +193,22 @@ def sync_state_store(data_dir: Path) -> Dict[str, Any]:
         action_id = str(row.get("action_id", "")).strip() or f"policy_action_{synced['policy_actions'] + 1}"
         store.upsert("policy_actions", action_id, str(row.get("ts", "")), {**row, "action_id": action_id}, extra={"status": str(row.get("status", ""))})
         synced["policy_actions"] += 1
+    for row in _load_jsonl(base / "pending_question_sets.jsonl"):
+        question_set_id = str(row.get("question_set_id", "")).strip()
+        if question_set_id:
+            store.upsert(
+                "pending_questions",
+                question_set_id,
+                str(row.get("ts", "")),
+                row,
+                extra={"status": str(row.get("status", ""))},
+            )
+            synced["pending_questions"] += 1
+    for row in _load_jsonl(base / "answer_packets.jsonl"):
+        question_set_id = str(row.get("question_set_id", "")).strip()
+        if question_set_id:
+            store.upsert("answer_packets", question_set_id, str(row.get("ts", "")), row)
+            synced["answer_packets"] += 1
     prefs_file = base / "agent_user_preferences.json"
     prefs = _load_json(prefs_file)
     if prefs:

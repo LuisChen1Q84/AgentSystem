@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.kernel.context_profile import build_context_profile, scaffold_context_folder
+from core.kernel.context_profile import apply_context_defaults, build_context_profile, context_brief, scaffold_context_folder
 
 
 class ContextProfileTest(unittest.TestCase):
@@ -48,6 +48,34 @@ class ContextProfileTest(unittest.TestCase):
             self.assertTrue((root / "project-instructions.json").exists())
             self.assertIn("Board Pack", report.get("summary", ""))
             self.assertEqual(report.get("profile", {}).get("project_name"), "Board Pack")
+
+    def test_context_brief_and_defaults(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "about-project.md").write_text("Board decision pack for pricing reset.", encoding="utf-8")
+            (root / "output-standards.md").write_text("Need citations and risks.", encoding="utf-8")
+            (root / "project-instructions.json").write_text(
+                json.dumps(
+                    {
+                        "project_name": "Pricing Board Pack",
+                        "audience": "board",
+                        "preferred_language": "zh",
+                        "default_deliverable": "slide_spec",
+                        "detail_level": "concise",
+                        "connectors": ["knowledge", "sec"],
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            profile = build_context_profile(root)
+            brief = context_brief(profile)
+            self.assertEqual(brief["project_name"], "Pricing Board Pack")
+            merged = apply_context_defaults({}, profile, domain="research")
+            self.assertEqual(merged["audience"], "board")
+            self.assertEqual(merged["source_connectors"], ["knowledge", "sec"])
+            self.assertIn("audience", merged["context_inheritance"]["applied_defaults"])
 
 
 if __name__ == "__main__":

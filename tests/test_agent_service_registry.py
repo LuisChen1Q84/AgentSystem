@@ -26,6 +26,10 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.policy.apply", names)
         self.assertIn("agent.preferences.learn", names)
         self.assertIn("agent.question_set", names)
+        self.assertIn("agent.question_set.pending", names)
+        self.assertIn("agent.question_set.answer", names)
+        self.assertIn("agent.run.resume", names)
+        self.assertIn("agent.workbench", names)
         self.assertIn("agent.repairs.apply", names)
         self.assertIn("agent.repairs.approve", names)
         self.assertIn("agent.repairs.compare", names)
@@ -274,6 +278,67 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(question_set.get("ok", False))
             self.assertEqual(question_set.get("task_kind"), "presentation")
             self.assertIn("question_set", question_set)
+
+    def test_execute_pending_answer_resume_and_workbench_services(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            context_dir = root / "ctx"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "project-instructions.json").write_text(
+                json.dumps(
+                    {
+                        "project_name": "Board Pack",
+                        "audience": "",
+                        "preferred_language": "zh",
+                        "default_deliverable": "markdown_report",
+                        "ask_before_execute": True,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            paused = reg.execute(
+                "agent.run",
+                text="请做一份汇报",
+                params={
+                    "profile": "strict",
+                    "dry_run": True,
+                    "question_mode": "required",
+                    "context_dir": str(context_dir),
+                    "agent_log_dir": str(root / "agent"),
+                    "autonomy_log_dir": str(root / "aut"),
+                    "memory_file": str(root / "memory.json"),
+                },
+            )
+            self.assertTrue(paused.get("ok", False))
+            self.assertEqual(paused.get("status"), "needs_input")
+            question_set_id = paused.get("question_set_id", "")
+            self.assertTrue(question_set_id)
+
+            pending = reg.execute("agent.question_set.pending", data_dir=str(root / "agent"), limit=10, status="pending")
+            self.assertTrue(pending.get("ok", False))
+            self.assertEqual(pending.get("report", {}).get("summary", {}).get("pending"), 1)
+
+            answered = reg.execute(
+                "agent.question_set.answer",
+                data_dir=str(root / "agent"),
+                question_set_id=question_set_id,
+                answers={"presentation_audience": "board", "page_budget": "6"},
+                note="董事会 6 页",
+            )
+            self.assertTrue(answered.get("ok", False))
+            self.assertEqual(answered.get("answer_packet", {}).get("answers", {}).get("page_budget"), "6")
+
+            resumed = reg.execute("agent.run.resume", data_dir=str(root / "agent"), question_set_id=question_set_id)
+            self.assertTrue(resumed.get("ok", False))
+            self.assertEqual(resumed.get("source_question_set_id"), question_set_id)
+
+            workbench = reg.execute("agent.workbench", data_dir=str(root / "agent"), context_dir=str(context_dir), days=14, limit=5)
+            self.assertTrue(workbench.get("ok", False))
+            self.assertIn("report", workbench)
+            self.assertEqual(workbench.get("report", {}).get("summary", {}).get("project_name"), "Board Pack")
 
     def test_execute_research_report(self):
         with tempfile.TemporaryDirectory() as td:

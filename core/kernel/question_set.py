@@ -6,6 +6,11 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List
 
+try:
+    from core.kernel.question_flow import answered_dimensions
+except ModuleNotFoundError:  # direct
+    from question_flow import answered_dimensions  # type: ignore
+
 
 def _has_any(text: str, patterns: List[str]) -> bool:
     low = text.lower()
@@ -25,8 +30,15 @@ def _question(question_id: str, *, dimension: str, question: str, options: List[
 
 
 
-def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def build_question_set(
+    text: str,
+    *,
+    task_kind: str,
+    context_profile: Dict[str, Any] | None = None,
+    answers: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     context_profile = context_profile or {}
+    answered = answered_dimensions(answers)
     bias = context_profile.get("question_bias", {}) if isinstance(context_profile.get("question_bias", {}), dict) else {}
     instructions = context_profile.get("instructions", {}) if isinstance(context_profile.get("instructions", {}), dict) else {}
     audience_hint = str(bias.get("audience", "")).strip() or str(instructions.get("audience", "")).strip()
@@ -50,7 +62,7 @@ def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, 
     if deliverable_hint:
         context_signals.append(f"deliverable={deliverable_hint}")
 
-    if len(t) < 12 and not deliverable_hint:
+    if len(t) < 12 and not deliverable_hint and "deliverable" not in answered:
         missing_dimensions.append("deliverable")
         questions.append(
             _question(
@@ -67,7 +79,7 @@ def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, 
         )
         assumptions.append("默认先输出 markdown 报告。")
 
-    if task_kind == "presentation" and not audience_hint and not _has_any(low, ["董事会", "管理层", "客户", "投资人", "audience"]):
+    if task_kind == "presentation" and not audience_hint and "audience" not in answered and not _has_any(low, ["董事会", "管理层", "客户", "投资人", "audience"]):
         missing_dimensions.append("audience")
         questions.append(
             _question(
@@ -84,7 +96,7 @@ def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, 
         )
         assumptions.append("默认受众为管理层。")
 
-    if task_kind == "presentation" and not _has_any(low, ["页", "slide", "slides", "deck"]):
+    if task_kind == "presentation" and "page_count" not in answered and not _has_any(low, ["页", "slide", "slides", "deck"]):
         missing_dimensions.append("page_count")
         questions.append(
             _question(
@@ -101,7 +113,7 @@ def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, 
         )
         assumptions.append("默认控制在 10-12 页。")
 
-    if task_kind in {"report", "research", "general"} and not _has_any(low, ["本周", "本月", "季度", "年度", "today", "week", "month", "quarter", "year"]) and not _has_any(low, ["tam", "sam", "som", "prisma", "systematic review"]):
+    if task_kind in {"report", "research", "general"} and "time_range" not in answered and not _has_any(low, ["本周", "本月", "季度", "年度", "today", "week", "month", "quarter", "year"]) and not _has_any(low, ["tam", "sam", "som", "prisma", "systematic review"]):
         missing_dimensions.append("time_range")
         questions.append(
             _question(
@@ -118,7 +130,7 @@ def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, 
         )
         assumptions.append("默认先按本周处理。")
 
-    if task_kind == "market" and not _has_any(low, ["a股", "港股", "美股", "etf", "spy", "qqq", "代码", "ticker", "symbol"]):
+    if task_kind == "market" and "market_scope" not in answered and not _has_any(low, ["a股", "港股", "美股", "etf", "spy", "qqq", "代码", "ticker", "symbol"]):
         missing_dimensions.append("market_scope")
         questions.append(
             _question(
@@ -135,7 +147,7 @@ def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, 
         )
         assumptions.append("默认按美股 ETF 语境分析。")
 
-    if task_kind == "report" and not audience_hint and not _has_any(low, ["给谁看", "管理层", "董事会", "客户", "内部"]):
+    if task_kind == "report" and not audience_hint and "audience" not in answered and not _has_any(low, ["给谁看", "管理层", "董事会", "客户", "内部"]):
         missing_dimensions.append("report_audience")
         questions.append(
             _question(
@@ -163,4 +175,5 @@ def build_question_set(text: str, *, task_kind: str, context_profile: Dict[str, 
         "missing_dimensions": missing_dimensions,
         "readiness_score": readiness_score,
         "context_signals_used": context_signals,
+        "answered_dimensions": answered,
     }
