@@ -19,6 +19,7 @@ GOV_CFG_DEFAULT = ROOT / "config" / "agent_governance.toml"
 PACKS_CFG_DEFAULT = ROOT / "config" / "agent_domain_packs.json"
 PROFILE_OVERRIDES_DEFAULT = ROOT / "config" / "agent_profile_overrides.json"
 STRATEGY_OVERRIDES_DEFAULT = ROOT / "config" / "agent_strategy_overrides.json"
+PREFERENCES_FILE_DEFAULT = ROOT / "日志" / "agent_os" / "agent_user_preferences.json"
 
 import sys
 if str(ROOT) not in sys.path:
@@ -214,12 +215,17 @@ def _load_strategy_overrides(path: Path) -> Dict[str, Any]:
     return _load_json(path, default={"global_blocked_strategies": [], "profile_blocked_strategies": {}})
 
 
+def _load_preferences(path: Path) -> Dict[str, Any]:
+    return _load_json(path, default={"preferences": {}, "task_kind_profiles": {}, "strategy_affinity": {}})
+
+
 
 def resolve_profile(
     cfg: Dict[str, Any],
     requested: str,
     text: str,
     overrides_file: Path,
+    preferences_file: Path | None = None,
 ) -> Tuple[str, Dict[str, Any], Dict[str, Any]]:
     defaults = cfg.get("defaults", {})
     profiles = cfg.get("profiles", {})
@@ -232,8 +238,21 @@ def resolve_profile(
     if requested_clean == "auto":
         ov = _load_profile_overrides(overrides_file)
         tk_map = ov.get("task_kind_profiles", {}) if isinstance(ov.get("task_kind_profiles", {}), dict) else {}
-        profile_name = str(tk_map.get(task_kind, "")).strip() or str(ov.get("default_profile", "")).strip() or default_profile
-        profile_source = "auto_override" if profile_name != default_profile else "auto_fallback_default"
+        pref_path = Path(preferences_file) if preferences_file else PREFERENCES_FILE_DEFAULT
+        learned = _load_preferences(pref_path)
+        learned_task_profiles = learned.get("task_kind_profiles", {}) if isinstance(learned.get("task_kind_profiles", {}), dict) else {}
+        profile_name = (
+            str(tk_map.get(task_kind, "")).strip()
+            or str(learned_task_profiles.get(task_kind, "")).strip()
+            or str(ov.get("default_profile", "")).strip()
+            or default_profile
+        )
+        if str(tk_map.get(task_kind, "")).strip() or str(ov.get("default_profile", "")).strip():
+            profile_source = "auto_override"
+        elif str(learned_task_profiles.get(task_kind, "")).strip():
+            profile_source = "learned_preference"
+        else:
+            profile_source = "auto_fallback_default"
     elif not requested_clean:
         profile_source = "default"
 
@@ -439,7 +458,18 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
         str(values.get("strategy_overrides_file", defaults.get("strategy_overrides_file", str(STRATEGY_OVERRIDES_DEFAULT)))),
         ROOT,
     )
-    profile_name, governor, profile_meta = resolve_profile(cfg, str(values.get("profile", "")), text, overrides_file)
+    log_dir = resolve_path(values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), ROOT)
+    preferences_file = resolve_path(
+        str(values.get("preferences_file", log_dir / "agent_user_preferences.json")),
+        ROOT,
+    )
+    profile_name, governor, profile_meta = resolve_profile(
+        cfg,
+        str(values.get("profile", "")),
+        text,
+        overrides_file,
+        preferences_file=preferences_file,
+    )
     task = build_task_spec(text, values, task_kind=str(profile_meta.get("task_kind", "general")))
     clarification = build_clarification_plan(text, task.task_kind)
     capability = capability_report(values, cfg)
@@ -465,6 +495,7 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
         "clarification": clarification,
         "governor": governor,
         "profile_meta": profile_meta,
+        "preferences_file": str(preferences_file),
         "capability_report": capability,
         "capability_snapshot": cap_snapshot,
         "strategy_controls": strategy_controls,

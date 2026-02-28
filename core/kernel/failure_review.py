@@ -53,6 +53,30 @@ def _repair_action(*, scope: str, target: str, action: str, reason: str, priorit
     }
 
 
+def _root_cause(
+    *,
+    eval_reason: str,
+    policy_signals: List[str],
+    has_evidence: bool,
+    has_delivery: bool,
+    quality_score: float,
+) -> str:
+    signals = {str(item).strip() for item in policy_signals if str(item).strip()}
+    if not has_evidence or not has_delivery:
+        return "observability_gap"
+    if "low_selection_confidence" in signals:
+        return "route_error"
+    if "clarification_heavy" in signals:
+        return "prompt_contract_gap"
+    if "deep_fallback_chain" in signals:
+        return "service_instability"
+    if "manual_takeover" in signals and quality_score < 0.45:
+        return "delivery_mismatch"
+    if str(eval_reason).strip() == "delegated_autonomy_failed":
+        return "execution_failure"
+    return "unknown"
+
+
 def _counter_dict(counter: Counter[str], limit: int = 3) -> Dict[str, int]:
     return {str(k): int(v) for k, v in counter.most_common(max(1, int(limit)))}
 
@@ -283,6 +307,7 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
     task_missing_delivery: Counter[str] = Counter()
     strategy_run_ids: Dict[str, List[str]] = {}
     task_run_ids: Dict[str, List[str]] = {}
+    root_cause_counter: Counter[str] = Counter()
     pending_feedback = 0
     evidence_missing = 0
     delivery_missing = 0
@@ -333,6 +358,14 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
             delivery_missing += 1
             strategy_missing_delivery.update([selected_strategy or "unknown"])
             task_missing_delivery.update([task_kind or "unknown"])
+        root_cause = _root_cause(
+            eval_reason=str(evaluation.get("eval_reason", "")),
+            policy_signals=list(evaluation.get("policy_signals", [])),
+            has_evidence=bool(evidence_object),
+            has_delivery=bool(delivery_object),
+            quality_score=float(evaluation.get("quality_score", 0.0) or 0.0),
+        )
+        root_cause_counter.update([root_cause])
         details.append(
             {
                 "run_id": run_id,
@@ -343,6 +376,7 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
                 "duration_ms": int(status.get("duration_ms", 0) or 0),
                 "quality_score": float(evaluation.get("quality_score", 0.0) or 0.0),
                 "risk_level": risk_level,
+                "root_cause": root_cause,
                 "eval_reason": str(evaluation.get("eval_reason", "")),
                 "policy_signals": list(evaluation.get("policy_signals", [])),
                 "feedback_pending": bool(feedback.get("pending", False)),
@@ -554,6 +588,7 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         "strategy_top": [{"strategy": k, "count": v} for k, v in strategy_counter.most_common(5)],
         "policy_signal_top": [{"signal": k, "count": v} for k, v in signal_counter.most_common(5)],
         "risk_level_top": [{"risk_level": k, "count": v} for k, v in risk_counter.most_common(5)],
+        "root_cause_top": [{"root_cause": k, "count": v} for k, v in root_cause_counter.most_common(5)],
         "failures": details,
         "repair_actions": repair_actions,
         "recommendations": recommendations,
@@ -579,6 +614,7 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
         f"- pending_feedback_failures: {s.get('pending_feedback_failures', 0)}",
         f"- missing_evidence_objects: {s.get('missing_evidence_objects', 0)}",
         f"- missing_delivery_objects: {s.get('missing_delivery_objects', 0)}",
+        f"- top_root_cause: {report.get('root_cause_top', [{}])[0].get('root_cause', '') if report.get('root_cause_top') else ''}",
         "",
         "## Recommendations",
         "",
@@ -608,7 +644,7 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
     if report.get("failures"):
         for row in report["failures"]:
             lines.append(
-                f"- {row.get('ts', '')} | {row.get('task_kind', '')} | {row.get('selected_strategy', '')} | risk={row.get('risk_level', '')} | run_id={row.get('run_id', '')}"
+                f"- {row.get('ts', '')} | {row.get('task_kind', '')} | {row.get('selected_strategy', '')} | risk={row.get('risk_level', '')} | cause={row.get('root_cause', '')} | run_id={row.get('run_id', '')}"
             )
     else:
         lines.append("- none")

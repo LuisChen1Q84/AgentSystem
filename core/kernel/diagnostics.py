@@ -23,7 +23,9 @@ from scripts.agent_os_observability import aggregate
 from core.kernel.memory_store import load_memory, memory_snapshot
 from core.kernel.policy_tuner import tune_policy
 from core.kernel.repair_apply import list_repair_snapshots
+from core.kernel.repair_observe import build_repair_observation_report
 from core.kernel.repair_presets import build_repair_preset_inventory
+from core.kernel.state_store import sync_state_store
 
 
 def _local_presets_file(data_dir: Path) -> Path | None:
@@ -231,6 +233,7 @@ def _recommendations(obs: Dict[str, Any], evals: Dict[str, Any], pending_count: 
 
 
 def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int = 10) -> Dict[str, Any]:
+    state_report = sync_state_store(data_dir)
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     eval_rows = _load_jsonl(data_dir / "agent_evaluations.jsonl")
     delivery_rows = _load_jsonl(data_dir / "agent_deliveries.jsonl")
@@ -256,14 +259,22 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     latest_feedback = feedback_rows[-1] if feedback_rows else {}
     avg_quality = float(eval_summary.get("avg_quality_score", 0.0) or 0.0)
     quality_band = _quality_band(avg_quality)
-    policy_tuning = tune_policy(run_rows=run_rows, evaluation_rows=eval_rows, memory=memory, days=max(1, int(days)))
     mem_snapshot = memory_snapshot(memory)
     object_coverage = _object_coverage(run_rows, run_object_rows, evidence_rows, delivery_object_rows, days=max(1, int(days)))
     scope = _scope_days(days)
     scoped_evidence_rows = [row for row in evidence_rows if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
     risk_dist = Counter(str(r.get("risk_level", "unknown")) for r in scoped_evidence_rows if str(r.get("risk_level", "")).strip())
     repair_governance = _repair_governance_summary(data_dir)
+    repair_observe = build_repair_observation_report(data_dir=data_dir, limit=10)
     repair_preset_inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=_local_presets_file(data_dir))
+    policy_tuning = tune_policy(
+        run_rows=run_rows,
+        evaluation_rows=eval_rows,
+        feedback_rows=feedback_rows,
+        memory=memory,
+        preset_inventory=repair_preset_inventory.get("items", []) if isinstance(repair_preset_inventory.get("items", []), list) else [],
+        days=max(1, int(days)),
+    )
 
     summary = {
         "window_days": max(1, int(days)),
@@ -285,6 +296,8 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "repair_last_approved_at": str(repair_governance.get("activity", {}).get("last_approved", {}).get("ts", "")),
         "repair_last_applied_at": str(repair_governance.get("activity", {}).get("last_applied", {}).get("ts", "")),
         "repair_last_rolled_back_at": str(repair_governance.get("activity", {}).get("last_rolled_back", {}).get("ts", "")),
+        "repair_promote_recommended": int(repair_observe.get("summary", {}).get("promote_recommended", 0) or 0),
+        "repair_rollback_recommended": int(repair_observe.get("summary", {}).get("rollback_recommended", 0) or 0),
     }
 
     report = {
@@ -294,6 +307,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "evaluation": eval_summary,
         "object_coverage": object_coverage,
         "repair_governance": repair_governance,
+        "repair_observe": repair_observe,
         "repair_preset_effectiveness": {
             "count": int(repair_preset_inventory.get("count", 0) or 0),
             "top_presets": list(repair_preset_inventory.get("items", []))[:5],
@@ -316,7 +330,9 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
             "delivery_objects": str(data_dir / "agent_delivery_objects.jsonl"),
             "feedback": str(data_dir / "feedback.jsonl"),
             "memory": str(data_dir / "memory.json"),
+            "state_db": str(state_report.get("db_path", "")),
         },
+        "state_store": state_report,
     }
     return report
 

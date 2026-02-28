@@ -136,5 +136,6 @@ class EvaluationRecord(KernelModel):
     selection_confidence: float = 0.0
     efficiency_score: float = 0.0
     stability_score: float = 0.0
+    quality_layers: Dict[str, float] = field(default_factory=dict)
     policy_signals: List[str] = field(default_factory=list)
     policy_recommendations: List[str] = field(default_factory=list)

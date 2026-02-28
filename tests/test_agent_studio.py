@@ -20,6 +20,12 @@ class AgentStudioTest(unittest.TestCase):
         a2 = parser.parse_args(["feedback-stats"])
         self.assertEqual(a2.cmd, "feedback-stats")
 
+        a21 = parser.parse_args(["state-sync"])
+        self.assertEqual(a21.cmd, "state-sync")
+
+        a22 = parser.parse_args(["state-stats"])
+        self.assertEqual(a22.cmd, "state-stats")
+
         a3 = parser.parse_args(["call", "--service", "agent.feedback.stats"])
         self.assertEqual(a3.cmd, "call")
         self.assertEqual(a3.service, "agent.feedback.stats")
@@ -33,6 +39,10 @@ class AgentStudioTest(unittest.TestCase):
 
         a42 = parser.parse_args(["failure-review"])
         self.assertEqual(a42.cmd, "failure-review")
+
+        a421 = parser.parse_args(["repair-observe", "--limit", "12"])
+        self.assertEqual(a421.cmd, "repair-observe")
+        self.assertEqual(a421.limit, 12)
 
         a43 = parser.parse_args(
             [
@@ -135,10 +145,27 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a47.cmd, "run-inspect")
         self.assertEqual(a47.run_id, "r1")
 
+        a48 = parser.parse_args(["object-view", "--run-id", "r1"])
+        self.assertEqual(a48.cmd, "object-view")
+        self.assertEqual(a48.run_id, "r1")
+
+        a49 = parser.parse_args(["run-replay", "--run-id", "r1"])
+        self.assertEqual(a49.cmd, "run-replay")
+        self.assertEqual(a49.run_id, "r1")
+
         a5 = parser.parse_args(["policy"])
         self.assertEqual(a5.cmd, "policy")
         a51 = parser.parse_args(["policy", "--lifecycle-file", "/tmp/lifecycle.json"])
         self.assertEqual(a51.lifecycle_file, "/tmp/lifecycle.json")
+
+        a52 = parser.parse_args(["policy-apply", "--apply", "--approve-code", "abc"])
+        self.assertEqual(a52.cmd, "policy-apply")
+        self.assertTrue(a52.apply)
+        self.assertEqual(a52.approve_code, "abc")
+
+        a53 = parser.parse_args(["preferences", "--out-file", "/tmp/prefs.json"])
+        self.assertEqual(a53.cmd, "preferences")
+        self.assertEqual(a53.out_file, "/tmp/prefs.json")
 
     def test_repair_list_cmd(self):
         with tempfile.TemporaryDirectory() as td:

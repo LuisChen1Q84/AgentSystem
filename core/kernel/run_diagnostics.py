@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.strategy_evaluator import evaluate_payload
+from core.kernel.state_store import sync_state_store
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -181,6 +182,7 @@ def build_run_diagnostic(*, data_dir: Path, run_id: str) -> Dict[str, Any]:
     run_id = str(run_id).strip()
     if not run_id:
         raise ValueError("run_id is required")
+    sync_state_store(data_dir)
 
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     eval_rows = _load_jsonl(data_dir / "agent_evaluations.jsonl")
@@ -249,6 +251,7 @@ def build_run_diagnostic(*, data_dir: Path, run_id: str) -> Dict[str, Any]:
         },
         "evaluation": {
             "quality_score": float(eval_row.get("quality_score", eval_report.get("quality_score", 0.0)) or 0.0) if eval_row or eval_report else 0.0,
+            "quality_layers": dict(eval_row.get("quality_layers", eval_report.get("quality_layers", {}))) if eval_row or eval_report else {},
             "selection_confidence": float(eval_row.get("selection_confidence", eval_report.get("selection_confidence", 0.0)) or 0.0) if eval_row or eval_report else 0.0,
             "efficiency_score": float(eval_row.get("efficiency_score", eval_report.get("efficiency_score", 0.0)) or 0.0) if eval_row or eval_report else 0.0,
             "stability_score": float(eval_row.get("stability_score", eval_report.get("stability_score", 0.0)) or 0.0) if eval_row or eval_report else 0.0,
@@ -330,6 +333,7 @@ def render_run_diagnostic_md(report: Dict[str, Any]) -> str:
         "## Evaluation",
         "",
         f"- quality_score: {evaluation.get('quality_score', 0.0)}",
+        f"- quality_layers: {json.dumps(evaluation.get('quality_layers', {}), ensure_ascii=False)}",
         f"- selection_confidence: {evaluation.get('selection_confidence', 0.0)}",
         f"- efficiency_score: {evaluation.get('efficiency_score', 0.0)}",
         f"- stability_score: {evaluation.get('stability_score', 0.0)}",

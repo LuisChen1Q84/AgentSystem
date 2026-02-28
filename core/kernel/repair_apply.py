@@ -15,6 +15,7 @@ from core.kernel.memory_store import load_memory
 from core.kernel.policy_tuner import tune_policy
 from core.kernel.preset_drift import build_preset_drift_report
 from core.kernel.repair_presets import default_selector_effectiveness_file, default_selector_lifecycle_file
+from core.kernel.state_store import sync_state_store
 
 ROOT = Path(__file__).resolve().parents[2]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
@@ -732,6 +733,7 @@ def approve_repair_plan(
             "source": str(status.get("source", "")),
         },
     )
+    sync_state_store(backup_dir.parent)
     return {"snapshot_id": snapshot_id, "status": status, "receipt": receipt}
 
 
@@ -1000,6 +1002,7 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
             "changed_components": _changed_components(plan.get("preview_diff", {}) if isinstance(plan.get("preview_diff", {}), dict) else {}),
         },
     )
+    sync_state_store(backup_dir.parent)
     return {
         "profile_overrides_file": str(profile_path),
         "strategy_overrides_file": str(strategy_path),
@@ -1208,6 +1211,7 @@ def rollback_repair_plan(
         actor="repair-rollback",
         extra={"restored_components": restored_components, "snapshot_file": str(snapshot_file)},
     )
+    sync_state_store(backup_dir.parent)
     return {
         "snapshot_file": str(snapshot_file),
         "snapshot_id": str(snapshot.get("snapshot_id", "")),

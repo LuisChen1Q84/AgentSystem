@@ -16,6 +16,9 @@ from core.kernel.failure_review import build_failure_review
 from core.kernel.memory_store import load_memory
 from core.kernel.policy_tuner import tune_policy
 from core.kernel.preset_drift import build_preset_drift_report
+from core.kernel.preference_learning import build_preference_profile
+from core.kernel.repair_observe import build_repair_observation_report
+from core.kernel.state_store import sync_state_store
 
 
 def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
@@ -43,6 +46,7 @@ def _local_companion(base: Path, filename: str, fallback: Path) -> Path:
 
 def build_governance_console(*, data_dir: Path, days: int = 14, limit: int = 10, pending_limit: int = 10) -> Dict[str, Any]:
     base = Path(data_dir)
+    state_report = sync_state_store(base)
     runs = _load_jsonl(base / "agent_runs.jsonl")
     evals = _load_jsonl(base / "agent_evaluations.jsonl")
     feedback = _load_jsonl(base / "feedback.jsonl")
@@ -57,6 +61,8 @@ def build_governance_console(*, data_dir: Path, days: int = 14, limit: int = 10,
     )
     dashboard = build_agent_dashboard(data_dir=base, days=max(1, int(days)), pending_limit=max(1, int(pending_limit)))
     failures = build_failure_review(data_dir=base, days=max(1, int(days)), limit=max(1, int(limit)))
+    repair_observe = build_repair_observation_report(data_dir=base, limit=max(1, int(limit)))
+    preferences = build_preference_profile(data_dir=base)
     policy = tune_policy(
         run_rows=runs,
         evaluation_rows=evals,
@@ -87,15 +93,21 @@ def build_governance_console(*, data_dir: Path, days: int = 14, limit: int = 10,
         "high_drift_alerts": int(drift.get("summary", {}).get("high_alerts", 0) or 0),
         "lifecycle_updates": int(drift.get("summary", {}).get("lifecycle_update_count", 0) or 0),
         "suggested_default_profile": str(policy.get("summary", {}).get("suggested_default_profile", "")),
+        "state_store_runs": int(state_report.get("summary", {}).get("counts", {}).get("runs", 0) or 0),
+        "repair_promote_recommended": int(repair_observe.get("summary", {}).get("promote_recommended", 0) or 0),
+        "repair_rollback_recommended": int(repair_observe.get("summary", {}).get("rollback_recommended", 0) or 0),
     }
     return {
         "as_of": drift.get("as_of", ""),
         "summary": summary,
+        "state_store": state_report,
         "dashboard": {
             "summary": dashboard.get("summary", {}),
             "repair_governance": dashboard.get("repair_governance", {}),
             "repair_preset_effectiveness": dashboard.get("repair_preset_effectiveness", {}),
         },
+        "repair_observe": repair_observe,
+        "preferences": preferences,
         "policy": policy,
         "preset_drift": drift,
         "failure_review": {
@@ -125,6 +137,9 @@ def render_governance_console_md(report: Dict[str, Any]) -> str:
         f"- high_drift_alerts: {summary.get('high_drift_alerts', 0)}",
         f"- lifecycle_updates: {summary.get('lifecycle_updates', 0)}",
         f"- suggested_default_profile: {summary.get('suggested_default_profile', '')}",
+        f"- state_store_runs: {summary.get('state_store_runs', 0)}",
+        f"- repair_promote_recommended: {summary.get('repair_promote_recommended', 0)}",
+        f"- repair_rollback_recommended: {summary.get('repair_rollback_recommended', 0)}",
         "",
         "## Policy",
         "",
@@ -132,6 +147,8 @@ def render_governance_console_md(report: Dict[str, Any]) -> str:
         f"- success_rate: {policy.get('summary', {}).get('success_rate', 0.0)}",
         f"- feedback_score: {policy.get('feedback_summary', {}).get('avg_rating', 0.0)}",
         f"- strict_block_candidates: {','.join(policy.get('strict_block_candidates', []))}",
+        f"- learned_detail_level: {report.get('preferences', {}).get('preferences', {}).get('detail_level', '')}",
+        f"- learned_language: {report.get('preferences', {}).get('preferences', {}).get('language', '')}",
         "",
         "## Drift Alerts",
         "",

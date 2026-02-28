@@ -18,11 +18,13 @@ if str(ROOT) not in sys.path:
 
 try:
     from core.kernel.models import DeliveryBundle, EvaluationRecord
+    from core.kernel.state_store import sync_state_store
     from core.kernel.strategy_evaluator import evaluate_payload
     from core.registry.delivery_protocol import build_evidence_object, build_output_objects
     from scripts.agent_delivery_card import build_card, render_md as render_delivery_md
 except ModuleNotFoundError:  # direct
     from models import DeliveryBundle, EvaluationRecord  # type: ignore
+    from state_store import sync_state_store  # type: ignore
     from strategy_evaluator import evaluate_payload  # type: ignore
     from delivery_protocol import build_evidence_object, build_output_objects  # type: ignore
     from agent_delivery_card import build_card, render_md as render_delivery_md  # type: ignore
@@ -87,6 +89,7 @@ def build_evaluation_record(payload: Dict[str, Any], quality_score: float) -> Ev
         selection_confidence=float(eval_report.get("selection_confidence", 0.0) or 0.0),
         efficiency_score=float(eval_report.get("efficiency_score", 0.0) or 0.0),
         stability_score=float(eval_report.get("stability_score", 0.0) or 0.0),
+        quality_layers=dict(eval_report.get("quality_layers", {})) if isinstance(eval_report.get("quality_layers", {}), dict) else {},
         policy_signals=list(eval_report.get("policy_signals", [])),
         policy_recommendations=list(eval_report.get("recommendations", [])),
     )
@@ -129,6 +132,7 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
             "top_gap": float(payload.get("result", {}).get("top_gap", 0.0)) if isinstance(payload.get("result", {}), dict) else 0.0,
             "selection_confidence": float(eval_report.get("selection_confidence", 0.0) or 0.0),
             "quality_score": float(delivery_bundle.quality_score),
+            "quality_layers": dict(eval_report.get("quality_layers", {})) if isinstance(eval_report.get("quality_layers", {}), dict) else {},
             "clarify_needed": bool(payload.get("clarification", {}).get("needed", False)) if isinstance(payload.get("clarification", {}), dict) else False,
             "payload_path": str(out_file),
         },
@@ -210,4 +214,5 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
         },
     )
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    sync_state_store(log_dir)
     return {"items": delivery_bundle.artifacts}

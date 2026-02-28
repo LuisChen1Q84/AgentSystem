@@ -88,6 +88,16 @@ def _recommend_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
     return 0
 
 
+def _state_sync_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
+    _print_json(reg.execute("agent.state.sync", data_dir=data_dir or str(ROOT / "日志/agent_os")))
+    return 0
+
+
+def _state_stats_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
+    _print_json(reg.execute("agent.state.stats", data_dir=data_dir or str(ROOT / "日志/agent_os")))
+    return 0
+
+
 def _diagnostics_cmd(reg: AgentServiceRegistry, days: int, data_dir: str, out_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -118,6 +128,18 @@ def _failure_review_cmd(reg: AgentServiceRegistry, days: int, limit: int, data_d
         reg.execute(
             "agent.failures.review",
             days=days,
+            limit=limit,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+        )
+    )
+    return 0
+
+
+def _repair_observe_cmd(reg: AgentServiceRegistry, limit: int, data_dir: str, out_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.repairs.observe",
             limit=limit,
             data_dir=data_dir or str(ROOT / "日志/agent_os"),
             out_dir=out_dir,
@@ -382,6 +404,65 @@ def _policy_cmd(
     return 0
 
 
+def _policy_apply_cmd(
+    reg: AgentServiceRegistry,
+    days: int,
+    data_dir: str,
+    out_dir: str,
+    profile_overrides_file: str,
+    strategy_overrides_file: str,
+    apply: bool,
+    approve_code: str,
+    force: bool,
+) -> int:
+    out = reg.execute(
+        "agent.policy.apply",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        days=days,
+        out_dir=out_dir,
+        profile_overrides_file=profile_overrides_file,
+        strategy_overrides_file=strategy_overrides_file,
+        apply=apply,
+        approve_code=approve_code,
+        force=force,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _preferences_cmd(reg: AgentServiceRegistry, data_dir: str, out_file: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.preferences.learn",
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_file=out_file,
+        )
+    )
+    return 0
+
+
+def _object_view_cmd(reg: AgentServiceRegistry, run_id: str, data_dir: str, out_dir: str) -> int:
+    out = reg.execute(
+        "agent.object.view",
+        run_id=run_id,
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        out_dir=out_dir,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _run_replay_cmd(reg: AgentServiceRegistry, run_id: str, data_dir: str, out_dir: str) -> int:
+    out = reg.execute(
+        "agent.run.replay",
+        run_id=run_id,
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        out_dir=out_dir,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
 def _pending_cmd(reg: AgentServiceRegistry, limit: int, task_kind: str, profile: str, data_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -441,10 +522,11 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
-        "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "governance [days] [limit], failure-review [days], repair-apply [days] [min_score] [max_actions], repair-approve [days] [min_score] [max_actions], "
-        "repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], repair-compare [snapshot_id] [base_snapshot_id], "
-        "repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
+        "governance [days] [limit], failure-review [days], repair-observe [limit], repair-apply [days] [min_score] [max_actions], "
+        "repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], "
+        "repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, object-view <run_id>, "
+        "run-replay <run_id>, policy [days], policy-apply [days], preferences, feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -471,6 +553,12 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
         if cmd == "recommend":
             _recommend_cmd(reg, days=int(args[0]) if args else 30, data_dir=data_dir)
             continue
+        if cmd == "state-sync":
+            _state_sync_cmd(reg, data_dir=data_dir)
+            continue
+        if cmd == "state-stats":
+            _state_stats_cmd(reg, data_dir=data_dir)
+            continue
         if cmd == "diagnostics":
             _diagnostics_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="")
             continue
@@ -479,6 +567,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "failure-review":
             _failure_review_cmd(reg, days=int(args[0]) if args else 14, limit=10, data_dir=data_dir, out_dir="")
+            continue
+        if cmd == "repair-observe":
+            _repair_observe_cmd(reg, limit=int(args[0]) if args else 20, data_dir=data_dir, out_dir="")
             continue
         if cmd == "repair-apply":
             days = int(args[0]) if len(args) > 0 else 14
@@ -597,8 +688,26 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 continue
             _run_inspect_cmd(reg, run_id=str(args[0]), data_dir=data_dir, out_dir="")
             continue
+        if cmd == "object-view":
+            if not args:
+                print("usage: object-view <run_id>")
+                continue
+            _object_view_cmd(reg, run_id=str(args[0]), data_dir=data_dir, out_dir="")
+            continue
+        if cmd == "run-replay":
+            if not args:
+                print("usage: run-replay <run_id>")
+                continue
+            _run_replay_cmd(reg, run_id=str(args[0]), data_dir=data_dir, out_dir="")
+            continue
         if cmd == "policy":
             _policy_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, memory_file="", presets_file="", effectiveness_file="", lifecycle_file="")
+            continue
+        if cmd == "policy-apply":
+            _policy_apply_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="", profile_overrides_file="", strategy_overrides_file="", apply=False, approve_code="", force=False)
+            continue
+        if cmd == "preferences":
+            _preferences_cmd(reg, data_dir=data_dir, out_file="")
             continue
         if cmd == "pending":
             _pending_cmd(reg, limit=int(args[0]) if args else 10, task_kind="", profile="", data_dir=data_dir)
@@ -649,6 +758,9 @@ def build_cli() -> argparse.ArgumentParser:
     rec = sp.add_parser("recommend")
     rec.add_argument("--days", type=int, default=30)
 
+    sp.add_parser("state-sync")
+    sp.add_parser("state-stats")
+
     diag = sp.add_parser("diagnostics")
     diag.add_argument("--days", type=int, default=14)
     diag.add_argument("--out-dir", default="")
@@ -662,6 +774,10 @@ def build_cli() -> argparse.ArgumentParser:
     frev.add_argument("--days", type=int, default=14)
     frev.add_argument("--limit", type=int, default=10)
     frev.add_argument("--out-dir", default="")
+
+    robserve = sp.add_parser("repair-observe")
+    robserve.add_argument("--limit", type=int, default=20)
+    robserve.add_argument("--out-dir", default="")
 
     rapply = sp.add_parser("repair-apply")
     rapply.add_argument("--days", type=int, default=14)
@@ -754,6 +870,14 @@ def build_cli() -> argparse.ArgumentParser:
     inspect.add_argument("--run-id", required=True)
     inspect.add_argument("--out-dir", default="")
 
+    obj = sp.add_parser("object-view")
+    obj.add_argument("--run-id", required=True)
+    obj.add_argument("--out-dir", default="")
+
+    replay = sp.add_parser("run-replay")
+    replay.add_argument("--run-id", required=True)
+    replay.add_argument("--out-dir", default="")
+
     sp.add_parser("slo")
 
     pol = sp.add_parser("policy")
@@ -762,6 +886,18 @@ def build_cli() -> argparse.ArgumentParser:
     pol.add_argument("--presets-file", default="")
     pol.add_argument("--effectiveness-file", default="")
     pol.add_argument("--lifecycle-file", default="")
+
+    papply = sp.add_parser("policy-apply")
+    papply.add_argument("--days", type=int, default=14)
+    papply.add_argument("--out-dir", default="")
+    papply.add_argument("--profile-overrides-file", default="")
+    papply.add_argument("--strategy-overrides-file", default="")
+    papply.add_argument("--apply", action="store_true")
+    papply.add_argument("--approve-code", default="")
+    papply.add_argument("--force", action="store_true")
+
+    pref = sp.add_parser("preferences")
+    pref.add_argument("--out-file", default="")
 
     pend = sp.add_parser("pending")
     pend.add_argument("--limit", type=int, default=10)
@@ -797,12 +933,18 @@ def main() -> int:
         return _observe_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "recommend":
         return _recommend_cmd(reg, days=int(args.days), data_dir=data_dir)
+    if args.cmd == "state-sync":
+        return _state_sync_cmd(reg, data_dir=data_dir)
+    if args.cmd == "state-stats":
+        return _state_stats_cmd(reg, data_dir=data_dir)
     if args.cmd == "diagnostics":
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "governance":
         return _governance_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "failure-review":
         return _failure_review_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "repair-observe":
+        return _repair_observe_cmd(reg, limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "repair-apply":
         return _repair_apply_cmd(
             reg,
@@ -904,6 +1046,10 @@ def main() -> int:
         )
     if args.cmd == "run-inspect":
         return _run_inspect_cmd(reg, run_id=str(args.run_id), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "object-view":
+        return _object_view_cmd(reg, run_id=str(args.run_id), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "run-replay":
+        return _run_replay_cmd(reg, run_id=str(args.run_id), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "slo":
         return _slo_cmd(reg, data_dir=data_dir)
     if args.cmd == "policy":
@@ -916,6 +1062,20 @@ def main() -> int:
             effectiveness_file=str(args.effectiveness_file),
             lifecycle_file=str(args.lifecycle_file),
         )
+    if args.cmd == "policy-apply":
+        return _policy_apply_cmd(
+            reg,
+            days=int(args.days),
+            data_dir=data_dir,
+            out_dir=str(args.out_dir),
+            profile_overrides_file=str(args.profile_overrides_file),
+            strategy_overrides_file=str(args.strategy_overrides_file),
+            apply=bool(args.apply),
+            approve_code=str(args.approve_code),
+            force=bool(args.force),
+        )
+    if args.cmd == "preferences":
+        return _preferences_cmd(reg, data_dir=data_dir, out_file=str(args.out_file))
     if args.cmd == "pending":
         return _pending_cmd(reg, limit=int(args.limit), task_kind=str(args.task_kind), profile=str(args.profile), data_dir=data_dir)
     if args.cmd == "feedback-add":

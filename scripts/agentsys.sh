@@ -1896,6 +1896,69 @@ run_agent_repair_rollback() {
   automation_log "INFO" "agent-repair-rollback" "done"
 }
 
+run_agent_state_sync() {
+  automation_log "INFO" "agent-state-sync" "start"
+  local data_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir) data_dir="${2:-}"; shift 2 || true ;;
+      *) extra+=("$1"); shift || true ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then cmd+=(--data-dir "${data_dir}"); fi
+  cmd+=(state-sync)
+  if [ "${#extra[@]}" -gt 0 ]; then cmd+=("${extra[@]}"); fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-state-sync" "done"
+}
+
+run_agent_state_stats() {
+  automation_log "INFO" "agent-state-stats" "start"
+  local data_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir) data_dir="${2:-}"; shift 2 || true ;;
+      *) extra+=("$1"); shift || true ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then cmd+=(--data-dir "${data_dir}"); fi
+  cmd+=(state-stats)
+  if [ "${#extra[@]}" -gt 0 ]; then cmd+=("${extra[@]}"); fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-state-stats" "done"
+}
+
+run_agent_repair_observe() {
+  automation_log "INFO" "agent-repair-observe" "start"
+  local data_dir=""
+  local limit=""
+  local out_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir) data_dir="${2:-}"; shift 2 || true ;;
+      --limit) limit="${2:-}"; shift 2 || true ;;
+      --out-dir) out_dir="${2:-}"; shift 2 || true ;;
+      *) extra+=("$1"); shift || true ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then cmd+=(--data-dir "${data_dir}"); fi
+  cmd+=(repair-observe)
+  if [ -n "${limit}" ]; then cmd+=(--limit "${limit}"); fi
+  if [ -n "${out_dir}" ]; then cmd+=(--out-dir "${out_dir}"); fi
+  if [ "${#extra[@]}" -gt 0 ]; then cmd+=("${extra[@]}"); fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-repair-observe" "done"
+}
+
 run_agent_run_inspect() {
   automation_log "INFO" "agent-run-inspect" "start"
   local data_dir=""
@@ -1939,6 +2002,56 @@ run_agent_run_inspect() {
   fi
   "${cmd[@]}" || return "${E_SKILL}"
   automation_log "INFO" "agent-run-inspect" "done"
+}
+
+run_agent_object_view() {
+  automation_log "INFO" "agent-object-view" "start"
+  local data_dir=""
+  local run_id=""
+  local out_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir) data_dir="${2:-}"; shift 2 || true ;;
+      --run-id) run_id="${2:-}"; shift 2 || true ;;
+      --out-dir) out_dir="${2:-}"; shift 2 || true ;;
+      *) extra+=("$1"); shift || true ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then cmd+=(--data-dir "${data_dir}"); fi
+  cmd+=(object-view)
+  if [ -n "${run_id}" ]; then cmd+=(--run-id "${run_id}"); fi
+  if [ -n "${out_dir}" ]; then cmd+=(--out-dir "${out_dir}"); fi
+  if [ "${#extra[@]}" -gt 0 ]; then cmd+=("${extra[@]}"); fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-object-view" "done"
+}
+
+run_agent_run_replay() {
+  automation_log "INFO" "agent-run-replay" "start"
+  local data_dir=""
+  local run_id=""
+  local out_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir) data_dir="${2:-}"; shift 2 || true ;;
+      --run-id) run_id="${2:-}"; shift 2 || true ;;
+      --out-dir) out_dir="${2:-}"; shift 2 || true ;;
+      *) extra+=("$1"); shift || true ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then cmd+=(--data-dir "${data_dir}"); fi
+  cmd+=(run-replay)
+  if [ -n "${run_id}" ]; then cmd+=(--run-id "${run_id}"); fi
+  if [ -n "${out_dir}" ]; then cmd+=(--out-dir "${out_dir}"); fi
+  if [ "${#extra[@]}" -gt 0 ]; then cmd+=("${extra[@]}"); fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-run-replay" "done"
 }
 
 run_agent_policy() {
@@ -2008,6 +2121,68 @@ run_agent_policy() {
   fi
   "${cmd[@]}" || return "${E_SKILL}"
   automation_log "INFO" "agent-policy" "done"
+}
+
+run_agent_policy_apply() {
+  automation_log "INFO" "agent-policy-apply" "start"
+  local data_dir=""
+  local days=""
+  local out_dir=""
+  local profile_overrides_file=""
+  local strategy_overrides_file=""
+  local approve_code=""
+  local apply_flag=0
+  local force_flag=0
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir) data_dir="${2:-}"; shift 2 || true ;;
+      --days) days="${2:-}"; shift 2 || true ;;
+      --out-dir) out_dir="${2:-}"; shift 2 || true ;;
+      --profile-overrides-file) profile_overrides_file="${2:-}"; shift 2 || true ;;
+      --strategy-overrides-file) strategy_overrides_file="${2:-}"; shift 2 || true ;;
+      --approve-code) approve_code="${2:-}"; shift 2 || true ;;
+      --apply) apply_flag=1; shift || true ;;
+      --force) force_flag=1; shift || true ;;
+      *) extra+=("$1"); shift || true ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then cmd+=(--data-dir "${data_dir}"); fi
+  cmd+=(policy-apply)
+  if [ -n "${days}" ]; then cmd+=(--days "${days}"); fi
+  if [ -n "${out_dir}" ]; then cmd+=(--out-dir "${out_dir}"); fi
+  if [ -n "${profile_overrides_file}" ]; then cmd+=(--profile-overrides-file "${profile_overrides_file}"); fi
+  if [ -n "${strategy_overrides_file}" ]; then cmd+=(--strategy-overrides-file "${strategy_overrides_file}"); fi
+  if [ -n "${approve_code}" ]; then cmd+=(--approve-code "${approve_code}"); fi
+  if [ "${apply_flag}" -eq 1 ]; then cmd+=(--apply); fi
+  if [ "${force_flag}" -eq 1 ]; then cmd+=(--force); fi
+  if [ "${#extra[@]}" -gt 0 ]; then cmd+=("${extra[@]}"); fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-policy-apply" "done"
+}
+
+run_agent_preferences() {
+  automation_log "INFO" "agent-preferences" "start"
+  local data_dir=""
+  local out_file=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir) data_dir="${2:-}"; shift 2 || true ;;
+      --out-file) out_file="${2:-}"; shift 2 || true ;;
+      *) extra+=("$1"); shift || true ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then cmd+=(--data-dir "${data_dir}"); fi
+  cmd+=(preferences)
+  if [ -n "${out_file}" ]; then cmd+=(--out-file "${out_file}"); fi
+  if [ "${#extra[@]}" -gt 0 ]; then cmd+=("${extra[@]}"); fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-preferences" "done"
 }
 
 run_agent_governance() {
@@ -2276,8 +2451,15 @@ Usage:
   scripts/agentsys.sh agent-repair-presets [--mode list|recommend|save|drift|lifecycle --days N --limit N --top-n N --presets-file <path> --effectiveness-file <path> --lifecycle-file <path> --allow-update --include-review-only --apply-lifecycle --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-compare [--snapshot-id <id> --base-snapshot-id <id> --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --only both|profile|strategy --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-state-sync [--data-dir <path>]
+  scripts/agentsys.sh agent-state-stats [--data-dir <path>]
+  scripts/agentsys.sh agent-repair-observe [--limit N --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-run-inspect --run-id <run_id> [--data-dir <path> --out-dir <path>]
+  scripts/agentsys.sh agent-object-view --run-id <run_id> [--data-dir <path> --out-dir <path>]
+  scripts/agentsys.sh agent-run-replay --run-id <run_id> [--data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-policy [--days N --memory-file <path> --presets-file <path> --effectiveness-file <path> --lifecycle-file <path> --data-dir <path>]
+  scripts/agentsys.sh agent-policy-apply [--days N --apply --approve-code <code> --profile-overrides-file <path> --strategy-overrides-file <path> --data-dir <path>]
+  scripts/agentsys.sh agent-preferences [--data-dir <path> --out-file <path>]
   scripts/agentsys.sh agent-governance [--days N --limit N --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-pack [list|enable|disable] [--name <pack>] [--cfg <path>]
   scripts/agentsys.sh agent-slo-guard [--enforce --cfg <path>]
@@ -2394,8 +2576,15 @@ case "${cmd}" in
   agent-repair-presets) shift; run_agent_repair_presets "$@" ;;
   agent-repair-compare) shift; run_agent_repair_compare "$@" ;;
   agent-repair-rollback) shift; run_agent_repair_rollback "$@" ;;
+  agent-state-sync) shift; run_agent_state_sync "$@" ;;
+  agent-state-stats) shift; run_agent_state_stats "$@" ;;
+  agent-repair-observe) shift; run_agent_repair_observe "$@" ;;
   agent-run-inspect) shift; run_agent_run_inspect "$@" ;;
+  agent-object-view) shift; run_agent_object_view "$@" ;;
+  agent-run-replay) shift; run_agent_run_replay "$@" ;;
   agent-policy) shift; run_agent_policy "$@" ;;
+  agent-policy-apply) shift; run_agent_policy_apply "$@" ;;
+  agent-preferences) shift; run_agent_preferences "$@" ;;
   agent-governance) shift; run_agent_governance "$@" ;;
   agent-pack) shift; run_agent_pack "${1:-list}" "${@:2}" ;;
   agent-slo-guard) shift; run_agent_slo_guard "$@" ;;

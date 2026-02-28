@@ -16,6 +16,31 @@ def _selected(payload: Dict[str, Any]) -> Dict[str, Any]:
     return selected
 
 
+def _quality_layers(
+    *,
+    ok: bool,
+    selection_confidence: float,
+    efficiency_score: float,
+    stability_score: float,
+    clarification_needed: bool,
+    feedback_rating: float = 0.0,
+) -> Dict[str, float]:
+    execution = 0.25 + 0.35 * efficiency_score + 0.40 * stability_score
+    delivery = 0.20 + 0.65 * selection_confidence + (0.15 if ok else 0.0)
+    user_satisfaction = 0.50 if feedback_rating == 0 else max(0.0, min(1.0, 0.5 + 0.25 * feedback_rating))
+    governance = 0.75 if ok else 0.35
+    if clarification_needed:
+        execution -= 0.08
+        delivery -= 0.06
+        governance -= 0.05
+    return {
+        "execution_quality": round(max(0.0, min(1.0, execution)), 4),
+        "delivery_quality": round(max(0.0, min(1.0, delivery)), 4),
+        "user_satisfaction_quality": round(max(0.0, min(1.0, user_satisfaction)), 4),
+        "governance_stability_quality": round(max(0.0, min(1.0, governance)), 4),
+    }
+
+
 
 def evaluate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     result = payload.get("result", {}) if isinstance(payload.get("result", {}), dict) else {}
@@ -30,6 +55,8 @@ def evaluate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     duration_ms = int(payload.get("duration_ms", 0) or 0)
     ambiguity_flag = bool(payload.get("ambiguity_flag", result.get("ambiguity_flag", False)))
     clarification_needed = bool(payload.get("clarification", {}).get("needed", False)) if isinstance(payload.get("clarification", {}), dict) else False
+    feedback = payload.get("feedback", {}) if isinstance(payload.get("feedback", {}), dict) else {}
+    feedback_rating = float(feedback.get("rating", 0.0) or 0.0)
     selected = _selected(payload)
     selected_strategy = str(selected.get("strategy", ""))
     fallback_depth = max(0, len(attempts) - 1)
@@ -45,6 +72,14 @@ def evaluate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if clarification_needed:
         quality_score -= 0.05
     quality_score = round(max(0.0, min(1.0, quality_score)), 4)
+    quality_layers = _quality_layers(
+        ok=ok,
+        selection_confidence=selection_confidence,
+        efficiency_score=efficiency_score,
+        stability_score=stability_score,
+        clarification_needed=clarification_needed,
+        feedback_rating=feedback_rating,
+    )
 
     policy_signals: List[str] = []
     if selection_confidence < 0.25:
@@ -77,6 +112,7 @@ def evaluate_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         "efficiency_score": efficiency_score,
         "stability_score": stability_score,
         "quality_score": quality_score,
+        "quality_layers": quality_layers,
         "policy_signals": policy_signals,
         "recommendations": recommendations,
     }

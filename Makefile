@@ -16,7 +16,7 @@ ROOT ?= $(CURDIR)
 	mcp-doctor mcp-route-smart mcp-run mcp-replay mcp-pipeline \
 	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
 	stock-env-check stock-health-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
-	skill-route skill-execute autonomous agent agent-studio agent-observe agent-recommend agent-failure-review agent-repair-apply agent-repair-approve agent-repair-list agent-repair-presets agent-repair-compare agent-repair-rollback agent-run-inspect agent-policy agent-governance agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
+	skill-route skill-execute autonomous agent agent-studio agent-observe agent-recommend agent-state-sync agent-state-stats agent-failure-review agent-repair-observe agent-repair-apply agent-repair-approve agent-repair-list agent-repair-presets agent-repair-compare agent-repair-rollback agent-run-inspect agent-object-view agent-run-replay agent-policy agent-policy-apply agent-preferences agent-governance agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
 
 help:
 	@echo "Available targets:"
@@ -27,7 +27,7 @@ help:
 	@echo "  make stock-env-check [root='$(ROOT)']"
 	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
-	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|diagnostics|governance|failure-review|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|data.query|agent.diagnostics|agent.governance.console|agent.failures.review|agent.repairs.apply|agent.repairs.approve|agent.repairs.list|agent.repairs.presets|agent.repairs.compare|agent.repairs.rollback|agent.run.inspect|agent.policy.tune'] [params='{\"k\":\"v\"}'] [selector_preset='presentation_recovery|auto'] [selector_presets_file='.../agent_repair_selector_presets.json'] [min_effectiveness_score=5] [only_if_effective=1] [avoid_rolled_back=1] [rollout_mode='auto|canary|full'] [canary_max_actions=1] | agent-observe [days=14] | agent-recommend [days=30] [apply=1] | agent-failure-review [days=14] [limit=10] | agent-governance [days=14] [limit=10] | agent-repair-apply [days=14] [limit=10] [min_priority_score=50] [max_actions=3] [selector_preset='presentation_recovery|auto'] [selector_presets_file='.../agent_repair_selector_presets.json'] [min_effectiveness_score=5] [only_if_effective=1] [avoid_rolled_back=1] [rollout_mode='auto|canary|full'] [canary_max_actions=1] [disable_safety_gate=1] [scopes='strategy,task_kind'] [strategies='mckinsey-ppt'] [task_kinds='presentation'] [exclude_scopes='feedback'] [exclude_strategies='mcp-generalist'] [exclude_task_kinds='report'] [apply=1] [snapshot_id='...'] [approve_code='...'] | agent-repair-approve [days=14] [limit=10] [min_priority_score=50] [max_actions=3] [selector_preset='presentation_recovery|auto'] [selector_presets_file='.../agent_repair_selector_presets.json'] [min_effectiveness_score=5] [only_if_effective=1] [avoid_rolled_back=1] [rollout_mode='auto|canary|full'] [canary_max_actions=1] [disable_safety_gate=1] [scopes='strategy,task_kind'] [strategies='mckinsey-ppt'] [task_kinds='presentation'] [exclude_scopes='feedback'] [exclude_strategies='mcp-generalist'] [exclude_task_kinds='report'] [snapshot_id='...'] [approve_code='...'] | agent-repair-list [limit=20] | agent-repair-presets [mode='list|recommend|save|drift|lifecycle'] [top_n=3] [presets_file='.../agent_repair_selector_presets.json'] [effectiveness_file='.../agent_repair_selector_effectiveness.json'] [lifecycle_file='.../agent_repair_selector_lifecycle.json'] [allow_update=1] [include_review_only=1] [apply_lifecycle=1] | agent-repair-compare [snapshot_id='...'] [base_snapshot_id='...'] | agent-repair-rollback [snapshot_id='...'] [only='both|profile|strategy'] | agent-run-inspect run_id='...' | agent-policy [days=14] [lifecycle_file='.../agent_repair_selector_lifecycle.json'] | agent-pack cmd='list|enable|disable' [name='finance'] | agent-slo-guard [enforce=1] | agent-golden [strict=1] | agent-fault [strict=1] | agent-feedback cmd='add|stats|pending' [run_id='...'] [rating='1|-1'] | agent-learn [apply=1] | capability-catalog | skill-contract-lint [strict=1] | autonomy-observe [days=14] | autonomy-eval | image-hub text='...' [params='{\"k\":\"v\"}'] | image-hub-observe [days=7]"
+	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|observe|recommend|state-sync|state-stats|diagnostics|governance|failure-review|repair-observe|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|object-view|run-replay|slo|policy|policy-apply|preferences|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|data.query|agent.diagnostics|agent.governance.console|agent.failures.review|agent.repairs.observe|agent.repairs.apply|agent.repairs.approve|agent.repairs.list|agent.repairs.presets|agent.repairs.compare|agent.repairs.rollback|agent.run.inspect|agent.object.view|agent.run.replay|agent.policy.tune|agent.policy.apply|agent.state.sync|agent.state.stats|agent.preferences.learn'] [params='{\"k\":\"v\"}']"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
@@ -880,8 +880,17 @@ agent-observe:
 agent-recommend:
 	@$(ROOT)/scripts/agentsys.sh agent-recommend $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(apply),--apply,) $(if $(overrides),--overrides-file "$(overrides)",) $(if $(feedback_file),--feedback-file "$(feedback_file)",) $(if $(out_json),--out-json "$(out_json)",) $(if $(out_md),--out-md "$(out_md)",)
 
+agent-state-sync:
+	@$(ROOT)/scripts/agentsys.sh agent-state-sync $(if $(data_dir),--data-dir "$(data_dir)",)
+
+agent-state-stats:
+	@$(ROOT)/scripts/agentsys.sh agent-state-stats $(if $(data_dir),--data-dir "$(data_dir)",)
+
 agent-failure-review:
 	@$(ROOT)/scripts/agentsys.sh agent-failure-review $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(limit),--limit $(limit),) $(if $(out_dir),--out-dir "$(out_dir)",)
+
+agent-repair-observe:
+	@$(ROOT)/scripts/agentsys.sh agent-repair-observe $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(limit),--limit $(limit),) $(if $(out_dir),--out-dir "$(out_dir)",)
 
 agent-repair-apply:
 	@$(ROOT)/scripts/agentsys.sh agent-repair-apply $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(limit),--limit $(limit),) $(if $(apply),--apply,) $(if $(out_dir),--out-dir "$(out_dir)",) $(if $(profile_overrides_file),--profile-overrides-file "$(profile_overrides_file)",) $(if $(strategy_overrides_file),--strategy-overrides-file "$(strategy_overrides_file)",) $(if $(backup_dir),--backup-dir "$(backup_dir)",) $(if $(snapshot_id),--snapshot-id "$(snapshot_id)",) $(if $(plan_file),--plan-file "$(plan_file)",) $(if $(min_priority_score),--min-priority-score "$(min_priority_score)",) $(if $(max_actions),--max-actions "$(max_actions)",) $(if $(selector_preset),--selector-preset "$(selector_preset)",) $(if $(selector_presets_file),--selector-presets-file "$(selector_presets_file)",) $(if $(min_effectiveness_score),--min-effectiveness-score "$(min_effectiveness_score)",) $(if $(only_if_effective),--only-if-effective,) $(if $(avoid_rolled_back),--avoid-rolled-back,) $(if $(rollout_mode),--rollout-mode "$(rollout_mode)",) $(if $(canary_max_actions),--canary-max-actions "$(canary_max_actions)",) $(if $(disable_safety_gate),--disable-safety-gate,) $(if $(scopes),--scopes "$(scopes)",) $(if $(strategies),--strategies "$(strategies)",) $(if $(task_kinds),--task-kinds "$(task_kinds)",) $(if $(exclude_scopes),--exclude-scopes "$(exclude_scopes)",) $(if $(exclude_strategies),--exclude-strategies "$(exclude_strategies)",) $(if $(exclude_task_kinds),--exclude-task-kinds "$(exclude_task_kinds)",) $(if $(approve_code),--approve-code "$(approve_code)",) $(if $(force),--force,)
@@ -904,8 +913,20 @@ agent-repair-rollback:
 agent-run-inspect:
 	@$(ROOT)/scripts/agentsys.sh agent-run-inspect $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(run_id),--run-id "$(run_id)",) $(if $(out_dir),--out-dir "$(out_dir)",)
 
+agent-object-view:
+	@$(ROOT)/scripts/agentsys.sh agent-object-view $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(run_id),--run-id "$(run_id)",) $(if $(out_dir),--out-dir "$(out_dir)",)
+
+agent-run-replay:
+	@$(ROOT)/scripts/agentsys.sh agent-run-replay $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(run_id),--run-id "$(run_id)",) $(if $(out_dir),--out-dir "$(out_dir)",)
+
 agent-policy:
 	@$(ROOT)/scripts/agentsys.sh agent-policy $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(memory_file),--memory-file "$(memory_file)",) $(if $(presets_file),--presets-file "$(presets_file)",) $(if $(effectiveness_file),--effectiveness-file "$(effectiveness_file)",) $(if $(lifecycle_file),--lifecycle-file "$(lifecycle_file)",)
+
+agent-policy-apply:
+	@$(ROOT)/scripts/agentsys.sh agent-policy-apply $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(out_dir),--out-dir "$(out_dir)",) $(if $(profile_overrides_file),--profile-overrides-file "$(profile_overrides_file)",) $(if $(strategy_overrides_file),--strategy-overrides-file "$(strategy_overrides_file)",) $(if $(apply),--apply,) $(if $(approve_code),--approve-code "$(approve_code)",) $(if $(force),--force,)
+
+agent-preferences:
+	@$(ROOT)/scripts/agentsys.sh agent-preferences $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(out_file),--out-file "$(out_file)",)
 
 agent-governance:
 	@$(ROOT)/scripts/agentsys.sh agent-governance $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days $(days),) $(if $(limit),--limit $(limit),) $(if $(out_dir),--out-dir "$(out_dir)",)

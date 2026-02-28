@@ -46,6 +46,21 @@ def _feedback_summary(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _quality_layer_summary(rows: List[Dict[str, Any]]) -> Dict[str, float]:
+    layers = {
+        "execution_quality": [],
+        "delivery_quality": [],
+        "user_satisfaction_quality": [],
+        "governance_stability_quality": [],
+    }
+    for row in rows:
+        quality_layers = row.get("quality_layers", {}) if isinstance(row.get("quality_layers", {}), dict) else {}
+        for key in layers:
+            if str(quality_layers.get(key, "")).strip() or isinstance(quality_layers.get(key), (int, float)):
+                layers[key].append(float(quality_layers.get(key, 0.0) or 0.0))
+    return {key: _avg(values) for key, values in layers.items()}
+
+
 def _build_dimension_rows(
     *,
     run_rows: List[Dict[str, Any]],
@@ -141,6 +156,7 @@ def tune_policy(
     clarify_rate = _pct(sum(1 for r in recent_evals if bool(r.get("clarification_needed", False))), len(recent_evals))
     manual_rate = _pct(sum(1 for r in recent_evals if bool(r.get("manual_takeover", False))), len(recent_evals))
     feedback_summary = _feedback_summary(recent_feedback)
+    quality_layers = _quality_layer_summary(recent_evals)
     preset_summary = _preset_summary(inventory, drift)
 
     suggested_default_profile = "strict"
@@ -259,6 +275,7 @@ def tune_policy(
             "suggested_default_profile": suggested_default_profile,
         },
         "feedback_summary": feedback_summary,
+        "quality_layers": quality_layers,
         "preset_intelligence": preset_summary,
         "drift_summary": drift.get("summary", {}) if isinstance(drift.get("summary", {}), dict) else {},
         "task_kind_profiles": task_kind_profiles,

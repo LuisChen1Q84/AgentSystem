@@ -16,6 +16,8 @@ if str(ROOT) not in sys.path:
 
 from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, ok_response
+from core.kernel.preference_learning import build_preference_profile, save_preference_profile
+from core.kernel.state_store import sync_state_store
 from scripts.agent_feedback import add_feedback, list_pending_feedback, summarize
 
 
@@ -37,9 +39,22 @@ class FeedbackService:
             profile=profile,
             task_kind=task_kind,
         )
+        preferences_file = base / "agent_user_preferences.json"
+        learned = build_preference_profile(data_dir=base)
+        save_preference_profile(learned, path=preferences_file)
+        sync_state_store(base)
         return ok_response(
             "agent.feedback.add",
-            payload=annotate_payload("agent.feedback.add", {"item": item, "summary": "feedback recorded"}, entrypoint="scripts.agent_feedback"),
+            payload=annotate_payload(
+                "agent.feedback.add",
+                {
+                    "item": item,
+                    "preferences_file": str(preferences_file),
+                    "preference_profile": learned,
+                    "summary": "feedback recorded",
+                },
+                entrypoint="scripts.agent_feedback",
+            ),
             meta={"data_dir": str(base)},
         )
 

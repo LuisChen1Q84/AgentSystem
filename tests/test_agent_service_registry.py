@@ -17,19 +17,194 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.diagnostics", names)
         self.assertIn("agent.failures.review", names)
         self.assertIn("agent.governance.console", names)
+        self.assertIn("agent.state.sync", names)
+        self.assertIn("agent.state.stats", names)
         self.assertIn("agent.policy.tune", names)
+        self.assertIn("agent.policy.apply", names)
+        self.assertIn("agent.preferences.learn", names)
         self.assertIn("agent.repairs.apply", names)
         self.assertIn("agent.repairs.approve", names)
         self.assertIn("agent.repairs.compare", names)
         self.assertIn("agent.repairs.list", names)
+        self.assertIn("agent.repairs.observe", names)
         self.assertIn("agent.repairs.presets", names)
         self.assertIn("agent.repairs.rollback", names)
         self.assertIn("agent.run.inspect", names)
+        self.assertIn("agent.object.view", names)
+        self.assertIn("agent.run.replay", names)
         self.assertIn("mcp.run", names)
         self.assertIn("ppt.generate", names)
         self.assertIn("image.generate", names)
         self.assertIn("market.report", names)
         self.assertIn("data.query", names)
+
+    def test_state_sync_preferences_object_view_and_replay(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "agent_run_20260228_100000.json"
+            payload = {
+                "run_id": "r1",
+                "ts": "2026-02-28 10:00:00",
+                "ok": True,
+                "mode": "personal-agent-os",
+                "profile": "strict",
+                "task_kind": "report",
+                "request": {"text": "生成本周报告", "params": {}},
+                "result": {
+                    "ok": True,
+                    "top_gap": 0.12,
+                    "selected": {"strategy": "mcp-generalist", "executor": "mcp"},
+                    "candidates": [{"strategy": "mcp-generalist", "executor": "mcp", "score": 0.88, "rank": 1}],
+                    "attempts": [{"strategy": "mcp-generalist", "executor": "mcp", "ok": True, "result": {"ok": True}}],
+                },
+                "delivery_bundle": {"summary": "ok"},
+            }
+            payload_path.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": True,
+                        "profile": "strict",
+                        "task_kind": "report",
+                        "selected_strategy": "mcp-generalist",
+                        "duration_ms": 10,
+                        "payload_path": str(payload_path),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "success": True,
+                        "quality_score": 0.91,
+                        "quality_layers": {"execution_quality": 0.9, "delivery_quality": 0.88},
+                        "selected_strategy": "mcp-generalist",
+                        "selection_confidence": 0.82,
+                        "stability_score": 0.9,
+                        "ts": "2026-02-28 10:00:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_deliveries.jsonl").write_text(
+                json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "summary": "done", "quality_score": 0.91, "artifacts": []}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_run_objects.jsonl").write_text(
+                json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "summary": "run object"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evidence_objects.jsonl").write_text(
+                json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "summary": "evidence", "risk_level": "low"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_delivery_objects.jsonl").write_text(
+                json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "summary": "delivery"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "feedback.jsonl").write_text(
+                json.dumps({"feedback_id": "f1", "run_id": "r1", "rating": 1, "note": "请继续保持简洁中文风格", "ts": "2026-02-28 10:05:00"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+
+            reg = AgentServiceRegistry(root=root)
+            synced = reg.execute("agent.state.sync", data_dir=str(root))
+            self.assertTrue(synced.get("ok", False))
+            self.assertIn("db_path", synced.get("report", {}))
+
+            stats = reg.execute("agent.state.stats", data_dir=str(root))
+            self.assertTrue(stats.get("ok", False))
+            self.assertGreaterEqual(stats.get("report", {}).get("counts", {}).get("runs", 0), 1)
+
+            prefs = reg.execute("agent.preferences.learn", data_dir=str(root))
+            self.assertTrue(prefs.get("ok", False))
+            self.assertEqual(prefs.get("profile", {}).get("preferences", {}).get("language"), "zh")
+
+            obj = reg.execute("agent.object.view", data_dir=str(root), run_id="r1", out_dir=str(root / "out"))
+            self.assertTrue(obj.get("ok", False))
+            self.assertEqual(obj.get("report", {}).get("run_id"), "r1")
+
+            replay = reg.execute("agent.run.replay", data_dir=str(root), run_id="r1", out_dir=str(root / "out"))
+            self.assertTrue(replay.get("ok", False))
+            self.assertGreaterEqual(len(replay.get("report", {}).get("timeline", [])), 2)
+
+    def test_policy_apply_and_repair_observe(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "memory.json").write_text(json.dumps({"strategies": {}}, ensure_ascii=False) + "\n", encoding="utf-8")
+            (root / "agent_runs.jsonl").write_text(
+                "\n".join(
+                    [
+                        json.dumps(
+                            {
+                                "run_id": "r1",
+                                "ts": "2026-02-27 10:00:00",
+                                "ok": False,
+                                "profile": "strict",
+                                "task_kind": "presentation",
+                                "selected_strategy": "mckinsey-ppt",
+                            },
+                            ensure_ascii=False,
+                        ),
+                        json.dumps(
+                            {
+                                "run_id": "r2",
+                                "ts": "2026-02-28 10:00:00",
+                                "ok": True,
+                                "profile": "strict",
+                                "task_kind": "presentation",
+                                "selected_strategy": "mckinsey-ppt",
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                "\n".join(
+                    [
+                        json.dumps({"run_id": "r1", "success": False, "quality_score": 0.3, "ts": "2026-02-27 10:00:00"}, ensure_ascii=False),
+                        json.dumps({"run_id": "r2", "success": True, "quality_score": 0.88, "ts": "2026-02-28 10:00:00"}, ensure_ascii=False),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "feedback.jsonl").write_text(
+                json.dumps({"feedback_id": "f1", "run_id": "r2", "rating": 1, "note": "good", "ts": "2026-02-28 10:10:00"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            backup_dir = root / "repair_backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            snapshot = {
+                "snapshot_id": "repair_snapshot_20260228_100000",
+                "ts": "2026-02-28 09:00:00",
+                "lifecycle": "applied",
+                "selection": {"selector": {"scopes": ["strategy"], "strategies": ["mckinsey-ppt"]}, "selector_preset": "presentation_recovery"},
+            }
+            (backup_dir / "repair_snapshot_20260228_100000.json").write_text(json.dumps(snapshot, ensure_ascii=False) + "\n", encoding="utf-8")
+
+            reg = AgentServiceRegistry(root=root)
+            observe = reg.execute("agent.repairs.observe", data_dir=str(root), limit=10, out_dir=str(root / "out"))
+            self.assertTrue(observe.get("ok", False))
+            self.assertEqual(observe.get("report", {}).get("summary", {}).get("count"), 1)
+
+            preview = reg.execute("agent.policy.apply", data_dir=str(root), days=14, out_dir=str(root / "out"))
+            self.assertTrue(preview.get("ok", False))
+            code = preview.get("report", {}).get("approval", {}).get("code", "")
+            applied = reg.execute("agent.policy.apply", data_dir=str(root), days=14, out_dir=str(root / "out"), apply=True, approve_code=code)
+            self.assertTrue(applied.get("ok", False))
+            self.assertEqual(applied.get("receipt", {}).get("status"), "applied")
 
     def test_execute_agent_run(self):
         with tempfile.TemporaryDirectory() as td:
