@@ -29,6 +29,8 @@ class ResearchHubTest(unittest.TestCase):
             self.assertTrue(Path(out.get("appendix_md_path", "")).exists())
             self.assertTrue(Path(out.get("quality_scorecard_csv_path", "")).exists())
             self.assertTrue(Path(out.get("citation_appendix_csv_path", "")).exists())
+            self.assertTrue(Path(out.get("review_appendix_xlsx_path", "")).exists())
+            self.assertTrue(Path(out.get("prisma_svg_path", "")).exists())
             html_text = Path(out["html_path"]).read_text(encoding="utf-8")
             self.assertIn("PRISMA Flow", html_text)
             self.assertTrue(any(item.get("severity") == "high" for item in out.get("peer_review_findings", [])))

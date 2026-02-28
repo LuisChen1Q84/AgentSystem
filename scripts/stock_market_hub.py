@@ -423,6 +423,14 @@ def render_md(payload: Dict[str, Any]) -> str:
             lines.extend(["", "### Event Timeline", ""])
             for item in source_evidence_map.get("event_timeline", [])[:6]:
                 lines.append(f"- {item.get('date','')} | {item.get('connector','')} | {item.get('title','')} | {item.get('location','')}")
+        if source_evidence_map.get("highlights"):
+            lines.extend(["", "### Source Highlights", ""])
+            for item in source_evidence_map.get("highlights", [])[:6]:
+                lines.append(f"- {item.get('connector','')} | {item.get('headline','')} | {item.get('summary','')}")
+        if source_evidence_map.get("watchouts"):
+            lines.extend(["", "### Source Watchouts", ""])
+            for item in source_evidence_map.get("watchouts", [])[:6]:
+                lines.append(f"- {item}")
         lines.extend(["", ""])
     return "\n".join(lines)
 

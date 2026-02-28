@@ -22,6 +22,8 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertEqual(out.get("market_committee", {}).get("source_item_count"), 1)
             self.assertEqual(out.get("source_evidence_map", {}).get("by_connector", {}).get("knowledge"), 1)
             self.assertEqual(len(out.get("market_committee", {}).get("event_timeline", [])), 1)
+            self.assertEqual(len(out.get("market_committee", {}).get("source_highlights", [])), 1)
+            self.assertEqual(out.get("market_committee", {}).get("source_watchouts", []), [])
 
 
 if __name__ == "__main__":

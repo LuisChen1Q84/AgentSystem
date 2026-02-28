@@ -21,6 +21,8 @@ from scripts.research_source_adapters import lookup_sources
 def _source_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
     by_connector: dict[str, int] = {}
     timeline: list[dict[str, Any]] = []
+    highlights: list[dict[str, Any]] = []
+    watchouts: list[str] = []
     for item in items:
         connector = str(item.get("connector", "unknown")).strip() or "unknown"
         by_connector[connector] = by_connector.get(connector, 0) + 1
@@ -36,10 +38,41 @@ def _source_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
                     "location": location,
                 }
             )
+        if connector == "sec":
+            form = str(item.get("form", "")).strip()
+            highlights.append(
+                {
+                    "connector": connector,
+                    "headline": label,
+                    "summary": f"SEC filing {form or 'document'} dated {event_date or 'n/a'}",
+                }
+            )
+        elif connector == "openalex":
+            highlights.append(
+                {
+                    "connector": connector,
+                    "headline": label,
+                    "summary": f"Academic source with citation_count={item.get('citation_count', 0)}",
+                }
+            )
+        elif connector == "knowledge":
+            highlights.append(
+                {
+                    "connector": connector,
+                    "headline": label,
+                    "summary": f"Local knowledge note at {location or 'n/a'}",
+                }
+            )
+        if connector == "knowledge" and not event_date:
+            watchouts.append("Some local knowledge items lack explicit dates; verify recency before treating them as event signals.")
+        if connector == "sec" and not str(item.get("url", "")).strip():
+            watchouts.append("A SEC item is missing a filing URL; validate archive resolution before external sharing.")
     timeline.sort(key=lambda x: (str(x.get("date", "")) == "", str(x.get("date", ""))), reverse=False)
     return {
         "by_connector": by_connector,
         "event_timeline": timeline[:8],
+        "highlights": highlights[:8],
+        "watchouts": list(dict.fromkeys(watchouts))[:5],
     }
 
 
@@ -76,4 +109,6 @@ class MarketHubApp:
             payload["market_committee"]["source_connectors"] = source_intel.get("connectors", [])
             payload["market_committee"]["source_item_count"] = len(source_intel.get("items", []))
             payload["market_committee"]["event_timeline"] = payload["source_evidence_map"].get("event_timeline", [])
+            payload["market_committee"]["source_highlights"] = payload["source_evidence_map"].get("highlights", [])
+            payload["market_committee"]["source_watchouts"] = payload["source_evidence_map"].get("watchouts", [])
         return payload

@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List
+from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
@@ -21,6 +22,7 @@ if str(ROOT) not in sys.path:
 
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
+from openpyxl import Workbook
 from scripts.mckinsey_ppt_engine import run_request as run_ppt_request
 from scripts.research_hub_html_renderer import render_research_html
 from scripts.research_source_adapters import lookup_sources
@@ -906,6 +908,75 @@ def _write_csv(path: Path, rows: List[Dict[str, Any]], fieldnames: List[str]) ->
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
+def _write_review_workbook(path: Path, systematic: Dict[str, Any]) -> None:
+    wb = Workbook()
+    ws_prisma = wb.active
+    ws_prisma.title = "prisma_flow"
+    ws_prisma.append(["stage", "count"])
+    for row in systematic.get("prisma_flow", []):
+        ws_prisma.append([row.get("stage", ""), row.get("count", 0)])
+
+    ws_quality = wb.create_sheet("quality_scorecard")
+    ws_quality.append(["study_id", "title", "tool", "risk_of_bias", "certainty", "notes"])
+    for row in systematic.get("quality_scorecard", []):
+        ws_quality.append([
+            row.get("study_id", ""),
+            row.get("title", ""),
+            row.get("tool", ""),
+            row.get("risk_of_bias", ""),
+            row.get("certainty", ""),
+            row.get("notes", ""),
+        ])
+
+    ws_citations = wb.create_sheet("citation_appendix")
+    ws_citations.append(["id", "title", "type", "url"])
+    for row in systematic.get("citation_appendix", []):
+        ws_citations.append([row.get("id", ""), row.get("title", ""), row.get("type", ""), row.get("url", "")])
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(path)
+
+
+def _write_prisma_svg(path: Path, systematic: Dict[str, Any]) -> None:
+    rows = systematic.get("prisma_flow", []) if isinstance(systematic.get("prisma_flow", []), list) else []
+    if not rows:
+        return
+    width = 860
+    box_w = 640
+    box_h = 82
+    gap = 36
+    margin = 48
+    total_h = margin * 2 + len(rows) * box_h + max(0, len(rows) - 1) * gap
+    x = (width - box_w) // 2
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{total_h}" viewBox="0 0 {width} {total_h}">',
+        '<defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12"/></filter></defs>',
+        '<rect width="100%" height="100%" fill="#f7f4ed"/>',
+    ]
+    for idx, row in enumerate(rows):
+        y = margin + idx * (box_h + gap)
+        label = escape(str(row.get("stage", "")))
+        count = escape(str(row.get("count", 0)))
+        parts += [
+            f'<rect x="{x}" y="{y}" rx="22" ry="22" width="{box_w}" height="{box_h}" fill="#ffffff" stroke="#d7cec2" filter="url(#shadow)"/>',
+            f'<text x="{x + 28}" y="{y + 34}" font-family="Avenir Next, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#0f172a">{label}</text>',
+            f'<text x="{x + 28}" y="{y + 60}" font-family="Avenir Next, PingFang SC, sans-serif" font-size="14" fill="#64748b">Records / Items</text>',
+            f'<rect x="{x + box_w - 130}" y="{y + 18}" rx="20" ry="20" width="96" height="44" fill="#e6f3f1"/>',
+            f'<text x="{x + box_w - 82}" y="{y + 47}" text-anchor="middle" font-family="Avenir Next, PingFang SC, sans-serif" font-size="22" font-weight="700" fill="#0f766e">{count}</text>',
+        ]
+        if idx < len(rows) - 1:
+            line_y = y + box_h
+            next_y = y + box_h + gap
+            mid_x = width // 2
+            parts += [
+                f'<line x1="{mid_x}" y1="{line_y + 4}" x2="{mid_x}" y2="{next_y - 10}" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>',
+                f'<polygon points="{mid_x - 10},{next_y - 18} {mid_x + 10},{next_y - 18} {mid_x},{next_y}" fill="#94a3b8"/>',
+            ]
+    parts.append("</svg>")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(parts), encoding="utf-8")
+
+
 def _ppt_bridge(req: Dict[str, Any], playbook: str, sections: List[Dict[str, Any]]) -> Dict[str, Any]:
     deck_title = f"{req['title']} | Executive Readout"
     if playbook == "ceo_text_deck":
@@ -1138,6 +1209,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     out_appendix_md = out_root / f"research_appendix_{ts}.md"
     out_quality_csv = out_root / f"research_quality_scorecard_{ts}.csv"
     out_citations_csv = out_root / f"research_citation_appendix_{ts}.csv"
+    out_review_xlsx = out_root / f"research_review_appendix_{ts}.xlsx"
+    out_prisma_svg = out_root / f"research_prisma_flow_{ts}.svg"
 
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     out_md.write_text(_markdown_report(payload), encoding="utf-8")
@@ -1155,6 +1228,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             systematic_review.get("citation_appendix", []) if isinstance(systematic_review.get("citation_appendix", []), list) else [],
             ["id", "title", "type", "url"],
         )
+        _write_review_workbook(out_review_xlsx, systematic_review)
+        _write_prisma_svg(out_prisma_svg, systematic_review)
 
     result: Dict[str, Any] = {
         "ok": True,
@@ -1179,6 +1254,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "appendix_md_path": str(out_appendix_md) if appendix_text else "",
         "quality_scorecard_csv_path": str(out_quality_csv) if appendix_text else "",
         "citation_appendix_csv_path": str(out_citations_csv) if appendix_text else "",
+        "review_appendix_xlsx_path": str(out_review_xlsx) if appendix_text else "",
+        "prisma_svg_path": str(out_prisma_svg) if appendix_text else "",
         "deliver_assets": {
             "items": (
                 [{"path": str(out_json)}, {"path": str(out_md)}, {"path": str(out_html)}]
@@ -1187,6 +1264,8 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
                         {"path": str(out_appendix_md)},
                         {"path": str(out_quality_csv)},
                         {"path": str(out_citations_csv)},
+                        {"path": str(out_review_xlsx)},
+                        {"path": str(out_prisma_svg)},
                     ]
                     if appendix_text
                     else []
