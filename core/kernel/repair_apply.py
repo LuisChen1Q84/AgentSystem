@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Set
 
@@ -13,6 +14,8 @@ from core.kernel.failure_review import build_failure_review
 from core.kernel.memory_store import load_memory
 from core.kernel.policy_tuner import tune_policy
 
+ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 
 PLAN_GLOB = "repair_plan_repair_snapshot_*.json"
 JOURNAL_FILE = "repair_approval_journal.jsonl"
@@ -93,6 +96,57 @@ def _repair_selector(
         "exclude_scopes": _normalize_selector_values(exclude_scopes),
         "exclude_strategies": _normalize_selector_values(exclude_strategies),
         "exclude_task_kinds": _normalize_selector_values(exclude_task_kinds),
+    }
+
+
+def _default_selector_presets_file() -> Path:
+    return ROOT / "config/agent_repair_selector_presets.json"
+
+
+def _load_selector_presets(path: Path) -> Dict[str, Dict[str, List[str]]]:
+    raw = _load_json(path, {})
+    presets: Dict[str, Dict[str, List[str]]] = {}
+    for name, payload in raw.items():
+        if not isinstance(name, str) or not isinstance(payload, dict):
+            continue
+        presets[name] = _repair_selector(
+            scopes=payload.get("scopes", []),
+            strategies=payload.get("strategies", []),
+            task_kinds=payload.get("task_kinds", []),
+            exclude_scopes=payload.get("exclude_scopes", []),
+            exclude_strategies=payload.get("exclude_strategies", []),
+            exclude_task_kinds=payload.get("exclude_task_kinds", []),
+        )
+    return presets
+
+
+def _resolve_selector(
+    *,
+    selector_preset: str = "",
+    selector_presets_file: Path | None = None,
+    scopes: List[str] | None = None,
+    strategies: List[str] | None = None,
+    task_kinds: List[str] | None = None,
+    exclude_scopes: List[str] | None = None,
+    exclude_strategies: List[str] | None = None,
+    exclude_task_kinds: List[str] | None = None,
+) -> tuple[Dict[str, List[str]], Dict[str, Any]]:
+    preset_name = str(selector_preset).strip()
+    preset_file = Path(selector_presets_file) if selector_presets_file else _default_selector_presets_file()
+    presets = _load_selector_presets(preset_file)
+    base = presets.get(preset_name, {}) if preset_name else {}
+    resolved = _repair_selector(
+        scopes=_merge_unique(list(base.get("scopes", [])), _normalize_selector_values(scopes)),
+        strategies=_merge_unique(list(base.get("strategies", [])), _normalize_selector_values(strategies)),
+        task_kinds=_merge_unique(list(base.get("task_kinds", [])), _normalize_selector_values(task_kinds)),
+        exclude_scopes=_merge_unique(list(base.get("exclude_scopes", [])), _normalize_selector_values(exclude_scopes)),
+        exclude_strategies=_merge_unique(list(base.get("exclude_strategies", [])), _normalize_selector_values(exclude_strategies)),
+        exclude_task_kinds=_merge_unique(list(base.get("exclude_task_kinds", [])), _normalize_selector_values(exclude_task_kinds)),
+    )
+    return resolved, {
+        "preset": preset_name,
+        "preset_found": bool(preset_name and preset_name in presets),
+        "presets_file": str(preset_file),
     }
 
 
@@ -495,6 +549,8 @@ def build_repair_apply_plan(
     backup_dir: Path,
     min_priority_score: int = 0,
     max_actions: int = 0,
+    selector_preset: str = "",
+    selector_presets_file: Path | None = None,
     scopes: List[str] | None = None,
     strategies: List[str] | None = None,
     task_kinds: List[str] | None = None,
@@ -509,7 +565,9 @@ def build_repair_apply_plan(
     memory = load_memory(data_dir / "memory.json")
 
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
-    selector = _repair_selector(
+    selector, selector_meta = _resolve_selector(
+        selector_preset=selector_preset,
+        selector_presets_file=selector_presets_file,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -588,6 +646,9 @@ def build_repair_apply_plan(
             "min_priority_score": max(0, int(min_priority_score)),
             "max_actions": max(0, int(max_actions)),
             "selector": selector,
+            "selector_preset": str(selector_meta.get("preset", "")),
+            "selector_preset_found": bool(selector_meta.get("preset_found", False)),
+            "selector_presets_file": str(selector_meta.get("presets_file", "")),
             "selected_scopes": sorted(selected_scopes),
             "selected_action_count": len(filtered_failure_report.get("repair_actions", [])),
             "skipped_action_count": len(filtered_failure_report.get("skipped_repair_actions", [])),
@@ -899,6 +960,9 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- strict_block_candidates: {s.get('strict_block_candidates', 0)}",
         f"- min_priority_score: {selection.get('min_priority_score', 0)}",
         f"- max_actions: {selection.get('max_actions', 0)}",
+        f"- selector_preset: {selection.get('selector_preset', '')}",
+        f"- selector_preset_found: {selection.get('selector_preset_found', False)}",
+        f"- selector_presets_file: {selection.get('selector_presets_file', '')}",
         f"- selector_scopes: {','.join(selector.get('scopes', []))}",
         f"- selector_strategies: {','.join(selector.get('strategies', []))}",
         f"- selector_task_kinds: {','.join(selector.get('task_kinds', []))}",
@@ -1003,7 +1067,7 @@ def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str
         selection = row.get("selection", {}) if isinstance(row.get("selection", {}), dict) else {}
         selector = selection.get("selector", {}) if isinstance(selection.get("selector", {}), dict) else {}
         lines.append(
-            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | lifecycle={row.get('lifecycle', '')} | approved={row.get('approval_recorded', False)} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | compare_base={row.get('compare_base_snapshot_id', '')} | selector_scopes={','.join(selector.get('scopes', []))} | approval={row.get('approval_code', '')}"
+            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | lifecycle={row.get('lifecycle', '')} | approved={row.get('approval_recorded', False)} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | compare_base={row.get('compare_base_snapshot_id', '')} | selector_preset={selection.get('selector_preset', '')} | selector_scopes={','.join(selector.get('scopes', []))} | approval={row.get('approval_code', '')}"
         )
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

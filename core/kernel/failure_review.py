@@ -165,7 +165,7 @@ def _governance_matches_action(row: Dict[str, Any], scope: str, target: str) -> 
 
 def _governance_history_for_action(data_dir: Path, action: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        from core.kernel.repair_apply import list_repair_snapshots
+        from core.kernel.repair_apply import compare_repair_snapshots, list_repair_snapshots
     except Exception:
         return {
             "match_count": 0,
@@ -173,6 +173,8 @@ def _governance_history_for_action(data_dir: Path, action: Dict[str, Any]) -> Di
             "last_lifecycle": "",
             "last_snapshot_id": "",
             "last_ts": "",
+            "last_compare_summary": {},
+            "last_compare_conclusion": "",
             "recent_matches": [],
         }
 
@@ -183,12 +185,61 @@ def _governance_history_for_action(data_dir: Path, action: Dict[str, Any]) -> Di
     matches = [row for row in rows if isinstance(row, dict) and _governance_matches_action(row, scope, target)]
     lifecycle_counter: Counter[str] = Counter(str(row.get("lifecycle", "")).strip() or "unknown" for row in matches)
     latest = matches[0] if matches else {}
+    component = _repair_component_for_scope(scope)
+    compare_summary: Dict[str, Any] = {}
+    compare_conclusion = ""
+    base_snapshot_id = str(latest.get("compare_base_snapshot_id", "")).strip()
+    latest_snapshot_id = str(latest.get("snapshot_id", "")).strip()
+    if component and latest_snapshot_id and base_snapshot_id:
+        try:
+            compare_report = compare_repair_snapshots(
+                backup_dir=data_dir / "repair_backups",
+                snapshot_id=latest_snapshot_id,
+                base_snapshot_id=base_snapshot_id,
+            )
+            section = "strategy_overrides" if component == "strategy" else "profile_overrides"
+            relevant_rows = compare_report.get("compare_diff", {}).get(section, [])
+            relevant_rows = relevant_rows if isinstance(relevant_rows, list) else []
+            compare_summary = {
+                "component": component,
+                "selected_snapshot_id": str(compare_report.get("selected_snapshot_id", "")),
+                "base_snapshot_id": str(compare_report.get("base_snapshot_id", "")),
+                "relevant_change_count": len(relevant_rows),
+                "relevant_paths": [str(row.get("path", "")) for row in relevant_rows[:3] if isinstance(row, dict)],
+                "total_change_count": int(compare_report.get("summary", {}).get("change_count", 0) or 0),
+            }
+            if not relevant_rows:
+                compare_conclusion = (
+                    f"Last matched repair had no relevant {component} diff versus base snapshot {base_snapshot_id}."
+                )
+            elif str(latest.get("last_lifecycle", latest.get("lifecycle", ""))).strip() == "rolled_back":
+                compare_conclusion = (
+                    f"Last matched repair was rolled back after changing {component} "
+                    f"({', '.join(compare_summary['relevant_paths']) or 'no named paths'}). "
+                    "Review rollback rationale before retrying the same repair."
+                )
+            else:
+                compare_conclusion = (
+                    f"Last matched repair changed {component} "
+                    f"({', '.join(compare_summary['relevant_paths']) or 'no named paths'}) "
+                    f"against {base_snapshot_id}; failures still persist, so inspect execution assumptions beyond routing."
+                )
+        except Exception as exc:
+            compare_summary = {
+                "component": component,
+                "selected_snapshot_id": latest_snapshot_id,
+                "base_snapshot_id": base_snapshot_id,
+                "error": str(exc),
+            }
+            compare_conclusion = f"Compare baseline exists but compare generation failed for {component}: {exc}."
     return {
         "match_count": len(matches),
         "lifecycle_counts": {str(k): int(v) for k, v in lifecycle_counter.items()},
         "last_lifecycle": str(latest.get("lifecycle", "")),
         "last_snapshot_id": str(latest.get("snapshot_id", "")),
         "last_ts": str(latest.get("ts", "")),
+        "last_compare_summary": compare_summary,
+        "last_compare_conclusion": compare_conclusion,
         "recent_matches": [
             {
                 "snapshot_id": str(row.get("snapshot_id", "")),
@@ -534,6 +585,8 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
                 lines.append(
                     f"  governance: matches={history.get('match_count', 0)} | last={history.get('last_lifecycle', '')} | snapshot={history.get('last_snapshot_id', '')} | ts={history.get('last_ts', '')}"
                 )
+                if str(history.get("last_compare_conclusion", "")).strip():
+                    lines.append(f"  compare: {history.get('last_compare_conclusion', '')}")
     else:
         lines.append("- none")
     lines += ["", "## Failures", ""]

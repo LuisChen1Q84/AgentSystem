@@ -1,0 +1,34 @@
+{
+  "presentation_recovery": {
+    "scopes": ["strategy", "task_kind"],
+    "strategies": ["mckinsey-ppt"],
+    "task_kinds": ["presentation"],
+    "exclude_scopes": ["feedback"],
+    "exclude_strategies": [],
+    "exclude_task_kinds": []
+  },
+  "tooling_stabilize": {
+    "scopes": ["strategy", "policy"],
+    "strategies": ["mcp-generalist"],
+    "task_kinds": [],
+    "exclude_scopes": ["feedback"],
+    "exclude_strategies": [],
+    "exclude_task_kinds": []
+  },
+  "feedback_cleanup": {
+    "scopes": ["feedback"],
+    "strategies": [],
+    "task_kinds": [],
+    "exclude_scopes": [],
+    "exclude_strategies": [],
+    "exclude_task_kinds": []
+  },
+  "strict_policy_hardening": {
+    "scopes": ["policy", "strategy"],
+    "strategies": [],
+    "task_kinds": [],
+    "exclude_scopes": ["feedback"],
+    "exclude_strategies": [],
+    "exclude_task_kinds": []
+  }
+}

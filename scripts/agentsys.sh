@@ -1135,6 +1135,8 @@ run_agent_repair_apply() {
   local plan_file=""
   local min_priority_score=""
   local max_actions=""
+  local selector_preset=""
+  local selector_presets_file=""
   local scopes=""
   local strategies=""
   local task_kinds=""
@@ -1190,6 +1192,14 @@ run_agent_repair_apply() {
         ;;
       --max-actions)
         max_actions="${2:-}"
+        shift 2 || true
+        ;;
+      --selector-preset)
+        selector_preset="${2:-}"
+        shift 2 || true
+        ;;
+      --selector-presets-file)
+        selector_presets_file="${2:-}"
         shift 2 || true
         ;;
       --scopes)
@@ -1272,6 +1282,12 @@ run_agent_repair_apply() {
   if [ -n "${max_actions}" ]; then
     cmd+=(--max-actions "${max_actions}")
   fi
+  if [ -n "${selector_preset}" ]; then
+    cmd+=(--selector-preset "${selector_preset}")
+  fi
+  if [ -n "${selector_presets_file}" ]; then
+    cmd+=(--selector-presets-file "${selector_presets_file}")
+  fi
   if [ -n "${scopes}" ]; then
     cmd+=(--scopes "${scopes}")
   fi
@@ -1316,6 +1332,8 @@ run_agent_repair_approve() {
   local plan_file=""
   local min_priority_score=""
   local max_actions=""
+  local selector_preset=""
+  local selector_presets_file=""
   local scopes=""
   local strategies=""
   local task_kinds=""
@@ -1370,6 +1388,14 @@ run_agent_repair_approve() {
         ;;
       --max-actions)
         max_actions="${2:-}"
+        shift 2 || true
+        ;;
+      --selector-preset)
+        selector_preset="${2:-}"
+        shift 2 || true
+        ;;
+      --selector-presets-file)
+        selector_presets_file="${2:-}"
         shift 2 || true
         ;;
       --scopes)
@@ -1444,6 +1470,12 @@ run_agent_repair_approve() {
   fi
   if [ -n "${max_actions}" ]; then
     cmd+=(--max-actions "${max_actions}")
+  fi
+  if [ -n "${selector_preset}" ]; then
+    cmd+=(--selector-preset "${selector_preset}")
+  fi
+  if [ -n "${selector_presets_file}" ]; then
+    cmd+=(--selector-presets-file "${selector_presets_file}")
   fi
   if [ -n "${scopes}" ]; then
     cmd+=(--scopes "${scopes}")
@@ -1948,8 +1980,8 @@ Usage:
   scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
   scripts/agentsys.sh agent-failure-review [--days N --limit N --data-dir <path> --out-dir <path>]
-  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
-  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery --selector-presets-file <path> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery --selector-presets-file <path> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-list [--limit N --data-dir <path> --backup-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-compare [--snapshot-id <id> --base-snapshot-id <id> --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --only both|profile|strategy --data-dir <path> --backup-dir <path>]

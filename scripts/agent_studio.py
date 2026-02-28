@@ -127,6 +127,8 @@ def _repair_apply_cmd(
     plan_file: str,
     min_priority_score: int,
     max_actions: int,
+    selector_preset: str,
+    selector_presets_file: str,
     scopes: str,
     strategies: str,
     task_kinds: str,
@@ -150,6 +152,8 @@ def _repair_apply_cmd(
         plan_file=plan_file,
         min_priority_score=min_priority_score,
         max_actions=max_actions,
+        selector_preset=selector_preset,
+        selector_presets_file=selector_presets_file,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -176,6 +180,8 @@ def _repair_approve_cmd(
     plan_file: str,
     min_priority_score: int,
     max_actions: int,
+    selector_preset: str,
+    selector_presets_file: str,
     scopes: str,
     strategies: str,
     task_kinds: str,
@@ -198,6 +204,8 @@ def _repair_approve_cmd(
         plan_file=plan_file,
         min_priority_score=min_priority_score,
         max_actions=max_actions,
+        selector_preset=selector_preset,
+        selector_presets_file=selector_presets_file,
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
@@ -403,6 +411,8 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 plan_file="",
                 min_priority_score=min_priority_score,
                 max_actions=max_actions,
+                selector_preset="",
+                selector_presets_file="",
                 scopes="",
                 strategies="",
                 task_kinds="",
@@ -430,6 +440,8 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 plan_file="",
                 min_priority_score=min_priority_score,
                 max_actions=max_actions,
+                selector_preset="",
+                selector_presets_file="",
                 scopes="",
                 strategies="",
                 task_kinds="",
@@ -542,6 +554,8 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--plan-file", default="")
     rapply.add_argument("--min-priority-score", type=int, default=0)
     rapply.add_argument("--max-actions", type=int, default=0)
+    rapply.add_argument("--selector-preset", default="")
+    rapply.add_argument("--selector-presets-file", default="")
     rapply.add_argument("--scopes", default="")
     rapply.add_argument("--strategies", default="")
     rapply.add_argument("--task-kinds", default="")
@@ -562,6 +576,8 @@ def build_cli() -> argparse.ArgumentParser:
     rapprove.add_argument("--plan-file", default="")
     rapprove.add_argument("--min-priority-score", type=int, default=0)
     rapprove.add_argument("--max-actions", type=int, default=0)
+    rapprove.add_argument("--selector-preset", default="")
+    rapprove.add_argument("--selector-presets-file", default="")
     rapprove.add_argument("--scopes", default="")
     rapprove.add_argument("--strategies", default="")
     rapprove.add_argument("--task-kinds", default="")
@@ -651,6 +667,8 @@ def main() -> int:
             plan_file=str(args.plan_file),
             min_priority_score=int(args.min_priority_score),
             max_actions=int(args.max_actions),
+            selector_preset=str(args.selector_preset),
+            selector_presets_file=str(args.selector_presets_file),
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),
@@ -674,6 +692,8 @@ def main() -> int:
             plan_file=str(args.plan_file),
             min_priority_score=int(args.min_priority_score),
             max_actions=int(args.max_actions),
+            selector_preset=str(args.selector_preset),
+            selector_presets_file=str(args.selector_presets_file),
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),

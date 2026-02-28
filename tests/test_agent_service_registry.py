@@ -317,15 +317,31 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 encoding="utf-8",
             )
             reg = AgentServiceRegistry(root=root)
+            presets_file = root / "selector_presets.json"
+            presets_file.write_text(
+                json.dumps(
+                    {
+                        "presentation_recovery": {
+                            "scopes": ["strategy", "task_kind"],
+                            "strategies": ["mckinsey-ppt"],
+                            "task_kinds": ["presentation"],
+                            "exclude_scopes": ["feedback"],
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             preview = reg.execute(
                 "agent.repairs.apply",
                 data_dir=str(root),
                 days=14,
                 limit=10,
                 max_actions=1,
-                scopes="strategy",
-                strategies="mckinsey-ppt",
-                exclude_scopes="feedback",
+                selector_preset="presentation_recovery",
+                selector_presets_file=str(presets_file),
                 apply=False,
                 profile_overrides_file=str(root / "profile_overrides.json"),
                 strategy_overrides_file=str(root / "strategy_overrides.json"),
@@ -334,8 +350,11 @@ class AgentServiceRegistryTest(unittest.TestCase):
             )
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("max_actions"), 1)
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selected_action_count"), 1)
-            self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("scopes"), ["strategy"])
+            self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector_preset"), "presentation_recovery")
+            self.assertTrue(preview.get("report", {}).get("selection", {}).get("selector_preset_found"))
+            self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("scopes"), ["strategy", "task_kind"])
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("strategies"), ["mckinsey-ppt"])
+            self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("task_kinds"), ["presentation"])
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("exclude_scopes"), ["feedback"])
             approval_code = str(preview.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)

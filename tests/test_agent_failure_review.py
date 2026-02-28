@@ -129,6 +129,7 @@ class AgentFailureReviewTest(unittest.TestCase):
                     {
                         "snapshot_id": "repair_snapshot_20260228_100000",
                         "ts": "2026-02-28 10:02:00",
+                        "strategy_overrides_after": {"profile_blocked_strategies": {"strict": ["mckinsey-ppt"]}},
                         "selection": {
                             "selector": {
                                 "scopes": ["strategy"],
@@ -139,6 +140,18 @@ class AgentFailureReviewTest(unittest.TestCase):
                                 "exclude_task_kinds": [],
                             }
                         },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (repair_backups / "repair_snapshot_20260228_095959.json").write_text(
+                json.dumps(
+                    {
+                        "snapshot_id": "repair_snapshot_20260228_095959",
+                        "ts": "2026-02-28 09:59:59",
+                        "strategy_overrides_after": {"profile_blocked_strategies": {"strict": []}},
                     },
                     ensure_ascii=False,
                 )
@@ -163,12 +176,16 @@ class AgentFailureReviewTest(unittest.TestCase):
             self.assertEqual(strategy_action["governance_history"]["match_count"], 1)
             self.assertEqual(strategy_action["governance_history"]["last_lifecycle"], "rolled_back")
             self.assertEqual(strategy_action["governance_history"]["last_snapshot_id"], "repair_snapshot_20260228_100000")
+            self.assertEqual(strategy_action["governance_history"]["last_compare_summary"]["component"], "strategy")
+            self.assertEqual(strategy_action["governance_history"]["last_compare_summary"]["relevant_change_count"], 1)
+            self.assertIn("rolled back after changing strategy", strategy_action["governance_history"]["last_compare_conclusion"])
             self.assertEqual(report["summary"]["actions_with_governance_history"], 1)
 
             files = write_failure_review_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())
             self.assertIn("governance:", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("compare:", Path(files["md"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
