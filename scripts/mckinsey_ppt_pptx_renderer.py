@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal native PPTX exporter for McKinsey-style deck specs."""
+"""Native PPTX exporter with layout-specific slide compositions."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from typing import Any, Dict, Iterable, List
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
 
-EMU = 914400
 SLIDE_CX = 12192000
 SLIDE_CY = 6858000
 
@@ -26,13 +25,17 @@ def _text(value: Any) -> str:
     return escape(str(value or ""))
 
 
-def _paragraph_xml(text: str, *, size: int, color: str, bold: bool = False) -> str:
-    style_bits = [f'sz="{size}"', f'lang="en-US"']
+def _lines(values: Iterable[Any]) -> List[str]:
+    return [str(value).strip() for value in values if str(value).strip()]
+
+
+def _paragraph_xml(text: str, *, size: int, color: str, bold: bool = False, align: str = "l") -> str:
+    style_bits = [f'sz="{size}"', 'lang="en-US"']
     if bold:
         style_bits.append('b="1"')
     return (
         "<a:p>"
-        "<a:pPr algn=\"l\"/>"
+        f"<a:pPr algn=\"{align}\"/>"
         f"<a:r><a:rPr {' '.join(style_bits)}><a:solidFill><a:srgbClr val=\"{color}\"/></a:solidFill></a:rPr>"
         f"<a:t>{_text(text)}</a:t></a:r>"
         f"<a:endParaRPr sz=\"{size}\" lang=\"en-US\"/>"
@@ -54,13 +57,22 @@ def _textbox_shape(
     fill: str | None = None,
     line: str | None = None,
     bold_first: bool = False,
+    prst: str = "rect",
+    align: str = "l",
 ) -> str:
     body = []
-    for idx, paragraph in enumerate(paragraphs):
-        body.append(_paragraph_xml(paragraph, size=font_size if idx == 0 or not bold_first else font_size - 200, color=color, bold=bold_first and idx == 0))
-    fill_xml = (
-        f"<a:solidFill><a:srgbClr val=\"{fill}\"/></a:solidFill>" if fill else "<a:noFill/>"
-    )
+    paras = list(paragraphs) or [""]
+    for idx, paragraph in enumerate(paras):
+        body.append(
+            _paragraph_xml(
+                paragraph,
+                size=font_size if idx == 0 or not bold_first else max(font_size - 180, 1000),
+                color=color,
+                bold=bold_first and idx == 0,
+                align=align,
+            )
+        )
+    fill_xml = f"<a:solidFill><a:srgbClr val=\"{fill}\"/></a:solidFill>" if fill else "<a:noFill/>"
     line_xml = (
         f"<a:ln w=\"12700\"><a:solidFill><a:srgbClr val=\"{line}\"/></a:solidFill></a:ln>" if line else "<a:ln><a:noFill/></a:ln>"
     )
@@ -69,7 +81,7 @@ def _textbox_shape(
         f"<p:nvSpPr><p:cNvPr id=\"{shape_id}\" name=\"{_text(name)}\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>"
         "<p:spPr>"
         f"<a:xfrm><a:off x=\"{x}\" y=\"{y}\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm>"
-        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>"
+        f"<a:prstGeom prst=\"{prst}\"><a:avLst/></a:prstGeom>"
         f"{fill_xml}{line_xml}"
         "</p:spPr>"
         "<p:txBody><a:bodyPr wrap=\"square\" lIns=\"91440\" tIns=\"45720\" rIns=\"91440\" bIns=\"45720\"/>"
@@ -80,61 +92,165 @@ def _textbox_shape(
     )
 
 
-def _background_shape(shape_id: int, paper: str, accent_soft: str) -> str:
-    return (
-        "<p:sp>"
-        f"<p:nvSpPr><p:cNvPr id=\"{shape_id}\" name=\"Background\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>"
-        "<p:spPr>"
-        f"<a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{SLIDE_CX}\" cy=\"{SLIDE_CY}\"/></a:xfrm>"
-        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>"
-        f"<a:solidFill><a:srgbClr val=\"{paper}\"/></a:solidFill>"
-        "<a:ln><a:noFill/></a:ln>"
-        "</p:spPr>"
-        "</p:sp>"
-        "<p:sp>"
-        f"<p:nvSpPr><p:cNvPr id=\"{shape_id + 1}\" name=\"Accent Band\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>"
-        "<p:spPr>"
-        f"<a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{SLIDE_CX}\" cy=\"420000\"/></a:xfrm>"
-        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>"
-        f"<a:solidFill><a:srgbClr val=\"{accent_soft}\"/></a:solidFill>"
-        "<a:ln><a:noFill/></a:ln>"
-        "</p:spPr>"
-        "</p:sp>"
-    )
+def _background_shapes(paper: str, accent_soft: str) -> List[str]:
+    return [
+        _textbox_shape(2, "Background", 0, 0, SLIDE_CX, SLIDE_CY, [""], font_size=1000, color=paper, fill=paper, line=None),
+        _textbox_shape(3, "Accent Band", 0, 0, SLIDE_CX, 420000, [""], font_size=1000, color=accent_soft, fill=accent_soft, line=None),
+    ]
+
+
+def _header_shapes(slide: Dict[str, Any], colors: Dict[str, str], *, title_y: int = 860000) -> List[str]:
+    return [
+        _textbox_shape(4, "Section", 700000, 520000, 2400000, 260000, [str(slide.get("section", ""))], font_size=1200, color=colors["accent"]),
+        _textbox_shape(5, "Title", 700000, title_y, 10300000, 880000, [str(slide.get("title_assertion", ""))], font_size=2200, color=colors["ink"], bold_first=True),
+    ]
+
+
+def _footer_shape(index: int, colors: Dict[str, str]) -> str:
+    return _textbox_shape(40, "Footer", 10850000, 6150000, 500000, 260000, [f"{index:02d}"], font_size=1200, color=colors["muted"], align="r")
+
+
+def _evidence_list(title: str, items: List[str], shape_id: int, x: int, y: int, cx: int, cy: int, colors: Dict[str, str]) -> str:
+    return _textbox_shape(shape_id, title, x, y, cx, cy, [title] + [f"• {item}" for item in items[:4]], font_size=1320, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True)
 
 
 def _cover_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
-    evidence = slide.get("evidence_needed", []) if isinstance(slide.get("evidence_needed", []), list) else []
-    metrics = request.get("key_metrics", []) if isinstance(request.get("key_metrics", []), list) else []
-    shapes = [
-        _background_shape(2, colors["paper"], colors["accent_soft"]),
-        _textbox_shape(4, "Brand", 700000, 540000, 2200000, 380000, [str(request.get("brand", ""))], font_size=1400, color=colors["accent"], fill=None),
-        _textbox_shape(5, "Title", 700000, 1100000, 9500000, 1350000, [str(slide.get("title_assertion", ""))], font_size=2800, color=colors["ink"], bold_first=True),
-        _textbox_shape(6, "Objective", 700000, 2550000, 9000000, 700000, [str(request.get("objective", "")), str(slide.get("so_what", ""))], font_size=1600, color=colors["muted"], fill=None),
-        _textbox_shape(7, "Decision Ask", 700000, 3600000, 4500000, 900000, ["Decision Ask", str(request.get("decision_ask", ""))], font_size=1600, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
-        _textbox_shape(8, "Metrics", 5600000, 3600000, 4900000, 900000, ["Signal Metrics", " | ".join(str(item) for item in metrics[:3])], font_size=1500, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
-        _textbox_shape(9, "Evidence", 700000, 4880000, 9800000, 1100000, ["Critical Proof"] + [f"• {item}" for item in evidence[:3]], font_size=1400, color=colors["ink"], fill=None, line=None, bold_first=True),
-        _textbox_shape(10, "Footer", 700000, 6180000, 10300000, 280000, [f"{slide.get('section', '')} | {slide.get('layout', '')} | native pptx export"], font_size=1000, color=colors["muted"], fill=None),
-    ]
+    evidence = _lines(slide.get("evidence_needed", []))
+    metrics = _lines(request.get("key_metrics", []))
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"])
+    shapes.extend(
+        [
+            _textbox_shape(4, "Brand", 700000, 540000, 2600000, 300000, [str(request.get("brand", ""))], font_size=1400, color=colors["accent"]),
+            _textbox_shape(5, "Title", 700000, 1080000, 9400000, 1350000, [str(slide.get("title_assertion", ""))], font_size=2800, color=colors["ink"], bold_first=True),
+            _textbox_shape(6, "Objective", 700000, 2550000, 9000000, 700000, [str(request.get("objective", "")), str(slide.get("so_what", ""))], font_size=1600, color=colors["muted"]),
+            _textbox_shape(7, "Decision Ask", 700000, 3580000, 4300000, 980000, ["Decision Ask", str(request.get("decision_ask", ""))], font_size=1550, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"),
+            _textbox_shape(8, "Theme", 5200000, 3580000, 5300000, 980000, ["Deck signal", f"Theme: {request.get('theme', '')}", " | ".join(metrics[:3])], font_size=1450, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"),
+            _textbox_shape(9, "Evidence", 700000, 4900000, 9800000, 1050000, ["Critical Proof"] + [f"• {item}" for item in evidence[:3]], font_size=1350, color=colors["ink"], bold_first=True),
+            _footer_shape(int(slide.get("index", 1)), colors),
+        ]
+    )
     return _slide_xml_from_shapes(shapes)
 
 
-def _content_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
-    evidence = slide.get("evidence_needed", []) if isinstance(slide.get("evidence_needed", []), list) else []
-    notes = slide.get("speaker_notes", []) if isinstance(slide.get("speaker_notes", []), list) else []
+def _summary_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
+    evidence = _lines(slide.get("evidence_needed", []))
+    metrics = _lines(request.get("key_metrics", []))
+    cards = [
+        (6, "Core Judgment", [str(slide.get("so_what", "")), str(slide.get("decision_link", ""))]),
+        (7, "Proof", [evidence[0] if evidence else "核心证据待补充", evidence[1] if len(evidence) > 1 else "补充一条对管理层最有说服力的数据"]),
+        (8, "Action", [str(request.get("decision_ask", "")), f"Focus metrics: {' / '.join(metrics[:2])}"]),
+    ]
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
+    positions = [(700000, 2100000), (4050000, 2100000), (7400000, 2100000)]
+    for (shape_id, title, lines), (x, y) in zip(cards, positions):
+        shapes.append(_textbox_shape(shape_id, title, x, y, 2650000, 2150000, [title] + lines, font_size=1450, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"))
+    shapes.append(_textbox_shape(9, "Metrics Strip", 700000, 4550000, 10050000, 820000, ["Signal Metrics", " | ".join(metrics[:3])], font_size=1350, color=colors["accent"], fill=colors["accent_soft"], line=None, bold_first=True, prst="roundRect", align="c"))
+    shapes.append(_footer_shape(int(slide.get("index", 2)), colors))
+    return _slide_xml_from_shapes(shapes)
+
+
+def _benchmark_slide_xml(slide: Dict[str, Any], request: Dict[str, str], colors: Dict[str, str]) -> str:
+    evidence = _lines(slide.get("evidence_needed", []))
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
+    shapes.extend(
+        [
+            _textbox_shape(6, "Baseline", 700000, 2100000, 3000000, 2400000, ["Current Position", evidence[0] if evidence else "Current baseline", evidence[1] if len(evidence) > 1 else "Capability baseline"], font_size=1400, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"),
+            _textbox_shape(7, "Gap", 4000000, 2100000, 3400000, 2400000, ["Gap That Matters", str(slide.get("so_what", "")), f"Priority metric: {request.get('key_metrics', [''])[0]}"], font_size=1400, color=colors["ink"], fill=colors["accent_soft"], line=colors["accent"], bold_first=True, prst="roundRect"),
+            _textbox_shape(8, "Winner Signal", 7700000, 2100000, 3450000, 2400000, ["Winning Pattern", evidence[2] if len(evidence) > 2 else "Leader benchmark", str(slide.get("decision_link", ""))], font_size=1400, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"),
+            _textbox_shape(9, "Footer Note", 700000, 4900000, 10400000, 760000, ["Board implication", "Benchmark only the few capabilities that materially change the result."], font_size=1250, color=colors["muted"], fill=None),
+            _footer_shape(int(slide.get("index", 5)), colors),
+        ]
+    )
+    return _slide_xml_from_shapes(shapes)
+
+
+def _options_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
+    evidence = _lines(slide.get("evidence_needed", []))
+    option_lines = [
+        ["Option A", evidence[0] if evidence else "Fastest payoff", "High near-term visibility"],
+        ["Option B", evidence[1] if len(evidence) > 1 else "Balanced risk-return", "Moderate coordination cost"],
+        ["Option C", evidence[2] if len(evidence) > 2 else "Capability-led build", str(slide.get("decision_link", ""))],
+    ]
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
+    for idx, lines in enumerate(option_lines, start=0):
+        x = 700000 + idx * 3370000
+        fill = colors["panel"] if idx != 1 else colors["accent_soft"]
+        line = colors["line"] if idx != 1 else colors["accent"]
+        shapes.append(_textbox_shape(6 + idx, f"Option{idx+1}", x, 2200000, 2900000, 2200000, lines, font_size=1380, color=colors["ink"], fill=fill, line=line, bold_first=True, prst="roundRect"))
+    shapes.append(_textbox_shape(10, "Selection", 700000, 4750000, 10100000, 760000, ["Selection stance", str(slide.get("decision_link", ""))], font_size=1280, color=colors["accent"], fill=None, bold_first=True))
+    shapes.append(_footer_shape(int(slide.get("index", 6)), colors))
+    return _slide_xml_from_shapes(shapes)
+
+
+def _portfolio_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
+    evidence = _lines(slide.get("evidence_needed", []))
+    quadrant_titles = [
+        ("Quick Wins", evidence[0] if evidence else "Short-cycle actions"),
+        ("Scale Bets", evidence[1] if len(evidence) > 1 else "High-impact programs"),
+        ("Capability Build", evidence[2] if len(evidence) > 2 else "Foundation work"),
+        ("Deprioritize", str(slide.get("decision_link", ""))),
+    ]
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
+    positions = [(700000, 2150000), (6350000, 2150000), (700000, 4200000), (6350000, 4200000)]
+    for idx, ((title, body), (x, y)) in enumerate(zip(quadrant_titles, positions), start=6):
+        fill = colors["panel"] if idx != 7 else colors["accent_soft"]
+        line = colors["line"] if idx != 7 else colors["accent"]
+        shapes.append(_textbox_shape(idx, title, x, y, 4750000, 1500000, [title, body], font_size=1360, color=colors["ink"], fill=fill, line=line, bold_first=True, prst="roundRect"))
+    shapes.append(_footer_shape(int(slide.get("index", 7)), colors))
+    return _slide_xml_from_shapes(shapes)
+
+
+def _roadmap_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
+    evidence = _lines(slide.get("evidence_needed", []))
+    phases = [
+        ("Wave 1", evidence[0] if evidence else "30-60-90 actions"),
+        ("Wave 2", evidence[1] if len(evidence) > 1 else "Core milestone"),
+        ("Wave 3", evidence[2] if len(evidence) > 2 else "Scale and governance"),
+    ]
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
+    shapes.append(_textbox_shape(6, "Timeline", 900000, 2500000, 9600000, 160000, [""], font_size=1000, color=colors["line"], fill=colors["line"], line=None))
+    for idx, (title, body) in enumerate(phases, start=0):
+        x = 900000 + idx * 3300000
+        shapes.append(_textbox_shape(7 + idx, title, x, 2050000, 2500000, 1600000, [title, body], font_size=1380, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"))
+        shapes.append(_textbox_shape(10 + idx, f"Milestone{idx+1}", x + 980000, 3800000, 540000, 540000, [str(idx + 1)], font_size=1400, color=colors["panel"], fill=colors["accent"], line=None, bold_first=True, prst="ellipse", align="c"))
+    shapes.append(_textbox_shape(20, "Roadmap Decision", 900000, 4950000, 9600000, 760000, ["Execution mandate", str(slide.get("decision_link", ""))], font_size=1280, color=colors["accent"], fill=None, bold_first=True))
+    shapes.append(_footer_shape(int(slide.get("index", 8)), colors))
+    return _slide_xml_from_shapes(shapes)
+
+
+def _generic_content_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
+    evidence = _lines(slide.get("evidence_needed", []))
+    notes = _lines(slide.get("speaker_notes", []))
     handoff = slide.get("designer_handoff", {}) if isinstance(slide.get("designer_handoff", {}), dict) else {}
-    shapes = [
-        _background_shape(2, colors["paper"], colors["accent_soft"]),
-        _textbox_shape(4, "Section", 700000, 530000, 2600000, 300000, [str(slide.get("section", ""))], font_size=1200, color=colors["accent"], fill=None),
-        _textbox_shape(5, "Title", 700000, 900000, 10300000, 850000, [str(slide.get("title_assertion", ""))], font_size=2200, color=colors["ink"], bold_first=True),
-        _textbox_shape(6, "So What", 700000, 1850000, 5000000, 850000, ["So what", str(slide.get("so_what", ""))], font_size=1450, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
-        _textbox_shape(7, "Decision", 5900000, 1850000, 4400000, 850000, ["Decision link", str(slide.get("decision_link", ""))], font_size=1450, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
-        _textbox_shape(8, "Evidence", 700000, 2950000, 5000000, 2050000, ["Evidence needed"] + [f"• {item}" for item in evidence[:4]], font_size=1350, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
-        _textbox_shape(9, "Design Handoff", 5900000, 2950000, 4400000, 2050000, ["Designer handoff", f"Primary visual: {handoff.get('primary_visual', '')}", f"Headline trim: {handoff.get('headline_density_flag', '')}"] + [f"• {item}" for item in handoff.get("asset_requests", [])[:2]], font_size=1300, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
-        _textbox_shape(10, "Speaker Notes", 700000, 5200000, 9600000, 900000, ["Presenter cue"] + [f"• {item}" for item in notes[:2]] + [f"Metric focus: {' / '.join(str(x) for x in request.get('key_metrics', [])[:2])}"], font_size=1200, color=colors["muted"], fill=None, line=None, bold_first=True),
-        _textbox_shape(11, "Footer", 10700000, 530000, 700000, 260000, [f"{slide.get('index', ''):02d}"], font_size=1300, color=colors["muted"], fill=None),
-    ]
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
+    shapes.extend(
+        [
+            _textbox_shape(6, "So What", 700000, 1850000, 5000000, 850000, ["So what", str(slide.get("so_what", ""))], font_size=1450, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
+            _textbox_shape(7, "Decision", 5900000, 1850000, 4400000, 850000, ["Decision link", str(slide.get("decision_link", ""))], font_size=1450, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
+            _evidence_list("Evidence needed", evidence, 8, 700000, 2950000, 5000000, 2050000, colors),
+            _textbox_shape(9, "Design Handoff", 5900000, 2950000, 4400000, 2050000, ["Designer handoff", f"Primary visual: {handoff.get('primary_visual', '')}", f"Headline trim: {handoff.get('headline_density_flag', '')}"] + [f"• {item}" for item in _lines(handoff.get("asset_requests", []))[:2]], font_size=1300, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True),
+            _textbox_shape(10, "Speaker Notes", 700000, 5200000, 9600000, 900000, ["Presenter cue"] + [f"• {item}" for item in notes[:2]] + [f"Metric focus: {' / '.join(_lines(request.get('key_metrics', []))[:2])}"], font_size=1200, color=colors["muted"], fill=None, bold_first=True),
+            _footer_shape(int(slide.get("index", 1)), colors),
+        ]
+    )
     return _slide_xml_from_shapes(shapes)
+
+
+def _render_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str], index: int) -> str:
+    if index == 1:
+        return _cover_slide_xml(slide, request, colors)
+    layout = str(slide.get("layout", ""))
+    if layout == "executive_summary":
+        return _summary_slide_xml(slide, request, colors)
+    if layout == "benchmark_matrix":
+        return _benchmark_slide_xml(slide, request, colors)
+    if layout == "initiative_portfolio":
+        return _portfolio_slide_xml(slide, request, colors)
+    if layout == "roadmap_track":
+        return _roadmap_slide_xml(slide, request, colors)
+    if layout == "strategic_options":
+        return _options_slide_xml(slide, request, colors)
+    return _generic_content_slide_xml(slide, request, colors)
 
 
 def _slide_xml_from_shapes(shapes: List[str]) -> str:
@@ -251,25 +367,17 @@ def _slide_master_rels_xml() -> str:
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
         "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-        "<Relationship Id=\"rId1\" "
-        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" "
-        "Target=\"../slideLayouts/slideLayout1.xml\"/>"
-        "<Relationship Id=\"rId2\" "
-        "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" "
-        "Target=\"../theme/theme1.xml\"/>"
+        "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>"
+        "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"../theme/theme1.xml\"/>"
         "</Relationships>"
     )
 
 
 def _presentation_xml(slide_count: int) -> str:
-    slide_ids = "".join(
-        f'<p:sldId id="{256 + idx}" r:id="rId{idx + 2}"/>' for idx in range(slide_count)
-    )
+    slide_ids = "".join(f'<p:sldId id="{256 + idx}" r:id="rId{idx + 2}"/>' for idx in range(slide_count))
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<p:presentation xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
-        "xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" "
-        "xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
+        "<p:presentation xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">"
         "<p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rId1\"/></p:sldMasterIdLst>"
         f"<p:sldIdLst>{slide_ids}</p:sldIdLst>"
         f"<p:sldSz cx=\"{SLIDE_CX}\" cy=\"{SLIDE_CY}\"/>"
@@ -280,33 +388,19 @@ def _presentation_xml(slide_count: int) -> str:
 
 
 def _presentation_rels_xml(slide_count: int) -> str:
-    items = [
-        "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/>"
-    ]
+    items = ["<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/>"]
     for idx in range(slide_count):
-        items.append(
-            f"<Relationship Id=\"rId{idx + 2}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{idx + 1}.xml\"/>"
-        )
-    items.extend(
-        [
-            "<Relationship Id=\"rId99\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/presProps\" Target=\"presProps.xml\"/>",
-            "<Relationship Id=\"rId100\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProps\" Target=\"viewProps.xml\"/>",
-            "<Relationship Id=\"rId101\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles\" Target=\"tableStyles.xml\"/>",
-        ]
-    )
-    return (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
-        + "".join(items)
-        + "</Relationships>"
-    )
+        items.append(f"<Relationship Id=\"rId{idx + 2}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{idx + 1}.xml\"/>")
+    items.extend([
+        "<Relationship Id=\"rId99\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/presProps\" Target=\"presProps.xml\"/>",
+        "<Relationship Id=\"rId100\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProps\" Target=\"viewProps.xml\"/>",
+        "<Relationship Id=\"rId101\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles\" Target=\"tableStyles.xml\"/>",
+    ])
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" + "".join(items) + "</Relationships>"
 
 
 def _content_types_xml(slide_count: int) -> str:
-    slide_overrides = "".join(
-        f'<Override PartName="/ppt/slides/slide{idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'
-        for idx in range(slide_count)
-    )
+    slide_overrides = "".join(f'<Override PartName="/ppt/slides/slide{idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' for idx in range(slide_count))
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
         "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
@@ -340,41 +434,31 @@ def _root_rels_xml() -> str:
 def _core_xml(topic: str) -> str:
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" "
-        "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" "
-        "xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">"
+        "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">"
         f"<dc:title>{_text(topic)}</dc:title>"
-        "<dc:creator>AgentSystem</dc:creator>"
-        "<cp:lastModifiedBy>AgentSystem</cp:lastModifiedBy>"
-        "</cp:coreProperties>"
+        "<dc:creator>AgentSystem</dc:creator><cp:lastModifiedBy>AgentSystem</cp:lastModifiedBy></cp:coreProperties>"
     )
 
 
 def _app_xml(slide_count: int) -> str:
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" "
-        "xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\">"
+        "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\">"
         "<Application>AgentSystem</Application>"
-        f"<Slides>{slide_count}</Slides>"
-        "<PresentationFormat>On-screen Show (16:9)</PresentationFormat>"
-        "</Properties>"
+        f"<Slides>{slide_count}</Slides><PresentationFormat>On-screen Show (16:9)</PresentationFormat></Properties>"
     )
 
 
 def _pres_props_xml() -> str:
-    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:presentationPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>"""
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><p:presentationPr xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"/>"
 
 
 def _view_props_xml() -> str:
-    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>"""
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><p:viewPr xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\"/>"
 
 
 def _table_styles_xml() -> str:
-    return """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>"""
+    return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><a:tblStyleLst xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" def=\"{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}\"/>"
 
 
 def render_deck_pptx(payload: Dict[str, Any], out_path: Path) -> Path:
@@ -409,7 +493,7 @@ def render_deck_pptx(payload: Dict[str, Any], out_path: Path) -> Path:
         zf.writestr("ppt/viewProps.xml", _view_props_xml())
         zf.writestr("ppt/tableStyles.xml", _table_styles_xml())
         for idx, slide in enumerate(slides, start=1):
-            xml = _cover_slide_xml(slide, request, colors) if idx == 1 else _content_slide_xml(slide, request, colors)
+            xml = _render_slide_xml(slide, request, colors, idx)
             zf.writestr(f"ppt/slides/slide{idx}.xml", xml)
             zf.writestr(f"ppt/slides/_rels/slide{idx}.xml.rels", _slide_rels_xml())
     return out_path

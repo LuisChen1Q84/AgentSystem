@@ -67,6 +67,22 @@
   - native PPTX 交付
   的闭环
 
+## 第四轮优化（PPTX 版式差异化）
+- PPTX 不再对所有内容页套一个统一模板。
+- 已按关键页型做差异化输出：
+  - `executive_summary`
+  - `benchmark_matrix`
+  - `strategic_options`
+  - `initiative_portfolio`
+  - `roadmap_track`
+- 结果是原生 PPTX 里已经开始出现：
+  - 三卡摘要页
+  - 对标差距页
+  - 三方案比较页
+  - 四象限组合页
+  - 三波路线图页
+- 这一步的意义是让最终交付更像真正的咨询 deck，而不是“同一种信息卡片重复 8 次”。
+
 ## 后续建议
 - 若要继续提升成品质量，下一步应该做 PPTX 原生导出模板，而不是再扩提示词。
 - 若要适配多个审美方向，应在 `assets/mckinsey_ppt/` 下继续扩主题与布局，而不是在 engine 里写分支。

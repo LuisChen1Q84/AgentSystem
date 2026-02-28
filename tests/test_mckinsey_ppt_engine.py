@@ -72,6 +72,10 @@ class McKinseyPptEngineTest(unittest.TestCase):
                 self.assertIn("ppt/theme/theme1.xml", names)
                 slide_xml = zf.read("ppt/slides/slide1.xml").decode("utf-8")
                 self.assertIn("Decision Ask", slide_xml)
+                slide2_xml = zf.read("ppt/slides/slide2.xml").decode("utf-8")
+                slide8_xml = zf.read("ppt/slides/slide8.xml").decode("utf-8")
+                self.assertIn("Core Judgment", slide2_xml)
+                self.assertIn("Wave 1", slide8_xml)
 
     def test_page_count_is_bounded_and_quality_review_exists(self):
         out = run_request("Growth strategy", {"page_count": 99, "theme": "ivory-ledger"})
