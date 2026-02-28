@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import tempfile
 import unittest
+from pathlib import Path
 
-from scripts.research_source_adapters import lookup_sec_filings, lookup_sources, resolve_sec_cik, search_openalex
+from scripts.research_source_adapters import lookup_sec_filings, lookup_sources, resolve_sec_cik, search_knowledge, search_openalex
 
 
 def _fake_fetcher(url: str, headers: dict[str, str]):
@@ -59,6 +61,28 @@ class ResearchSourceAdaptersTest(unittest.TestCase):
         )
         self.assertEqual(sorted(out["connectors"]), ["openalex", "sec"])
         self.assertEqual(len(out["items"]), 3)
+
+    def test_search_knowledge_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            kb = root / "知识库"
+            kb.mkdir(parents=True, exist_ok=True)
+            (kb / "支付SaaS市场研究.md").write_text("# 支付SaaS市场研究\n中国支付SaaS市场规模与竞争格局。", encoding="utf-8")
+            rows = search_knowledge("支付SaaS 市场", root=kb, db_path=root / "missing.db")
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["connector"], "knowledge")
+
+    def test_search_knowledge_prefers_title_and_market_docs(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            kb = root / "知识库"
+            (kb / "iresearch_information").mkdir(parents=True, exist_ok=True)
+            (kb / "regulation_weixin").mkdir(parents=True, exist_ok=True)
+            (kb / "iresearch_information" / "支付SaaS市场研究.md").write_text("# 支付SaaS市场研究\n市场规模与竞争格局。", encoding="utf-8")
+            (kb / "regulation_weixin" / "支付合规制度.md").write_text("# 支付合规制度\n支付机构内部控制。", encoding="utf-8")
+            rows = search_knowledge("支付SaaS 市场", root=kb, db_path=root / "missing.db")
+            self.assertGreaterEqual(len(rows), 1)
+            self.assertEqual(rows[0]["title"], "支付SaaS市场研究")
 
 
 if __name__ == "__main__":

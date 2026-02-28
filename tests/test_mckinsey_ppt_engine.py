@@ -165,6 +165,34 @@ class McKinseyPptEngineTest(unittest.TestCase):
                 self.assertIn("替代渠道试点", slide9)
                 self.assertIn("批准资源向 KA 与组合销售倾斜", slide10)
 
+    def test_research_citations_flow_into_appendix(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            out = run_request(
+                "帮我做支付市场研究deck",
+                {
+                    "page_count": 11,
+                    "research_payload": {
+                        "citation_block": [
+                            {"id": "S1", "title": "行业报告A", "url": "https://example.com/a"},
+                            {"id": "S2", "title": "监管文件B", "url": "https://example.com/b"},
+                        ]
+                    },
+                },
+                Path(td),
+            )
+            appendix = out["slides"][-1]["visual_payload"]
+            self.assertEqual(appendix["kind"], "appendix_evidence")
+            self.assertEqual(appendix["sources"][0]["label"], "行业报告A")
+            self.assertEqual(appendix["sources"][0]["detail"], "https://example.com/a")
+
+            html_text = Path(out["html_path"]).read_text(encoding="utf-8")
+            self.assertIn("https://example.com/a", html_text)
+
+            with ZipFile(out["pptx_path"]) as zf:
+                slide_xml = zf.read(f"ppt/slides/slide{len(out['slides'])}.xml").decode("utf-8")
+                self.assertIn("行业报告A", slide_xml)
+                self.assertIn("https://example.com/a", slide_xml)
+
 
 if __name__ == "__main__":
     unittest.main()

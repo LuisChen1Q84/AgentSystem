@@ -367,6 +367,7 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 '<div class="table-row">'
                 f'<span>{_esc(item.get("label", ""))}</span>'
                 f'<span>{_esc(item.get("status", ""))}</span>'
+                f'<span>{_esc(item.get("detail", ""))}</span>'
                 '</div>'
                 for item in sources
             )

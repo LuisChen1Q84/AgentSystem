@@ -130,6 +130,7 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
     research_claims = research_payload.get("claim_cards", []) if isinstance(research_payload.get("claim_cards", []), list) else []
     research_review = research_payload.get("peer_review_findings", []) if isinstance(research_payload.get("peer_review_findings", []), list) else []
     research_assumptions = research_payload.get("assumption_register", []) if isinstance(research_payload.get("assumption_register", []), list) else []
+    research_citations = research_payload.get("citation_block", []) if isinstance(research_payload.get("citation_block", []), list) else []
     topic = str(values.get("topic") or text or "Business strategy").strip()
     default_audience = "管理层" if lang == "zh" else "Management"
     default_objective = "支持管理层决策" if lang == "zh" else "Support decision making"
@@ -174,6 +175,7 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "research_claims": research_claims,
         "research_review": research_review,
         "research_assumptions": research_assumptions,
+        "research_citations": research_citations,
     }
 
 
@@ -553,6 +555,19 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
             ],
         }
     if layout == "appendix_evidence":
+        research_citations = req.get("research_citations", []) if isinstance(req.get("research_citations", []), list) else []
+        if research_citations:
+            return {
+                "kind": "appendix_evidence",
+                "sources": [
+                    {
+                        "label": str(item.get("title", item.get("id", ""))).strip(),
+                        "status": str(item.get("id", "")).strip() or ("citation" if lang == "en" else "引用"),
+                        "detail": str(item.get("url", "")).strip(),
+                    }
+                    for item in research_citations[:5]
+                ],
+            }
         return {
             "kind": "appendix_evidence",
             "sources": [

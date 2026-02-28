@@ -520,7 +520,7 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 2100000 + idx * 760000,
                 10100000,
                 580000,
-                [str(item.get("label", "")), f"Status: {item.get('status', '')}"],
+                [str(item.get("label", "")), f"Status: {item.get('status', '')}", str(item.get("detail", "")).strip()],
                 font_size=1240,
                 color=colors["ink"],
                 fill=colors["panel"],

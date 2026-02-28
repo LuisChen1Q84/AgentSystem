@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import ssl
+import sqlite3
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -13,6 +15,8 @@ from typing import Any, Callable, Dict, List
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
+KNOWLEDGE_INDEX_DB = ROOT / "日志" / "knowledge_index.db"
+KNOWLEDGE_ROOT = ROOT / "知识库"
 
 Fetcher = Callable[[str, Dict[str, str]], Dict[str, Any]]
 
@@ -27,6 +31,103 @@ def _json_get(url: str, headers: Dict[str, str] | None = None) -> Dict[str, Any]
     ctx = ssl.create_default_context()
     with urllib.request.urlopen(req, timeout=30, context=ctx) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _fts_query(db_path: Path, query: str, limit: int) -> List[Dict[str, Any]]:
+    if not db_path.exists():
+        return []
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT d.path, d.title, d.updated_date, d.source_url, d.confidence, COALESCE(d.domain, ''),
+                   snippet(docs_fts, 2, '[', ']', '...', 12) AS snippet_text
+            FROM docs_fts
+            JOIN docs d ON d.path = docs_fts.path
+            WHERE docs_fts MATCH ?
+            ORDER BY bm25(docs_fts)
+            LIMIT ?
+            """,
+            (query, max(1, min(20, limit))),
+        ).fetchall()
+    finally:
+        conn.close()
+    out: List[Dict[str, Any]] = []
+    for idx, row in enumerate(rows, start=1):
+        path, title, updated, source_url, confidence, domain, snippet = row
+        out.append(
+            {
+                "id": f"K{idx}",
+                "connector": "knowledge",
+                "title": str(title or Path(path).stem).strip(),
+                "type": str(domain or "knowledge_doc").strip(),
+                "url": str(source_url or "").strip(),
+                "path": str(path).strip(),
+                "updated_at": str(updated or "").strip(),
+                "confidence": float(confidence or 0.0),
+                "snippet": str(snippet or "").strip(),
+            }
+        )
+    return out
+
+
+def _fallback_file_search(root: Path, query: str, limit: int) -> List[Dict[str, Any]]:
+    terms = [part for part in re.split(r"[\s,/，]+", query.lower()) if part][:6]
+    if not terms:
+        return []
+    market_terms = {"市场", "industry", "market", "竞争", "sizing", "tam", "sam", "som", "行业"}
+    rows: List[Dict[str, Any]] = []
+    for idx, path in enumerate(root.rglob("*.md"), start=1):
+        if "日志" in path.parts:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        title = path.stem.lower()
+        body = text[:6000].lower()
+        title_hits = sum(1 for term in terms if term in title)
+        body_hits = sum(1 for term in terms if term in body)
+        if title_hits <= 0 and body_hits < 2:
+            continue
+        score = float(title_hits * 3 + body_hits * 1.2)
+        path_text = str(path).lower()
+        if any(term in market_terms for term in terms):
+            if "iresearch_information" in path_text:
+                score += 4.0
+            elif "important_document" in path_text:
+                score += 2.0
+            elif "regulation" in path_text:
+                score -= 1.0
+        rows.append(
+            {
+                "id": f"K{idx}",
+                "connector": "knowledge",
+                "title": path.stem,
+                "type": "knowledge_doc",
+                "url": "",
+                "path": str(path),
+                "updated_at": "",
+                "confidence": 50.0 + score * 4.0,
+                "snippet": text[:180].replace("\n", " "),
+                "_score": score,
+            }
+        )
+    rows.sort(key=lambda x: (-float(x.get("_score", 0.0)), -float(x.get("confidence", 0.0)), str(x.get("title", ""))))
+    return [{k: v for k, v in row.items() if k != "_score"} for row in rows[:limit]]
+
+
+def search_knowledge(query: str, *, limit: int = 5, db_path: Path = KNOWLEDGE_INDEX_DB, root: Path = KNOWLEDGE_ROOT) -> List[Dict[str, Any]]:
+    clean = query.strip()
+    if not clean:
+        return []
+    rows = _fts_query(db_path, clean, limit)
+    if rows:
+        return rows
+    if root.exists():
+        return _fallback_file_search(root, clean, limit)
+    return []
 
 
 def search_openalex(query: str, *, per_page: int = 5, mailto: str = "", fetcher: Fetcher | None = None) -> List[Dict[str, Any]]:
@@ -132,7 +233,7 @@ def lookup_sources(query: str, params: Dict[str, Any], *, fetcher: Fetcher | Non
     if isinstance(connectors, str):
         connectors = [part.strip() for part in connectors.split(",") if part.strip()]
     if not isinstance(connectors, list) or not connectors:
-        connectors = ["openalex"]
+        connectors = ["knowledge", "openalex"]
         if str(params.get("company", "")).strip() or str(params.get("ticker", "")).strip() or str(params.get("sec_identifier", "")).strip():
             connectors.append("sec")
 
@@ -143,7 +244,9 @@ def lookup_sources(query: str, params: Dict[str, Any], *, fetcher: Fetcher | Non
     for connector in connectors:
         name = str(connector).strip().lower()
         try:
-            if name == "openalex":
+            if name == "knowledge":
+                source_results.extend(search_knowledge(query, limit=per_page))
+            elif name == "openalex":
                 source_results.extend(search_openalex(query, per_page=per_page, mailto=mailto, fetcher=fetcher))
             elif name == "sec":
                 identifier = (
