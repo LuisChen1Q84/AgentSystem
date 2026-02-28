@@ -92,6 +92,23 @@ def _textbox_shape(
     )
 
 
+def _picture_shape(shape_id: int, name: str, rel_id: str, x: int, y: int, cx: int, cy: int) -> str:
+    return (
+        "<p:pic>"
+        f"<p:nvPicPr><p:cNvPr id=\"{shape_id}\" name=\"{_text(name)}\"/>"
+        "<p:cNvPicPr/><p:nvPr/></p:nvPicPr>"
+        "<p:blipFill>"
+        f"<a:blip r:embed=\"{rel_id}\"/>"
+        "<a:stretch><a:fillRect/></a:stretch>"
+        "</p:blipFill>"
+        "<p:spPr>"
+        f"<a:xfrm><a:off x=\"{x}\" y=\"{y}\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm>"
+        "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>"
+        "</p:spPr>"
+        "</p:pic>"
+    )
+
+
 def _block_shape(
     shape_id: int,
     name: str,
@@ -513,8 +530,9 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
     prisma_flow = payload.get("prisma_flow", []) if isinstance(payload.get("prisma_flow", []), list) else []
     quality_rows = payload.get("quality_rows", []) if isinstance(payload.get("quality_rows", []), list) else []
     appendix_assets = payload.get("appendix_assets", []) if isinstance(payload.get("appendix_assets", []), list) else []
+    media_rel_id = str(slide.get("_media_rel_id", "")).strip()
     shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
-    for idx, item in enumerate(sources[:2], start=0):
+    for idx, item in enumerate(sources[: (1 if media_rel_id else 2)], start=0):
         shapes.append(
             _textbox_shape(
                 6 + idx,
@@ -531,6 +549,8 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 bold_first=True,
             )
         )
+    if media_rel_id:
+        shapes.append(_picture_shape(9, "PRISMA Diagram", media_rel_id, 700000, 2880000, 4500000, 3000000))
     prisma_lines = ["PRISMA flow"] + [
         f"{item.get('stage', '')}: {item.get('count', '')}"
         for item in prisma_flow[:5]
@@ -551,8 +571,8 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
             _textbox_shape(
                 10,
                 "Prisma Summary",
-                700000,
-                3700000,
+                700000 if not media_rel_id else 5500000,
+                3700000 if not media_rel_id else 2100000,
                 4500000,
                 1600000,
                 prisma_lines,
@@ -569,7 +589,7 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 11,
                 "Quality Summary",
                 5500000,
-                2100000,
+                3900000 if media_rel_id else 2100000,
                 4600000,
                 1500000,
                 quality_lines,
@@ -586,9 +606,9 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 12,
                 "Appendix Assets",
                 5500000,
-                3800000,
+                5500000 if media_rel_id else 3800000,
                 4600000,
-                1500000,
+                900000,
                 asset_lines,
                 font_size=1120,
                 color=colors["ink"],
@@ -691,14 +711,22 @@ def _slide_xml_from_shapes(shapes: List[str]) -> str:
     )
 
 
-def _slide_rels_xml() -> str:
-    return (
-        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+def _slide_rels_xml(media_target: str = "") -> str:
+    items = [
         "<Relationship Id=\"rId1\" "
         "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" "
         "Target=\"../slideLayouts/slideLayout1.xml\"/>"
-        "</Relationships>"
+    ]
+    if media_target:
+        items.append(
+            f"<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" "
+            f"Target=\"../media/{_text(media_target)}\"/>"
+        )
+    return (
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+        "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+        + "".join(items)
+        + "</Relationships>"
     )
 
 
@@ -821,13 +849,15 @@ def _presentation_rels_xml(slide_count: int) -> str:
     return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" + "".join(items) + "</Relationships>"
 
 
-def _content_types_xml(slide_count: int) -> str:
+def _content_types_xml(slide_count: int, *, include_svg: bool = False) -> str:
     slide_overrides = "".join(f'<Override PartName="/ppt/slides/slide{idx + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' for idx in range(slide_count))
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
         "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
         "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
         "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+        + ("<Default Extension=\"svg\" ContentType=\"image/svg+xml\"/>" if include_svg else "")
+        +
         "<Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>"
         "<Override PartName=\"/ppt/slideMasters/slideMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>"
         "<Override PartName=\"/ppt/slideLayouts/slideLayout1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>"
@@ -898,9 +928,22 @@ def render_deck_pptx(payload: Dict[str, Any], out_path: Path) -> Path:
         "muted": _hex(colors_raw.get("muted"), "667085"),
     }
     slides = payload.get("slides", []) if isinstance(payload.get("slides", []), list) else []
+    slide_media: Dict[int, Dict[str, str]] = {}
+    for idx, slide in enumerate(slides, start=1):
+        visual_payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
+        if str(visual_payload.get("kind", "")).strip() != "appendix_evidence":
+            continue
+        assets = visual_payload.get("appendix_assets", []) if isinstance(visual_payload.get("appendix_assets", []), list) else []
+        for pos, item in enumerate(assets, start=1):
+            asset_path = Path(str(item.get("path", "")).strip())
+            if asset_path.exists() and asset_path.suffix.lower() == ".svg":
+                media_name = f"appendix_prisma_{idx}_{pos}.svg"
+                slide_media[idx] = {"rel_id": "rId2", "source_path": str(asset_path), "media_name": media_name}
+                slide["_media_rel_id"] = "rId2"
+                break
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(out_path, "w", compression=ZIP_DEFLATED) as zf:
-        zf.writestr("[Content_Types].xml", _content_types_xml(len(slides)))
+        zf.writestr("[Content_Types].xml", _content_types_xml(len(slides), include_svg=bool(slide_media)))
         zf.writestr("_rels/.rels", _root_rels_xml())
         zf.writestr("docProps/core.xml", _core_xml(str(request.get("topic", "Premium deck"))))
         zf.writestr("docProps/app.xml", _app_xml(len(slides)))
@@ -914,10 +957,15 @@ def render_deck_pptx(payload: Dict[str, Any], out_path: Path) -> Path:
         zf.writestr("ppt/presProps.xml", _pres_props_xml())
         zf.writestr("ppt/viewProps.xml", _view_props_xml())
         zf.writestr("ppt/tableStyles.xml", _table_styles_xml())
+        for item in slide_media.values():
+            zf.writestr(f"ppt/media/{item['media_name']}", Path(item["source_path"]).read_bytes())
         for idx, slide in enumerate(slides, start=1):
             xml = _render_slide_xml(slide, request, colors, idx)
             zf.writestr(f"ppt/slides/slide{idx}.xml", xml)
-            zf.writestr(f"ppt/slides/_rels/slide{idx}.xml.rels", _slide_rels_xml())
+            zf.writestr(
+                f"ppt/slides/_rels/slide{idx}.xml.rels",
+                _slide_rels_xml(slide_media.get(idx, {}).get("media_name", "")),
+            )
     return out_path
 
 

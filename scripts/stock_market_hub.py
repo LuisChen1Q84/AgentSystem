@@ -401,6 +401,7 @@ def render_md(payload: Dict[str, Any]) -> str:
             f"- bear case: {debate.get('bear_case', '')}",
             f"- resolved tension: {debate.get('resolved_tension', '')}",
             f"- risk level: {risk_gate.get('risk_level', '')} | flags: {risk_gate.get('risk_flags', [])}",
+            f"- source gate: {risk_gate.get('source_gate_status', '')} | source flags: {risk_gate.get('source_risk_flags', [])}",
             "",
             "| Role | Stance | Thesis |",
             "|---|---|---|",
@@ -445,6 +446,14 @@ def render_md(payload: Dict[str, Any]) -> str:
             lines.extend(["", "### Source Watchouts", ""])
             for item in source_evidence_map.get("watchouts", [])[:6]:
                 lines.append(f"- {item}")
+        source_risk_gate = payload.get("source_risk_gate", {}) if isinstance(payload.get("source_risk_gate", {}), dict) else {}
+        if source_risk_gate:
+            lines.extend(["", "### Source Risk Gate", ""])
+            lines.append(f"- status: {source_risk_gate.get('status','')}")
+            lines.append(f"- flags: {source_risk_gate.get('flags', [])}")
+            lines.append(f"- missing_connectors: {source_risk_gate.get('missing_connectors', [])}")
+            lines.append(f"- confidence_spread: {source_risk_gate.get('confidence_spread', '')}")
+            lines.append(f"- recency_spread: {source_risk_gate.get('recency_spread', '')}")
         lines.extend(["", ""])
     return "\n".join(lines)
 

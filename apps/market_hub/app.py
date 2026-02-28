@@ -165,6 +165,40 @@ def _source_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _source_risk_gate(summary: dict[str, Any], requested_connectors: list[str]) -> dict[str, Any]:
+    connector_confidence = summary.get("connector_confidence", {}) if isinstance(summary.get("connector_confidence", {}), dict) else {}
+    connector_recency = summary.get("connector_recency", {}) if isinstance(summary.get("connector_recency", {}), dict) else {}
+    requested = [str(item).strip() for item in requested_connectors if str(item).strip()]
+    available = list((summary.get("by_connector", {}) if isinstance(summary.get("by_connector", {}), dict) else {}).keys())
+    confidence_values = list(connector_confidence.values())
+    recency_values = list(connector_recency.values())
+    missing_connectors = [item for item in requested if item not in available]
+    confidence_spread = round(max(confidence_values) - min(confidence_values), 1) if len(confidence_values) >= 2 else 0.0
+    recency_spread = int(max(recency_values) - min(recency_values)) if len(recency_values) >= 2 else 0
+    low_confidence_present = bool(confidence_values and min(confidence_values) < 65.0)
+    connector_conflict = bool((confidence_spread >= 20.0 and low_confidence_present) or recency_spread >= 25)
+    evidence_freshness_warning = int(summary.get("source_recency_score", 0) or 0) < 60
+    source_gap = bool(missing_connectors or len(available) < max(1, min(2, len(requested))))
+    flags: list[str] = []
+    if connector_conflict:
+        flags.append("connector_conflict")
+    if evidence_freshness_warning:
+        flags.append("evidence_freshness_warning")
+    if source_gap:
+        flags.append("source_gap")
+    status = "elevated" if flags else "clear"
+    return {
+        "status": status,
+        "flags": flags,
+        "connector_conflict": connector_conflict,
+        "confidence_spread": confidence_spread,
+        "recency_spread": recency_spread,
+        "evidence_freshness_warning": evidence_freshness_warning,
+        "source_gap": source_gap,
+        "missing_connectors": missing_connectors,
+    }
+
+
 class MarketHubApp:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
@@ -194,6 +228,8 @@ class MarketHubApp:
         source_intel = lookup_sources(query, lookup_params)
         payload["source_intel"] = source_intel
         payload["source_evidence_map"] = _source_summary(source_intel.get("items", []) if isinstance(source_intel.get("items", []), list) else [])
+        requested_connectors = source_intel.get("connectors", []) if isinstance(source_intel.get("connectors", []), list) else []
+        payload["source_risk_gate"] = _source_risk_gate(payload["source_evidence_map"], requested_connectors)
         if isinstance(payload.get("market_committee", {}), dict):
             payload["market_committee"]["source_connectors"] = source_intel.get("connectors", [])
             payload["market_committee"]["source_item_count"] = len(source_intel.get("items", []))
@@ -203,4 +239,17 @@ class MarketHubApp:
             payload["market_committee"]["connector_confidence"] = payload["source_evidence_map"].get("connector_confidence", {})
             payload["market_committee"]["source_recency_score"] = payload["source_evidence_map"].get("source_recency_score", 0)
             payload["market_committee"]["sec_form_digest"] = payload["source_evidence_map"].get("sec_form_digest", [])
+            payload["market_committee"]["source_risk_gate"] = payload["source_risk_gate"]
+            payload["market_committee"]["source_gate_status"] = payload["source_risk_gate"].get("status", "clear")
+            payload["market_committee"]["source_risk_flags"] = payload["source_risk_gate"].get("flags", [])
+            risk_gate = payload["market_committee"].get("risk_gate", {}) if isinstance(payload["market_committee"].get("risk_gate", {}), dict) else {}
+            if risk_gate:
+                source_flags = list(payload["source_risk_gate"].get("flags", []))
+                existing_flags = risk_gate.get("risk_flags", []) if isinstance(risk_gate.get("risk_flags", []), list) else []
+                risk_gate["source_gate_status"] = payload["source_risk_gate"].get("status", "clear")
+                risk_gate["source_risk_flags"] = source_flags
+                risk_gate["risk_flags"] = list(dict.fromkeys(existing_flags + source_flags))
+                if source_flags and risk_gate.get("risk_level") == "low":
+                    risk_gate["risk_level"] = "medium"
+                payload["market_committee"]["risk_gate"] = risk_gate
         return payload

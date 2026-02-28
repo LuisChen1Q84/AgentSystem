@@ -195,6 +195,11 @@ class McKinseyPptEngineTest(unittest.TestCase):
 
     def test_systematic_review_appendix_flows_into_html_and_pptx(self):
         with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            prisma_svg = Path(td) / "prisma.svg"
+            prisma_svg.write_text(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"160\" height=\"80\"><rect width=\"160\" height=\"80\" fill=\"#ffffff\"/><text x=\"10\" y=\"40\">PRISMA</text></svg>",
+                encoding="utf-8",
+            )
             out = run_request(
                 "帮我生成系统综述deck",
                 {
@@ -208,7 +213,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
                             "quality_scorecard": [{"study_id": "S1", "risk_of_bias": "low", "certainty": "moderate"}],
                         },
                         "appendix_assets": [
-                            {"label": "PRISMA SVG", "path": "/tmp/prisma.svg"},
+                            {"label": "PRISMA SVG", "path": str(prisma_svg)},
                         ],
                     },
                 },
@@ -222,12 +227,17 @@ class McKinseyPptEngineTest(unittest.TestCase):
 
             html_text = Path(out["html_path"]).read_text(encoding="utf-8")
             self.assertIn("PRISMA Flow", html_text)
-            self.assertIn("/tmp/prisma.svg", html_text)
+            self.assertIn(str(prisma_svg), html_text)
 
             with ZipFile(out["pptx_path"]) as zf:
                 slide_xml = zf.read(f"ppt/slides/slide{len(out['slides'])}.xml").decode("utf-8")
+                slide_rels = zf.read(f"ppt/slides/_rels/slide{len(out['slides'])}.xml.rels").decode("utf-8")
                 self.assertIn("identified: 120", slide_xml)
-                self.assertIn("PRISMA SVG: /tmp/prisma.svg", slide_xml)
+                self.assertIn("rId2", slide_xml)
+                self.assertIn("image", slide_rels)
+                self.assertIn("appendix_prisma_", slide_rels)
+                media_files = [name for name in zf.namelist() if name.startswith("ppt/media/")]
+                self.assertTrue(any(name.endswith(".svg") for name in media_files))
 
 
 if __name__ == "__main__":

@@ -38,6 +38,31 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertIn("knowledge", out.get("market_committee", {}).get("connector_confidence", {}))
             self.assertGreater(out.get("market_committee", {}).get("source_recency_score", 0), 0)
             self.assertEqual(out.get("market_committee", {}).get("sec_form_digest", [])[0]["form"], "10-K")
+            self.assertEqual(out.get("source_risk_gate", {}).get("status"), "clear")
+            self.assertEqual(out.get("market_committee", {}).get("source_gate_status"), "clear")
+
+    def test_run_committee_marks_source_gate_when_connectors_are_stale_or_missing(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app = MarketHubApp(root=root)
+            with patch("apps.market_hub.app.load_cfg", return_value={"defaults": {"default_universe": "global_core"}}), \
+                patch("apps.market_hub.app.pick_symbols", return_value=["SPY"]), \
+                patch("apps.market_hub.app.run_committee", return_value={"ok": True, "market_committee": {"participants": [], "risk_gate": {"risk_level": "low", "risk_flags": []}}}), \
+                patch(
+                    "apps.market_hub.app.lookup_sources",
+                    return_value={
+                        "connectors": ["knowledge", "sec"],
+                        "items": [
+                            {"title": "Stale local note", "connector": "knowledge", "path": "/tmp/doc.md"},
+                        ],
+                        "errors": [],
+                    },
+                ):
+                out = app.run_committee("分析SPY", {"ticker": "SPY"})
+            self.assertTrue(out.get("source_risk_gate", {}).get("source_gap"))
+            self.assertTrue(out.get("source_risk_gate", {}).get("evidence_freshness_warning"))
+            self.assertIn("source_gap", out.get("market_committee", {}).get("risk_gate", {}).get("risk_flags", []))
+            self.assertEqual(out.get("market_committee", {}).get("risk_gate", {}).get("risk_level"), "medium")
 
 
 if __name__ == "__main__":
