@@ -109,6 +109,16 @@ def _changed(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
     return json.dumps(before, ensure_ascii=False, sort_keys=True) != json.dumps(after, ensure_ascii=False, sort_keys=True)
 
 
+def _snapshot_id(ts: str) -> str:
+    compact = (
+        str(ts)
+        .replace("-", "")
+        .replace(":", "")
+        .replace(" ", "_")
+    )
+    return f"repair_snapshot_{compact}"
+
+
 def build_repair_apply_plan(
     *,
     data_dir: Path,
@@ -116,6 +126,7 @@ def build_repair_apply_plan(
     limit: int,
     profile_overrides_file: Path,
     strategy_overrides_file: Path,
+    backup_dir: Path,
 ) -> Dict[str, Any]:
     ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     runs = _load_jsonl(data_dir / "agent_runs.jsonl")
@@ -157,6 +168,8 @@ def build_repair_apply_plan(
         "targets": {
             "profile_overrides_file": str(profile_overrides_file),
             "strategy_overrides_file": str(strategy_overrides_file),
+            "backup_dir": str(backup_dir),
+            "snapshot_id": _snapshot_id(ts),
         },
     }
 
@@ -164,13 +177,69 @@ def build_repair_apply_plan(
 def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
     profile_path = Path(str(plan.get("targets", {}).get("profile_overrides_file", "")))
     strategy_path = Path(str(plan.get("targets", {}).get("strategy_overrides_file", "")))
+    backup_dir = Path(str(plan.get("targets", {}).get("backup_dir", "")))
+    snapshot_id = str(plan.get("targets", {}).get("snapshot_id", "")).strip() or _snapshot_id(str(plan.get("ts", "")))
     profile_payload = plan.get("proposed", {}).get("profile_overrides", {})
     strategy_payload = plan.get("proposed", {}).get("strategy_overrides", {})
+    current_profile = plan.get("current", {}).get("profile_overrides", {})
+    current_strategy = plan.get("current", {}).get("strategy_overrides", {})
     profile_path.parent.mkdir(parents=True, exist_ok=True)
     strategy_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_file = backup_dir / f"{snapshot_id}.json"
+    snapshot_file.write_text(
+        json.dumps(
+            {
+                "snapshot_id": snapshot_id,
+                "ts": plan.get("ts", ""),
+                "profile_overrides_file": str(profile_path),
+                "strategy_overrides_file": str(strategy_path),
+                "profile_overrides_before": current_profile,
+                "strategy_overrides_before": current_strategy,
+                "profile_overrides_after": profile_payload,
+                "strategy_overrides_after": strategy_payload,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     profile_path.write_text(json.dumps(profile_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     strategy_path.write_text(json.dumps(strategy_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"profile_overrides_file": str(profile_path), "strategy_overrides_file": str(strategy_path)}
+    return {
+        "profile_overrides_file": str(profile_path),
+        "strategy_overrides_file": str(strategy_path),
+        "snapshot_file": str(snapshot_file),
+        "snapshot_id": snapshot_id,
+    }
+
+
+def rollback_repair_plan(*, backup_dir: Path, snapshot_id: str = "") -> Dict[str, Any]:
+    backup_dir = Path(backup_dir)
+    candidates = sorted(backup_dir.glob("repair_snapshot_*.json"))
+    if snapshot_id.strip():
+        snapshot_file = backup_dir / f"{snapshot_id.strip()}.json"
+    elif candidates:
+        snapshot_file = candidates[-1]
+    else:
+        raise FileNotFoundError(f"no repair snapshots found in {backup_dir}")
+
+    snapshot = _load_json(snapshot_file, {})
+    profile_path = Path(str(snapshot.get("profile_overrides_file", "")).strip())
+    strategy_path = Path(str(snapshot.get("strategy_overrides_file", "")).strip())
+    profile_before = snapshot.get("profile_overrides_before", {})
+    strategy_before = snapshot.get("strategy_overrides_before", {})
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    strategy_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text(json.dumps(profile_before, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    strategy_path.write_text(json.dumps(strategy_before, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {
+        "snapshot_file": str(snapshot_file),
+        "snapshot_id": str(snapshot.get("snapshot_id", "")),
+        "profile_overrides_file": str(profile_path),
+        "strategy_overrides_file": str(strategy_path),
+    }
 
 
 def render_repair_plan_md(plan: Dict[str, Any]) -> str:
@@ -193,6 +262,8 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         "",
         f"- profile_overrides_file: {plan.get('targets', {}).get('profile_overrides_file', '')}",
         f"- strategy_overrides_file: {plan.get('targets', {}).get('strategy_overrides_file', '')}",
+        f"- backup_dir: {plan.get('targets', {}).get('backup_dir', '')}",
+        f"- snapshot_id: {plan.get('targets', {}).get('snapshot_id', '')}",
         "",
         "## Repair Actions",
         "",

@@ -122,6 +122,7 @@ def _repair_apply_cmd(
     out_dir: str,
     profile_overrides_file: str,
     strategy_overrides_file: str,
+    backup_dir: str,
 ) -> int:
     _print_json(
         reg.execute(
@@ -133,6 +134,20 @@ def _repair_apply_cmd(
             out_dir=out_dir,
             profile_overrides_file=profile_overrides_file,
             strategy_overrides_file=strategy_overrides_file,
+            backup_dir=backup_dir,
+        )
+    )
+    return 0
+
+
+def _repair_rollback_cmd(reg: AgentServiceRegistry, snapshot_id: str, data_dir: str, out_dir: str, backup_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.repairs.rollback",
+            snapshot_id=snapshot_id,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+            backup_dir=backup_dir,
         )
     )
     return 0
@@ -227,7 +242,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "failure-review [days], repair-apply [days], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "failure-review [days], repair-apply [days], repair-rollback [snapshot_id], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -261,7 +276,10 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             _failure_review_cmd(reg, days=int(args[0]) if args else 14, limit=10, data_dir=data_dir, out_dir="")
             continue
         if cmd == "repair-apply":
-            _repair_apply_cmd(reg, days=int(args[0]) if args else 14, limit=10, apply=False, data_dir=data_dir, out_dir="", profile_overrides_file="", strategy_overrides_file="")
+            _repair_apply_cmd(reg, days=int(args[0]) if args else 14, limit=10, apply=False, data_dir=data_dir, out_dir="", profile_overrides_file="", strategy_overrides_file="", backup_dir="")
+            continue
+        if cmd == "repair-rollback":
+            _repair_rollback_cmd(reg, snapshot_id=str(args[0]) if args else "", data_dir=data_dir, out_dir="", backup_dir="")
             continue
         if cmd == "run-inspect":
             if not args:
@@ -337,6 +355,12 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--out-dir", default="")
     rapply.add_argument("--profile-overrides-file", default="")
     rapply.add_argument("--strategy-overrides-file", default="")
+    rapply.add_argument("--backup-dir", default="")
+
+    rrollback = sp.add_parser("repair-rollback")
+    rrollback.add_argument("--snapshot-id", default="")
+    rrollback.add_argument("--out-dir", default="")
+    rrollback.add_argument("--backup-dir", default="")
 
     inspect = sp.add_parser("run-inspect")
     inspect.add_argument("--run-id", required=True)
@@ -396,6 +420,15 @@ def main() -> int:
             out_dir=str(args.out_dir),
             profile_overrides_file=str(args.profile_overrides_file),
             strategy_overrides_file=str(args.strategy_overrides_file),
+            backup_dir=str(args.backup_dir),
+        )
+    if args.cmd == "repair-rollback":
+        return _repair_rollback_cmd(
+            reg,
+            snapshot_id=str(args.snapshot_id),
+            data_dir=data_dir,
+            out_dir=str(args.out_dir),
+            backup_dir=str(args.backup_dir),
         )
     if args.cmd == "run-inspect":
         return _run_inspect_cmd(reg, run_id=str(args.run_id), data_dir=data_dir, out_dir=str(args.out_dir))

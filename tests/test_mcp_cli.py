@@ -43,10 +43,11 @@ class MCPCliTest(unittest.TestCase):
                 cooldown_sec=300,
                 metrics_days=3,
                 breaker_path=Path(td) / "breaker.json",
-            )
-            self.assertTrue(out["ok"])
-            self.assertTrue(out["candidates"])
-            self.assertIn("selected", out)
+        )
+        self.assertTrue(out["ok"])
+        self.assertTrue(out["candidates"])
+        self.assertIn("selected", out)
+        self.assertIn("delivery_protocol", out)
 
     def test_run_dry_run(self):
         out = cmd_run(
@@ -62,6 +63,7 @@ class MCPCliTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out["mode"], "dry-run")
         self.assertIn("selected", out)
+        self.assertIn("delivery_protocol", out)
 
     def test_run_fallback_success_with_fake_runtime(self):
         with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
@@ -83,6 +85,7 @@ class MCPCliTest(unittest.TestCase):
             self.assertTrue(out["ok"])
             self.assertIn("run_file", out)
             self.assertGreaterEqual(len(out["attempts"]), 1)
+            self.assertIn("delivery_protocol", out)
 
     def test_replay_dry_run(self):
         with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:

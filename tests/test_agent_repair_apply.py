@@ -116,6 +116,7 @@ class AgentRepairApplyTest(unittest.TestCase):
                 limit=10,
                 profile_overrides_file=profile_path,
                 strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
             )
             self.assertTrue(plan["failure_review"]["repair_actions"])
             self.assertTrue(plan["changes"]["profile_overrides_changed"] or plan["changes"]["strategy_overrides_changed"])
@@ -127,6 +128,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             applied = apply_repair_plan(plan)
             self.assertTrue(Path(applied["profile_overrides_file"]).exists())
             self.assertTrue(Path(applied["strategy_overrides_file"]).exists())
+            self.assertTrue(Path(applied["snapshot_file"]).exists())
 
             strategy_payload = json.loads(strategy_path.read_text(encoding="utf-8"))
             strict_blocks = strategy_payload.get("profile_blocked_strategies", {}).get("strict", [])

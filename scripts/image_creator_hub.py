@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from core.registry.delivery_protocol import build_delivery_protocol
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 CFG_DEFAULT = ROOT / "config" / "image_creator_hub.toml"
 
@@ -1073,6 +1074,10 @@ def aggregate_logs(log_dir: Path, days: int = 7) -> Dict[str, Any]:
 
 
 def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[str, Any]:
+    def finish(payload: Dict[str, Any]) -> Dict[str, Any]:
+        payload["delivery_protocol"] = build_delivery_protocol("image.generate", payload, entrypoint="scripts.image_creator_hub")
+        return payload
+
     styles = _style_catalog()
     language = detect_language(text)
     logger = ObserveLogger(_log_dir_from_cfg(cfg))
@@ -1080,22 +1085,22 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
     low = text.lower()
     ask_cap = ("你能做什么" in text) or ("what can you do" in low)
     if ask_cap:
-        return {
+        return finish({
             "ok": True,
             "mode": "capabilities",
             "language": language,
             **_capabilities(language, styles),
-        }
+        })
 
     style_id = _resolve_style_id(text, values, styles, cfg)
     if not style_id:
         title = "请选择要生成的风格" if language == "zh" else "Choose a style"
-        return {
+        return finish({
             "ok": True,
             "mode": "choose-style",
             "language": language,
             "ui": _wizard(language, title, _style_options(language, styles)),
-        }
+        })
 
     spec = styles[style_id]
     try_mode = _is_try_mode(text, values)
@@ -1128,13 +1133,13 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
             if language == "zh"
             else f"Missing required inputs: {', '.join(ask)}. You can also try a sample first."
         )
-        return {
+        return finish({
             "ok": True,
             "mode": "need-input",
             "language": language,
             "route": {"subagent": spec.group, "style_id": spec.style_id},
             "message": msg,
-        }
+        })
 
     prompt = _replace_tokens(spec.template, merged)
     ref_files = _normalize_reference_files(values, cfg)
@@ -1189,7 +1194,7 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
         logger=logger,
     )
 
-    return {
+    payload = {
         "ok": True,
         "mode": "generated",
         "language": language,
@@ -1208,6 +1213,7 @@ def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[
             next_actions=["提升一致性可增加参考图", "对风格偏差可切换 style_id 重试"],
         ),
     }
+    return finish(payload)
 
 
 def build_cli() -> argparse.ArgumentParser:

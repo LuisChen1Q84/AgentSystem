@@ -24,6 +24,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertEqual(out["mode"], "deck-spec-generated")
             self.assertIn("loop_closure", out)
             self.assertIn("prompt_packet", out)
+            self.assertIn("delivery_protocol", out)
             self.assertEqual(out["request"]["page_count"], 8)
 
             items = out["deliver_assets"]["items"]
@@ -35,6 +36,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
         out = run_request("Growth strategy", {"page_count": 99})
         self.assertTrue(out["ok"])
         self.assertEqual(out["request"]["page_count"], 20)
+        self.assertIn("delivery_protocol", out)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+from core.registry.delivery_protocol import build_delivery_protocol
 
 try:
     from scripts.mcp_connector import MCPError, Registry, Router, Runtime, parse_params
@@ -305,7 +306,7 @@ def cmd_route_smart(
     )
     selected = ranked[0] if ranked else None
     risk = _derive_risk(selected["server"], selected["tool"]) if selected else {"level": "low", "reasons": []}
-    return {
+    payload = {
         "ok": True,
         "mode": "route-smart",
         "request": {"text": text},
@@ -313,6 +314,8 @@ def cmd_route_smart(
         "candidates": ranked,
         "risk": risk,
     }
+    payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.route_smart")
+    return payload
 
 
 def cmd_run(
@@ -346,13 +349,15 @@ def cmd_run(
     )
 
     if not ranked:
-        return {"ok": False, "error": "no candidates"}
+        payload = {"ok": False, "error": "no candidates"}
+        payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
+        return payload
 
     if dry_run:
         chosen = ranked[0]
         params = dict(chosen.get("default_params", {}))
         params.update(override_params)
-        return {
+        payload = {
             "ok": True,
             "mode": "dry-run",
             "selected": chosen,
@@ -360,6 +365,8 @@ def cmd_run(
             "candidates": ranked,
             "risk": _derive_risk(chosen["server"], chosen["tool"]),
         }
+        payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
+        return payload
 
     run_id = _run_id("mcp")
     attempts: List[Dict[str, Any]] = []
@@ -455,6 +462,8 @@ def cmd_run(
     run_file = runs_dir / f"{run_id}.json"
     _write_json(run_file, payload)
     payload["run_file"] = str(run_file)
+    payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
+    _write_json(run_file, payload)
     return payload
 
 
