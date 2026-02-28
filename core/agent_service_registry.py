@@ -13,6 +13,7 @@ ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 from core.registry.service_protocol import ServiceSpec, error_response
 from services.agent_runtime_service import AgentRuntimeService
 from services.data_service import DataService
+from services.diagnostics_service import DiagnosticsService
 from services.feedback_service import FeedbackService
 from services.image_service import ImageService
 from services.market_service import MarketService
@@ -29,6 +30,7 @@ class AgentServiceRegistry:
         self.runtime = AgentRuntimeService(root=self.root)
         self.observe = ObservabilityService(root=self.root)
         self.feedback = FeedbackService(root=self.root)
+        self.diagnostics = DiagnosticsService(root=self.root)
         self.recommend = RecommendationService(root=self.root)
         self.slo = SLOService(root=self.root)
         self.mcp = MCPService(root=self.root)
@@ -45,6 +47,7 @@ class AgentServiceRegistry:
             "agent.feedback.add": ServiceSpec("agent.feedback.add", "feedback", "Append feedback for a run", "low"),
             "agent.feedback.stats": ServiceSpec("agent.feedback.stats", "feedback", "Summarize collected feedback", "low"),
             "agent.feedback.pending": ServiceSpec("agent.feedback.pending", "feedback", "List runs pending feedback", "low"),
+            "agent.diagnostics": ServiceSpec("agent.diagnostics", "observability", "Build agent diagnostics dashboard", "low"),
             "mcp.run": ServiceSpec("mcp.run", "tooling", "Run MCP candidate routing and execution", "medium"),
             "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
             "image.generate": ServiceSpec("image.generate", "creative", "Generate image assets through image hub", "medium"),
@@ -99,6 +102,13 @@ class AgentServiceRegistry:
             limit=max(1, int(kwargs.get("limit", 10))),
             task_kind=str(kwargs.get("task_kind", "")),
             profile=str(kwargs.get("profile", "")),
+        ).to_dict()
+
+    def _exec_agent_diagnostics(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.diagnostics.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            out_dir=str(kwargs.get("out_dir", "")),
         ).to_dict()
 
     def _exec_mcp_run(self, **kwargs: Any) -> Dict[str, Any]:

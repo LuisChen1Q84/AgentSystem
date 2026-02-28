@@ -24,6 +24,9 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a3.cmd, "call")
         self.assertEqual(a3.service, "agent.feedback.stats")
 
+        a4 = parser.parse_args(["diagnostics"])
+        self.assertEqual(a4.cmd, "diagnostics")
+
     def test_feedback_add_and_stats_cmd(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -86,6 +89,36 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertIn("summary", payload)
+
+    def test_diagnostics_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": True,
+                        "profile": "strict",
+                        "task_kind": "report",
+                        "duration_ms": 10,
+                        "selected_strategy": "mcp-generalist",
+                        "attempt_count": 1,
+                        "clarify_needed": False,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._diagnostics_cmd(reg, days=14, data_dir=str(root), out_dir=str(root / "out"))
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("report", payload)
 
 
 if __name__ == "__main__":

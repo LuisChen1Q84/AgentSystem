@@ -14,15 +14,15 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from apps.creative_studio.app import CreativeStudioApp
 from core.registry.service_protocol import ServiceEnvelope, ok_response
-from scripts.mckinsey_ppt_engine import run_request
 
 
 class PPTService:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
+        self.app = CreativeStudioApp(root=self.root)
 
     def run(self, text: str, params: Dict[str, Any]) -> ServiceEnvelope:
-        out_dir = Path(str(params.get("out_dir", ""))).resolve() if str(params.get("out_dir", "")).strip() else None
-        payload = run_request(text, params, out_dir=out_dir)
-        return ok_response("ppt.generate", payload=payload, meta={"entrypoint": "mckinsey_ppt_engine"})
+        payload = self.app.generate_ppt(text, params)
+        return ok_response("ppt.generate", payload=payload, meta={"entrypoint": "apps.creative_studio"})

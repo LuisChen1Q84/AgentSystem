@@ -14,6 +14,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         names = {x["name"] for x in rows}
         self.assertIn("agent.run", names)
         self.assertIn("agent.feedback.pending", names)
+        self.assertIn("agent.diagnostics", names)
         self.assertIn("mcp.run", names)
         self.assertIn("ppt.generate", names)
         self.assertIn("image.generate", names)
@@ -91,6 +92,33 @@ class AgentServiceRegistryTest(unittest.TestCase):
         out = reg.execute("data.query", params={})
         self.assertFalse(out.get("ok", True))
         self.assertEqual(out.get("error_code"), "missing_query_spec")
+
+    def test_execute_agent_diagnostics(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": True,
+                        "profile": "strict",
+                        "task_kind": "report",
+                        "duration_ms": 10,
+                        "selected_strategy": "mcp-generalist",
+                        "attempt_count": 1,
+                        "clarify_needed": False,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry()
+            out = reg.execute("agent.diagnostics", data_dir=str(root), days=14, out_dir=str(root / "out"))
+            self.assertTrue(out.get("ok", False))
+            self.assertIn("report", out)
+            self.assertIn("deliver_assets", out)
 
 
 if __name__ == "__main__":

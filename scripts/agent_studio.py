@@ -23,7 +23,6 @@ except ModuleNotFoundError:  # direct
     from agent_service_registry import AgentServiceRegistry  # type: ignore
 
 
-
 def _parse_params_json(params_json: str) -> Dict[str, Any]:
     if not params_json.strip():
         return {}
@@ -33,10 +32,8 @@ def _parse_params_json(params_json: str) -> Dict[str, Any]:
     return raw
 
 
-
 def _print_json(out: Dict[str, Any]) -> None:
     print(json.dumps(out, ensure_ascii=False, indent=2))
-
 
 
 def _print_run_summary(out: Dict[str, Any]) -> None:
@@ -44,6 +41,8 @@ def _print_run_summary(out: Dict[str, Any]) -> None:
         _print_json({"ok": False, "error": "invalid_result"})
         return
     selected = out.get("result", {}).get("selected", {}) if isinstance(out.get("result", {}), dict) else {}
+    if not isinstance(selected, dict):
+        selected = {}
     _print_json(
         {
             "ok": bool(out.get("ok", False)),
@@ -57,7 +56,6 @@ def _print_run_summary(out: Dict[str, Any]) -> None:
             "delivery_bundle": out.get("delivery_bundle", {}),
         }
     )
-
 
 
 def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, params_json: str, data_dir: str) -> int:
@@ -80,11 +78,9 @@ def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, 
     return 0 if bool(out.get("ok", False)) else 1
 
 
-
 def _observe_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
     _print_json(reg.execute("agent.observe", days=days, data_dir=data_dir or str(ROOT / "日志/agent_os")))
     return 0
-
 
 
 def _recommend_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
@@ -92,11 +88,21 @@ def _recommend_cmd(reg: AgentServiceRegistry, days: int, data_dir: str) -> int:
     return 0
 
 
+def _diagnostics_cmd(reg: AgentServiceRegistry, days: int, data_dir: str, out_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.diagnostics",
+            days=days,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+        )
+    )
+    return 0
+
 
 def _slo_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
     _print_json(reg.execute("agent.slo", data_dir=data_dir or str(ROOT / "日志/agent_os"), cfg={"defaults": {}}))
     return 0
-
 
 
 def _pending_cmd(reg: AgentServiceRegistry, limit: int, task_kind: str, profile: str, data_dir: str) -> int:
@@ -110,7 +116,6 @@ def _pending_cmd(reg: AgentServiceRegistry, limit: int, task_kind: str, profile:
         )
     )
     return 0
-
 
 
 def _feedback_add_cmd(
@@ -136,17 +141,14 @@ def _feedback_add_cmd(
     return 0
 
 
-
 def _feedback_stats_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
     _print_json(reg.execute("agent.feedback.stats", data_dir=data_dir or str(ROOT / "日志/agent_os")))
     return 0
 
 
-
 def _services_cmd(reg: AgentServiceRegistry) -> int:
     _print_json({"ok": True, "services": reg.list_services()})
     return 0
-
 
 
 def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
@@ -160,10 +162,9 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
     return 0 if bool(out.get("ok", False)) else 1
 
 
-
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
-        "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], pending [limit], "
+        "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
         "feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
@@ -190,6 +191,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "recommend":
             _recommend_cmd(reg, days=int(args[0]) if args else 30, data_dir=data_dir)
+            continue
+        if cmd == "diagnostics":
+            _diagnostics_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="")
             continue
         if cmd == "pending":
             _pending_cmd(reg, limit=int(args[0]) if args else 10, task_kind="", profile="", data_dir=data_dir)
@@ -219,10 +223,8 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             params_json = args[1] if len(args) > 1 else "{}"
             _call_cmd(reg, service=service, params_json=params_json)
             continue
-        # fallback: direct natural language task
         _run_cmd(reg, text=line, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir)
     return 0
-
 
 
 def build_cli() -> argparse.ArgumentParser:
@@ -241,6 +243,10 @@ def build_cli() -> argparse.ArgumentParser:
 
     rec = sp.add_parser("recommend")
     rec.add_argument("--days", type=int, default=30)
+
+    diag = sp.add_parser("diagnostics")
+    diag.add_argument("--days", type=int, default=14)
+    diag.add_argument("--out-dir", default="")
 
     sp.add_parser("slo")
 
@@ -267,7 +273,6 @@ def build_cli() -> argparse.ArgumentParser:
     return p
 
 
-
 def main() -> int:
     args = build_cli().parse_args()
     reg = AgentServiceRegistry(root=ROOT)
@@ -279,6 +284,8 @@ def main() -> int:
         return _observe_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "recommend":
         return _recommend_cmd(reg, days=int(args.days), data_dir=data_dir)
+    if args.cmd == "diagnostics":
+        return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "slo":
         return _slo_cmd(reg, data_dir=data_dir)
     if args.cmd == "pending":

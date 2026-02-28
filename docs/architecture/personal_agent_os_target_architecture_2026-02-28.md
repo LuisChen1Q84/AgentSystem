@@ -27,6 +27,7 @@ Its core job is to classify tasks, apply governance, route to the best capabilit
 4. Capability services
 - `services/agent_runtime_service.py`
 - `services/observability_service.py`
+- `services/diagnostics_service.py`
 - `services/feedback_service.py`
 - `services/recommendation_service.py`
 - `services/slo_service.py`
@@ -37,9 +38,9 @@ Its core job is to classify tasks, apply governance, route to the best capabilit
 - `services/data_service.py`
 
 5. Domain applications
-- DataHub stack
-- Stock market hub
-- Creative stack (PPT / image)
+- `apps/datahub/app.py`
+- `apps/market_hub/app.py`
+- `apps/creative_studio/app.py`
 
 ## Canonical runtime flow
 
