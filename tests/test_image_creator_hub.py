@@ -18,6 +18,7 @@ class ImageCreatorHubTest(unittest.TestCase):
         self.assertEqual(out["mode"], "capabilities")
         self.assertEqual(out["ui"]["type"], "genui-form-wizard")
         self.assertIn("delivery_bundle", out)
+        self.assertIn("delivery_object", out)
         self.assertIn("delivery_protocol", out)
 
     def test_need_input_when_missing_required(self):
@@ -26,6 +27,7 @@ class ImageCreatorHubTest(unittest.TestCase):
         self.assertEqual(out["mode"], "need-input")
         self.assertIn("地标", out["message"])
         self.assertIn("delivery_bundle", out)
+        self.assertIn("evidence_object", out)
         self.assertIn("delivery_protocol", out)
 
     def test_generated_try_mode(self):
@@ -35,6 +37,7 @@ class ImageCreatorHubTest(unittest.TestCase):
         self.assertIn("prompt_packet", out)
         self.assertIn("loop_closure", out)
         self.assertIn("delivery_bundle", out)
+        self.assertIn("run_object", out)
         self.assertIn("delivery_protocol", out)
         items = out["deliver_assets"]["items"]
         self.assertEqual(len(items), 2)

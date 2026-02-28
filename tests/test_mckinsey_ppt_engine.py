@@ -25,6 +25,9 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("loop_closure", out)
             self.assertIn("prompt_packet", out)
             self.assertIn("delivery_bundle", out)
+            self.assertIn("delivery_object", out)
+            self.assertIn("evidence_object", out)
+            self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
             self.assertEqual(out["request"]["page_count"], 8)
 
@@ -38,6 +41,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out["request"]["page_count"], 20)
         self.assertIn("delivery_bundle", out)
+        self.assertIn("delivery_object", out)
         self.assertIn("delivery_protocol", out)
 
 

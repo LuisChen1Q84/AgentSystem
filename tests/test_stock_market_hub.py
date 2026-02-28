@@ -55,6 +55,8 @@ class StockMarketHubTest(unittest.TestCase):
                 out = run_report(cfg, "分析SPY", "global_core", ["SPY"], False)
             self.assertEqual(out["query"], "分析SPY")
             self.assertIn("delivery_bundle", out)
+            self.assertIn("run_object", out)
+            self.assertIn("evidence_object", out)
             self.assertIn("delivery_protocol", out)
             self.assertEqual(out["delivery_protocol"]["service"], "market.report")
             self.assertTrue(Path(out["report_md"]).exists())

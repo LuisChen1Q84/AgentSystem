@@ -162,3 +162,49 @@ def build_delivery_bundle_payload(service: str, payload: Dict[str, Any], *, entr
         "followups": list(protocol.get("followups", [])) if isinstance(protocol.get("followups", []), list) else [],
         "delivery_card": delivery_card,
     }
+
+
+def build_evidence_object(service: str, payload: Dict[str, Any], *, entrypoint: str) -> Dict[str, Any]:
+    protocol = build_delivery_protocol(service, payload, entrypoint=entrypoint)
+    evidence = dict(protocol.get("evidence", {}))
+    risk = protocol.get("risk", {}) if isinstance(protocol.get("risk", {}), dict) else {}
+    return {
+        "service": service,
+        "entrypoint": entrypoint,
+        "ok": bool(payload.get("ok", False)),
+        "artifacts": list(protocol.get("artifacts", [])),
+        "evidence": evidence,
+        "risk_level": str(risk.get("level", "")),
+        "risk_notes": list(risk.get("notes", [])) if isinstance(risk.get("notes", []), list) else [],
+    }
+
+
+def build_run_object(service: str, payload: Dict[str, Any], *, entrypoint: str) -> Dict[str, Any]:
+    protocol = build_delivery_protocol(service, payload, entrypoint=entrypoint)
+    evidence = protocol.get("evidence", {}) if isinstance(protocol.get("evidence", {}), dict) else {}
+    return {
+        "service": service,
+        "entrypoint": entrypoint,
+        "run_id": str(payload.get("run_id", "")),
+        "ts": str(payload.get("ts", "")),
+        "ok": bool(payload.get("ok", False)),
+        "status": "ok" if bool(payload.get("ok", False)) else "error",
+        "mode": str(payload.get("mode", "")),
+        "summary": str(protocol.get("summary", "")),
+        "artifact_count": int(evidence.get("artifact_count", 0) or 0),
+        "item_count": int(evidence.get("item_count", 0) or 0),
+    }
+
+
+def build_output_objects(service: str, payload: Dict[str, Any], *, entrypoint: str) -> Dict[str, Any]:
+    protocol = build_delivery_protocol(service, payload, entrypoint=entrypoint)
+    bundle = build_delivery_bundle_payload(service, payload, entrypoint=entrypoint)
+    evidence_object = build_evidence_object(service, payload, entrypoint=entrypoint)
+    run_object = build_run_object(service, payload, entrypoint=entrypoint)
+    return {
+        "delivery_protocol": protocol,
+        "delivery_bundle": bundle,
+        "delivery_object": bundle,
+        "evidence_object": evidence_object,
+        "run_object": run_object,
+    }

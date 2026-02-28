@@ -7,6 +7,7 @@ from pathlib import Path
 from core.kernel.repair_apply import (
     apply_repair_plan,
     build_repair_apply_plan,
+    compare_repair_snapshots,
     list_repair_snapshots,
     rollback_repair_plan,
     write_repair_plan_files,
@@ -127,6 +128,8 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertTrue(plan["failure_review"]["repair_actions"])
             self.assertTrue(plan["changes"]["profile_overrides_changed"] or plan["changes"]["strategy_overrides_changed"])
             self.assertGreater(plan["preview_diff"]["change_count"], 0)
+            self.assertTrue(plan["approval"]["required"])
+            self.assertTrue(plan["approval"]["code"])
 
             files = write_repair_plan_files(plan, root / "out")
             self.assertTrue(Path(files["json"]).exists())
@@ -156,6 +159,26 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(rollback["restored_components"], ["strategy"])
             self.assertEqual(json.loads(profile_path.read_text(encoding="utf-8")), profile_after_apply)
             self.assertEqual(json.loads(strategy_path.read_text(encoding="utf-8")), strategy_before_apply)
+
+            second_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+            )
+            second_plan["targets"]["snapshot_id"] = "repair_snapshot_20260228_120000"
+            second_plan["approval"]["code"] = "manualcode2"
+            apply_repair_plan(second_plan)
+
+            compared = compare_repair_snapshots(
+                backup_dir=root / "repair_backups",
+                snapshot_id="repair_snapshot_20260228_120000",
+                base_snapshot_id=applied["snapshot_id"],
+            )
+            self.assertEqual(compared["selected_snapshot_id"], "repair_snapshot_20260228_120000")
+            self.assertIn("compare_diff", compared)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.failures.review", names)
         self.assertIn("agent.policy.tune", names)
         self.assertIn("agent.repairs.apply", names)
+        self.assertIn("agent.repairs.compare", names)
         self.assertIn("agent.repairs.list", names)
         self.assertIn("agent.repairs.rollback", names)
         self.assertIn("agent.run.inspect", names)
@@ -45,6 +46,9 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(out.get("ok", False))
             self.assertIn("task_kind", out)
             self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_object", out)
+            self.assertIn("evidence_object", out)
+            self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
 
     def test_feedback_services(self):
@@ -312,12 +316,39 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 encoding="utf-8",
             )
             reg = AgentServiceRegistry(root=root)
+            preview = reg.execute(
+                "agent.repairs.apply",
+                data_dir=str(root),
+                days=14,
+                limit=10,
+                apply=False,
+                profile_overrides_file=str(root / "profile_overrides.json"),
+                strategy_overrides_file=str(root / "strategy_overrides.json"),
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+            )
+            approval_code = str(preview.get("approval", {}).get("code", ""))
+            self.assertTrue(approval_code)
+            denied = reg.execute(
+                "agent.repairs.apply",
+                data_dir=str(root),
+                days=14,
+                limit=10,
+                apply=True,
+                profile_overrides_file=str(root / "profile_overrides.json"),
+                strategy_overrides_file=str(root / "strategy_overrides.json"),
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+            )
+            self.assertFalse(denied.get("ok", True))
+            self.assertEqual(denied.get("error_code"), "approval_code_required")
             out = reg.execute(
                 "agent.repairs.apply",
                 data_dir=str(root),
                 days=14,
                 limit=10,
                 apply=True,
+                approve_code=approval_code,
                 profile_overrides_file=str(root / "profile_overrides.json"),
                 strategy_overrides_file=str(root / "strategy_overrides.json"),
                 backup_dir=str(root / "backups"),
@@ -342,6 +373,17 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(listed.get("ok", False))
             self.assertIn("delivery_bundle", listed)
             self.assertEqual(listed.get("report", {}).get("count"), 1)
+
+            compared = reg.execute(
+                "agent.repairs.compare",
+                data_dir=str(root),
+                snapshot_id=str(out.get("applied_files", {}).get("snapshot_id", "")),
+                base_snapshot_id="",
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+            )
+            self.assertFalse(compared.get("ok", True))
+            self.assertEqual(compared.get("error_code"), "repair_compare_failed")
 
     def test_execute_agent_repairs_rollback(self):
         with tempfile.TemporaryDirectory() as td:
@@ -407,12 +449,25 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 encoding="utf-8",
             )
             reg = AgentServiceRegistry(root=root)
+            preview = reg.execute(
+                "agent.repairs.apply",
+                data_dir=str(root),
+                days=14,
+                limit=10,
+                apply=False,
+                profile_overrides_file=str(root / "profile_overrides.json"),
+                strategy_overrides_file=str(root / "strategy_overrides.json"),
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+            )
+            approval_code = str(preview.get("approval", {}).get("code", ""))
             applied = reg.execute(
                 "agent.repairs.apply",
                 data_dir=str(root),
                 days=14,
                 limit=10,
                 apply=True,
+                approve_code=approval_code,
                 profile_overrides_file=str(root / "profile_overrides.json"),
                 strategy_overrides_file=str(root / "strategy_overrides.json"),
                 backup_dir=str(root / "backups"),

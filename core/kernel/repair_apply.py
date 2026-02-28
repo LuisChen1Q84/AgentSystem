@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Dict, List
@@ -139,6 +140,19 @@ def _snapshot_id(ts: str) -> str:
     return f"repair_snapshot_{compact}"
 
 
+def _approval_code(snapshot_id: str, preview_diff: Dict[str, Any], changes: Dict[str, Any]) -> str:
+    raw = json.dumps(
+        {
+            "snapshot_id": snapshot_id,
+            "preview_diff": preview_diff,
+            "changes": changes,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()[:10]
+
+
 def build_repair_apply_plan(
     *,
     data_dir: Path,
@@ -165,6 +179,22 @@ def build_repair_apply_plan(
     strategy_diff = _diff_rows(current_strategy, proposed_strategy)
 
     return {
+        "approval": {
+            "required": bool(profile_diff or strategy_diff),
+            "code": _approval_code(
+                _snapshot_id(ts),
+                {
+                    "profile_overrides": profile_diff,
+                    "strategy_overrides": strategy_diff,
+                    "change_count": len(profile_diff) + len(strategy_diff),
+                },
+                {
+                    "profile_overrides_changed": _changed(current_profile, proposed_profile),
+                    "strategy_overrides_changed": _changed(current_strategy, proposed_strategy),
+                },
+            ),
+            "reason": "explicit approval required before overwrite" if (profile_diff or strategy_diff) else "no changes detected",
+        },
         "ts": ts,
         "summary": {
             "days": max(1, int(days)),
@@ -227,6 +257,7 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
                 "strategy_overrides_after": strategy_payload,
                 "changes": plan.get("changes", {}),
                 "preview_diff": plan.get("preview_diff", {}),
+                "approval": plan.get("approval", {}),
             },
             ensure_ascii=False,
             indent=2,
@@ -260,6 +291,7 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
                 "profile_overrides_file": str(snapshot.get("profile_overrides_file", "")),
                 "strategy_overrides_file": str(snapshot.get("strategy_overrides_file", "")),
                 "change_count": int(preview_diff.get("change_count", len(profile_rows) + len(strategy_rows)) or 0),
+                "approval_code": str(snapshot.get("approval", {}).get("code", "")) if isinstance(snapshot.get("approval", {}), dict) else "",
                 "changed_components": [
                     component
                     for component, changed in (
@@ -273,6 +305,56 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
     return {"backup_dir": str(backup_dir), "rows": rows, "count": len(rows)}
 
 
+def compare_repair_snapshots(
+    *,
+    backup_dir: Path,
+    snapshot_id: str = "",
+    base_snapshot_id: str = "",
+) -> Dict[str, Any]:
+    backup_dir = Path(backup_dir)
+    candidates = sorted(backup_dir.glob("repair_snapshot_*.json"))
+    if not candidates:
+        raise FileNotFoundError(f"no repair snapshots found in {backup_dir}")
+    selected_file = backup_dir / f"{snapshot_id.strip()}.json" if snapshot_id.strip() else candidates[-1]
+    if snapshot_id.strip() and not selected_file.exists():
+        raise FileNotFoundError(f"repair snapshot not found: {selected_file}")
+    if base_snapshot_id.strip():
+        base_file = backup_dir / f"{base_snapshot_id.strip()}.json"
+        if not base_file.exists():
+            raise FileNotFoundError(f"repair snapshot not found: {base_file}")
+    else:
+        ordered = sorted(candidates)
+        current_index = ordered.index(selected_file) if selected_file in ordered else len(ordered) - 1
+        if current_index <= 0:
+            raise FileNotFoundError("need at least two snapshots to compare")
+        base_file = ordered[current_index - 1]
+
+    selected = _load_json(selected_file, {})
+    base = _load_json(base_file, {})
+    selected_profile = selected.get("profile_overrides_after", {})
+    base_profile = base.get("profile_overrides_after", {})
+    selected_strategy = selected.get("strategy_overrides_after", {})
+    base_strategy = base.get("strategy_overrides_after", {})
+    profile_diff = _diff_rows(base_profile, selected_profile)
+    strategy_diff = _diff_rows(base_strategy, selected_strategy)
+    return {
+        "backup_dir": str(backup_dir),
+        "selected_snapshot_id": str(selected.get("snapshot_id", selected_file.stem)),
+        "base_snapshot_id": str(base.get("snapshot_id", base_file.stem)),
+        "selected_snapshot_file": str(selected_file),
+        "base_snapshot_file": str(base_file),
+        "summary": {
+            "profile_change_count": len(profile_diff),
+            "strategy_change_count": len(strategy_diff),
+            "change_count": len(profile_diff) + len(strategy_diff),
+        },
+        "compare_diff": {
+            "profile_overrides": profile_diff,
+            "strategy_overrides": strategy_diff,
+        },
+    }
+
+
 def rollback_repair_plan(
     *,
     backup_dir: Path,
@@ -284,6 +366,8 @@ def rollback_repair_plan(
     candidates = sorted(backup_dir.glob("repair_snapshot_*.json"))
     if snapshot_id.strip():
         snapshot_file = backup_dir / f"{snapshot_id.strip()}.json"
+        if not snapshot_file.exists():
+            raise FileNotFoundError(f"repair snapshot not found: {snapshot_file}")
     elif candidates:
         snapshot_file = candidates[-1]
     else:
@@ -336,6 +420,8 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- strategy_overrides_file: {plan.get('targets', {}).get('strategy_overrides_file', '')}",
         f"- backup_dir: {plan.get('targets', {}).get('backup_dir', '')}",
         f"- snapshot_id: {plan.get('targets', {}).get('snapshot_id', '')}",
+        f"- approval_required: {plan.get('approval', {}).get('required', False)}",
+        f"- approval_code: {plan.get('approval', {}).get('code', '')}",
         "",
         "## Preview Diff",
         "",
@@ -398,8 +484,40 @@ def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str
         if not isinstance(row, dict):
             continue
         lines.append(
-            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)}"
+            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | approval={row.get('approval_code', '')}"
         )
+    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return {"json": str(json_path), "md": str(md_path)}
+
+
+def write_snapshot_compare_files(report: Dict[str, Any], out_dir: Path) -> Dict[str, str]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "agent_repair_compare_latest.json"
+    md_path = out_dir / "agent_repair_compare_latest.md"
+    summary = report.get("summary", {}) if isinstance(report.get("summary", {}), dict) else {}
+    lines = [
+        f"# Agent Repair Snapshot Compare | {report.get('selected_snapshot_id', '')} vs {report.get('base_snapshot_id', '')}",
+        "",
+        f"- backup_dir: {report.get('backup_dir', '')}",
+        f"- change_count: {summary.get('change_count', 0)}",
+        f"- profile_change_count: {summary.get('profile_change_count', 0)}",
+        f"- strategy_change_count: {summary.get('strategy_change_count', 0)}",
+        "",
+    ]
+    for section in ("profile_overrides", "strategy_overrides"):
+        rows = report.get("compare_diff", {}).get(section, [])
+        lines.append(f"## {section}")
+        lines.append("")
+        if not isinstance(rows, list) or not rows:
+            lines.append("- none")
+            lines.append("")
+            continue
+        for row in rows[:30]:
+            if not isinstance(row, dict):
+                continue
+            lines.append(f"- [{row.get('change', '')}] {row.get('path', '')}: {json.dumps(row.get('before'), ensure_ascii=False)} -> {json.dumps(row.get('after'), ensure_ascii=False)}")
+        lines.append("")
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"json": str(json_path), "md": str(md_path)}

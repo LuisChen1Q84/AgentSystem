@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 
-from core.registry.delivery_protocol import build_delivery_bundle_payload, build_delivery_protocol
+from core.registry.delivery_protocol import build_delivery_bundle_payload, build_delivery_protocol, build_evidence_object, build_output_objects, build_run_object
 from core.registry.service_diagnostics import annotate_payload, build_service_diagnostics
 
 
@@ -22,6 +22,9 @@ class ServiceDiagnosticsTest(unittest.TestCase):
         payload = annotate_payload("data.query", {"ok": True, "items": [1, 2, 3]}, entrypoint="apps.datahub")
         self.assertIn("service_diagnostics", payload)
         self.assertIn("delivery_bundle", payload)
+        self.assertIn("delivery_object", payload)
+        self.assertIn("evidence_object", payload)
+        self.assertIn("run_object", payload)
         self.assertIn("delivery_protocol", payload)
         self.assertEqual(payload["service_diagnostics"]["item_count"], 3)
         self.assertEqual(payload["delivery_protocol"]["evidence"]["item_count"], 3)
@@ -59,6 +62,15 @@ class ServiceDiagnosticsTest(unittest.TestCase):
         self.assertEqual(payload["summary"], "Generated images")
         self.assertEqual(len(payload["artifacts"]), 1)
         self.assertIn("payload_key_count", payload["evidence"])
+
+    def test_build_run_and_evidence_objects(self):
+        payload = {"ok": True, "mode": "generated", "run_id": "r1", "ts": "2026-02-28 12:00:00", "deliver_assets": {"items": [{"path": "out/a.json"}]}}
+        run_object = build_run_object("ppt.generate", payload, entrypoint="scripts.mckinsey_ppt_engine")
+        evidence_object = build_evidence_object("ppt.generate", payload, entrypoint="scripts.mckinsey_ppt_engine")
+        output_objects = build_output_objects("ppt.generate", payload, entrypoint="scripts.mckinsey_ppt_engine")
+        self.assertEqual(run_object["run_id"], "r1")
+        self.assertEqual(evidence_object["risk_level"], "low")
+        self.assertIn("delivery_object", output_objects)
 
 
 if __name__ == "__main__":

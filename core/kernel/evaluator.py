@@ -19,12 +19,12 @@ if str(ROOT) not in sys.path:
 try:
     from core.kernel.models import DeliveryBundle, EvaluationRecord
     from core.kernel.strategy_evaluator import evaluate_payload
-    from core.registry.delivery_protocol import build_delivery_protocol
+    from core.registry.delivery_protocol import build_evidence_object, build_output_objects
     from scripts.agent_delivery_card import build_card, render_md as render_delivery_md
 except ModuleNotFoundError:  # direct
     from models import DeliveryBundle, EvaluationRecord  # type: ignore
     from strategy_evaluator import evaluate_payload  # type: ignore
-    from delivery_protocol import build_delivery_protocol  # type: ignore
+    from delivery_protocol import build_evidence_object, build_output_objects  # type: ignore
     from agent_delivery_card import build_card, render_md as render_delivery_md  # type: ignore
 
 
@@ -155,15 +155,33 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
         {"path": str(log_dir / "agent_deliveries.jsonl")},
     ]
     payload["delivery_bundle"] = delivery_bundle.to_dict()
-    payload["delivery_protocol"] = build_delivery_protocol(
+    payload["delivery_object"] = delivery_bundle.to_dict()
+    standardized = build_output_objects(
         "agent.run",
         {
             "ok": bool(payload.get("ok", False)),
             "summary": delivery_bundle.summary,
             "artifacts": delivery_bundle.artifacts,
             "loop_closure": payload.get("loop_closure", {}),
+            "run_id": str(payload.get("run_id", "")),
+            "ts": str(payload.get("ts", "")),
+            "mode": str(payload.get("mode", "")),
         },
         entrypoint="core.kernel.evaluator",
     )
+    payload["delivery_protocol"] = standardized["delivery_protocol"]
+    payload["evidence_object"] = build_evidence_object(
+        "agent.run",
+        {
+            "ok": bool(payload.get("ok", False)),
+            "summary": delivery_bundle.summary,
+            "artifacts": delivery_bundle.artifacts,
+            "run_id": str(payload.get("run_id", "")),
+            "ts": str(payload.get("ts", "")),
+            "mode": str(payload.get("mode", "")),
+        },
+        entrypoint="core.kernel.evaluator",
+    )
+    payload["run_object"] = standardized["run_object"]
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"items": delivery_bundle.artifacts}

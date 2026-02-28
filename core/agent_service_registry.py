@@ -23,7 +23,7 @@ from services.observability_service import ObservabilityService
 from services.policy_service import PolicyService
 from services.ppt_service import PPTService
 from services.recommendation_service import RecommendationService
-from services.repair_apply_service import RepairApplyService, RepairListService, RepairRollbackService
+from services.repair_apply_service import RepairApplyService, RepairCompareService, RepairListService, RepairRollbackService
 from services.run_diagnostics_service import RunDiagnosticsService
 from services.slo_service import SLOService
 
@@ -38,6 +38,7 @@ class AgentServiceRegistry:
         self.failure_review = FailureReviewService(root=self.root)
         self.recommend = RecommendationService(root=self.root)
         self.repair_apply = RepairApplyService(root=self.root)
+        self.repair_compare = RepairCompareService(root=self.root)
         self.repair_list = RepairListService(root=self.root)
         self.repair_rollback = RepairRollbackService(root=self.root)
         self.slo = SLOService(root=self.root)
@@ -62,6 +63,7 @@ class AgentServiceRegistry:
             "agent.diagnostics": ServiceSpec("agent.diagnostics", "observability", "Build agent diagnostics dashboard", "low"),
             "agent.failures.review": ServiceSpec("agent.failures.review", "observability", "Review recent failed runs with grouped diagnostics", "low"),
             "agent.repairs.apply": ServiceSpec("agent.repairs.apply", "governance", "Build or apply controlled repair overrides", "medium"),
+            "agent.repairs.compare": ServiceSpec("agent.repairs.compare", "governance", "Compare repair snapshots and diff their approved changes", "low"),
             "agent.repairs.list": ServiceSpec("agent.repairs.list", "governance", "List available repair snapshots and backups", "low"),
             "agent.repairs.rollback": ServiceSpec("agent.repairs.rollback", "governance", "Rollback the latest or specified repair snapshot", "medium"),
             "mcp.run": ServiceSpec("mcp.run", "tooling", "Run MCP candidate routing and execution", "medium"),
@@ -159,6 +161,17 @@ class AgentServiceRegistry:
             profile_overrides_file=str(kwargs.get("profile_overrides_file", "")),
             strategy_overrides_file=str(kwargs.get("strategy_overrides_file", "")),
             backup_dir=str(kwargs.get("backup_dir", "")),
+            approve_code=str(kwargs.get("approve_code", "")),
+            force=bool(kwargs.get("force", False)),
+        ).to_dict()
+
+    def _exec_agent_repairs_compare(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.repair_compare.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            snapshot_id=str(kwargs.get("snapshot_id", "")),
+            base_snapshot_id=str(kwargs.get("base_snapshot_id", "")),
+            backup_dir=str(kwargs.get("backup_dir", "")),
+            out_dir=str(kwargs.get("out_dir", "")),
         ).to_dict()
 
     def _exec_agent_repairs_rollback(self, **kwargs: Any) -> Dict[str, Any]:

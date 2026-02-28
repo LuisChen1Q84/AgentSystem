@@ -33,19 +33,25 @@ class AgentStudioTest(unittest.TestCase):
         a43 = parser.parse_args(["repair-apply"])
         self.assertEqual(a43.cmd, "repair-apply")
         self.assertEqual(a43.backup_dir, "")
+        self.assertEqual(a43.approve_code, "")
 
         a44 = parser.parse_args(["repair-list"])
         self.assertEqual(a44.cmd, "repair-list")
         self.assertEqual(a44.limit, 20)
 
-        a45 = parser.parse_args(["repair-rollback", "--snapshot-id", "snap1", "--only", "strategy"])
-        self.assertEqual(a45.cmd, "repair-rollback")
-        self.assertEqual(a45.snapshot_id, "snap1")
-        self.assertEqual(a45.only, "strategy")
+        a45 = parser.parse_args(["repair-compare", "--snapshot-id", "snap2", "--base-snapshot-id", "snap1"])
+        self.assertEqual(a45.cmd, "repair-compare")
+        self.assertEqual(a45.snapshot_id, "snap2")
+        self.assertEqual(a45.base_snapshot_id, "snap1")
 
-        a46 = parser.parse_args(["run-inspect", "--run-id", "r1"])
-        self.assertEqual(a46.cmd, "run-inspect")
-        self.assertEqual(a46.run_id, "r1")
+        a46 = parser.parse_args(["repair-rollback", "--snapshot-id", "snap1", "--only", "strategy"])
+        self.assertEqual(a46.cmd, "repair-rollback")
+        self.assertEqual(a46.snapshot_id, "snap1")
+        self.assertEqual(a46.only, "strategy")
+
+        a47 = parser.parse_args(["run-inspect", "--run-id", "r1"])
+        self.assertEqual(a47.cmd, "run-inspect")
+        self.assertEqual(a47.run_id, "r1")
 
         a5 = parser.parse_args(["policy"])
         self.assertEqual(a5.cmd, "policy")
@@ -75,7 +81,68 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertIn("delivery_bundle", payload)
+            self.assertIn("run_object", payload)
             self.assertEqual(payload.get("report", {}).get("count"), 1)
+
+    def test_repair_compare_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            backup_dir = root / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            for idx in (1, 2):
+                (backup_dir / f"repair_snapshot_20260228_10000{idx}.json").write_text(
+                    json.dumps(
+                        {
+                            "snapshot_id": f"repair_snapshot_20260228_10000{idx}",
+                            "ts": f"2026-02-28 10:00:0{idx}",
+                            "profile_overrides_after": {"default_profile": "strict" if idx == 1 else "adaptive"},
+                            "strategy_overrides_after": {"profile_blocked_strategies": {"strict": ["mcp-generalist"] if idx == 2 else []}},
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._repair_compare_cmd(
+                    reg,
+                    snapshot_id="repair_snapshot_20260228_100002",
+                    base_snapshot_id="repair_snapshot_20260228_100001",
+                    data_dir=str(root),
+                    out_dir=str(root / "out"),
+                    backup_dir=str(backup_dir),
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("delivery_bundle", payload)
+            self.assertGreater(payload.get("report", {}).get("summary", {}).get("change_count", 0), 0)
+
+    def test_repair_compare_cmd_fails_without_pair(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            backup_dir = root / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            (backup_dir / "repair_snapshot_20260228_100001.json").write_text(
+                json.dumps({"snapshot_id": "repair_snapshot_20260228_100001"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._repair_compare_cmd(
+                    reg,
+                    snapshot_id="repair_snapshot_20260228_100001",
+                    base_snapshot_id="",
+                    data_dir=str(root),
+                    out_dir=str(root / "out"),
+                    backup_dir=str(backup_dir),
+                )
+            self.assertEqual(code, 1)
+            payload = json.loads(buf.getvalue())
+            self.assertFalse(payload.get("ok", True))
 
     def test_feedback_add_and_stats_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -311,6 +378,25 @@ class AgentStudioTest(unittest.TestCase):
                 encoding="utf-8",
             )
             reg = AgentServiceRegistry(root=root)
+            preview_buf = io.StringIO()
+            with redirect_stdout(preview_buf):
+                preview_code = agent_studio._repair_apply_cmd(
+                    reg,
+                    days=14,
+                    limit=10,
+                    apply=False,
+                    data_dir=str(root),
+                    out_dir=str(root / "out"),
+                    profile_overrides_file=str(root / "profile_overrides.json"),
+                    strategy_overrides_file=str(root / "strategy_overrides.json"),
+                    backup_dir="",
+                    approve_code="",
+                    force=False,
+                )
+            self.assertEqual(preview_code, 0)
+            preview_payload = json.loads(preview_buf.getvalue())
+            approval_code = str(preview_payload.get("approval", {}).get("code", ""))
+            self.assertTrue(approval_code)
             buf = io.StringIO()
             with redirect_stdout(buf):
                 code = agent_studio._repair_apply_cmd(
@@ -323,14 +409,70 @@ class AgentStudioTest(unittest.TestCase):
                     profile_overrides_file=str(root / "profile_overrides.json"),
                     strategy_overrides_file=str(root / "strategy_overrides.json"),
                     backup_dir="",
+                    approve_code=approval_code,
+                    force=False,
                 )
             self.assertEqual(code, 0)
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertTrue(payload.get("applied", False))
+            self.assertIn("delivery_bundle", payload)
             self.assertIn("delivery_protocol", payload)
             self.assertTrue(Path(root / "profile_overrides.json").exists())
             self.assertTrue(payload.get("applied_files", {}).get("snapshot_id", ""))
+
+    def test_repair_apply_cmd_requires_approval_code(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "agent_run_20260228_100500.json"
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "mode": "strict",
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "request": {"text": "生成汇报PPT", "params": {}},
+                        "clarification": {"needed": True},
+                        "result": {"ok": False},
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "ok": False, "profile": "strict", "task_kind": "presentation", "duration_ms": 200, "selected_strategy": "mckinsey-ppt", "attempt_count": 1, "payload_path": str(payload_path)}, ensure_ascii=False)
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps({"run_id": "r2", "success": False, "quality_score": 0.28, "policy_signals": ["manual_takeover"], "policy_recommendations": [], "eval_reason": "delegated_autonomy_failed", "ts": "2026-02-28 10:05:00"}, ensure_ascii=False)
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._repair_apply_cmd(
+                    reg,
+                    days=14,
+                    limit=10,
+                    apply=True,
+                    data_dir=str(root),
+                    out_dir=str(root / "out"),
+                    profile_overrides_file=str(root / "profile_overrides.json"),
+                    strategy_overrides_file=str(root / "strategy_overrides.json"),
+                    backup_dir="",
+                    approve_code="",
+                    force=False,
+                )
+            self.assertEqual(code, 1)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(payload.get("error_code"), "approval_code_required")
 
     def test_policy_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -447,6 +589,25 @@ class AgentStudioTest(unittest.TestCase):
             reg = AgentServiceRegistry(root=root)
             apply_buf = io.StringIO()
             with redirect_stdout(apply_buf):
+                code_preview = agent_studio._repair_apply_cmd(
+                    reg,
+                    days=14,
+                    limit=10,
+                    apply=False,
+                    data_dir=str(root),
+                    out_dir=str(root / "out"),
+                    profile_overrides_file=str(root / "profile_overrides.json"),
+                    strategy_overrides_file=str(root / "strategy_overrides.json"),
+                    backup_dir=str(root / "backups"),
+                    approve_code="",
+                    force=False,
+                )
+            self.assertEqual(code_preview, 0)
+            apply_payload = json.loads(apply_buf.getvalue())
+            approval_code = str(apply_payload.get("approval", {}).get("code", ""))
+            self.assertTrue(approval_code)
+            apply_buf = io.StringIO()
+            with redirect_stdout(apply_buf):
                 code_apply = agent_studio._repair_apply_cmd(
                     reg,
                     days=14,
@@ -457,6 +618,8 @@ class AgentStudioTest(unittest.TestCase):
                     profile_overrides_file=str(root / "profile_overrides.json"),
                     strategy_overrides_file=str(root / "strategy_overrides.json"),
                     backup_dir=str(root / "backups"),
+                    approve_code=approval_code,
+                    force=False,
                 )
             self.assertEqual(code_apply, 0)
             apply_payload = json.loads(apply_buf.getvalue())

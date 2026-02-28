@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from core.registry.delivery_protocol import build_delivery_bundle_payload, build_delivery_protocol
+from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 CFG_DEFAULT = ROOT / "config" / "stock_market_hub.toml"
 
@@ -312,8 +312,7 @@ def run_report(cfg: Dict[str, Any], query: str, universe: str, symbols: List[str
         },
         next_actions=["覆盖率不足时先扩充 symbols 再回测", "高波动阶段建议降低 leverage"],
     )
-    payload["delivery_bundle"] = build_delivery_bundle_payload("market.report", payload, entrypoint="scripts.stock_market_hub")
-    payload["delivery_protocol"] = build_delivery_protocol("market.report", payload, entrypoint="scripts.stock_market_hub")
+    payload.update(build_output_objects("market.report", payload, entrypoint="scripts.stock_market_hub"))
     out_md.write_text(render_md(payload), encoding="utf-8")
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
