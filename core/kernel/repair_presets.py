@@ -59,6 +59,40 @@ def _normalize_selector(selector: Dict[str, Any]) -> Dict[str, List[str]]:
     return {key: _unique_strings(selector.get(key, [])) for key in SELECTOR_KEYS}
 
 
+def _selector_matches_action(selector: Dict[str, Any], action: Dict[str, Any]) -> bool:
+    scope = str(action.get("scope", "")).strip()
+    target = str(action.get("target", "")).strip()
+    allowed_scopes = set(_unique_strings(selector.get("scopes", [])))
+    allowed_strategies = set(_unique_strings(selector.get("strategies", [])))
+    allowed_task_kinds = set(_unique_strings(selector.get("task_kinds", [])))
+    blocked_scopes = set(_unique_strings(selector.get("exclude_scopes", [])))
+    blocked_strategies = set(_unique_strings(selector.get("exclude_strategies", [])))
+    blocked_task_kinds = set(_unique_strings(selector.get("exclude_task_kinds", [])))
+    if scope in blocked_scopes:
+        return False
+    if scope == "strategy" and target in blocked_strategies:
+        return False
+    if scope == "task_kind" and target in blocked_task_kinds:
+        return False
+    if allowed_scopes and scope not in allowed_scopes:
+        return False
+    if scope == "strategy" and allowed_strategies:
+        return target in allowed_strategies
+    if scope == "task_kind" and allowed_task_kinds:
+        return target in allowed_task_kinds
+    if not allowed_scopes and (allowed_strategies or allowed_task_kinds):
+        if scope == "strategy":
+            return target in allowed_strategies if allowed_strategies else False
+        if scope == "task_kind":
+            return target in allowed_task_kinds if allowed_task_kinds else False
+        return False
+    return True
+
+
+def _selector_specificity(selector: Dict[str, List[str]]) -> int:
+    return sum(len(_unique_strings(selector.get(key, []))) for key in SELECTOR_KEYS)
+
+
 def default_selector_presets_file() -> Path:
     return ROOT / "config/agent_repair_selector_presets.json"
 
@@ -72,6 +106,27 @@ def load_selector_presets(path: Path) -> Dict[str, Dict[str, List[str]]]:
             continue
         out[name] = _normalize_selector(payload)
     return out
+
+
+def default_selector_effectiveness_file() -> Path:
+    return ROOT / "config/agent_repair_selector_effectiveness.json"
+
+
+def load_selector_effectiveness(path: Path) -> Dict[str, Dict[str, Any]]:
+    raw = _load_json(path, {})
+    out: Dict[str, Dict[str, Any]] = {}
+    for key, payload in raw.items():
+        name = str(key).strip()
+        if not name or not isinstance(payload, dict):
+            continue
+        out[name] = dict(payload)
+    return out
+
+
+def write_selector_effectiveness(path: Path, stats: Dict[str, Dict[str, Any]]) -> None:
+    normalized = {str(name): dict(payload) for name, payload in stats.items() if str(name).strip()}
+    ordered = dict(sorted(normalized.items(), key=lambda item: item[0]))
+    _write_json(path, ordered)
 
 
 def write_selector_presets(path: Path, presets: Dict[str, Dict[str, List[str]]]) -> None:
@@ -216,6 +271,153 @@ def _auto_save_safe(action: Dict[str, Any], status: str) -> bool:
     return int(action.get("priority_score", 0) or 0) >= 16
 
 
+def build_repair_preset_inventory(
+    *,
+    data_dir: Path,
+    presets_file: Path | None = None,
+    effectiveness_file: Path | None = None,
+) -> Dict[str, Any]:
+    actual_presets_file = Path(presets_file) if presets_file else default_selector_presets_file()
+    actual_effectiveness_file = Path(effectiveness_file) if effectiveness_file else default_selector_effectiveness_file()
+    presets = load_selector_presets(actual_presets_file)
+    persisted = load_selector_effectiveness(actual_effectiveness_file)
+    try:
+        from core.kernel.repair_apply import list_repair_snapshots
+    except Exception:
+        rows = []
+    else:
+        report = list_repair_snapshots(backup_dir=Path(data_dir) / "repair_backups", limit=200)
+        rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
+    items: List[Dict[str, Any]] = []
+    for name, selector in sorted(presets.items(), key=lambda item: item[0]):
+        matching_rows = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            selection = row.get("selection", {}) if isinstance(row.get("selection", {}), dict) else {}
+            if str(selection.get("selector_preset", "")).strip() == name:
+                matching_rows.append(row)
+        lifecycle_counts = {"planned": 0, "approved": 0, "applied": 0, "rolled_back": 0, "journal_only": 0}
+        for row in matching_rows:
+            lifecycle = str(row.get("lifecycle", "")).strip() or "journal_only"
+            if lifecycle == "journal-only":
+                lifecycle = "journal_only"
+            if lifecycle not in lifecycle_counts:
+                lifecycle = "journal_only"
+            lifecycle_counts[lifecycle] += 1
+        last_row = matching_rows[0] if matching_rows else {}
+        governance_score = (
+            lifecycle_counts["applied"] * 6
+            + lifecycle_counts["approved"] * 3
+            + lifecycle_counts["planned"] * 1
+            - lifecycle_counts["rolled_back"] * 8
+        )
+        persisted_row = persisted.get(name, {}) if isinstance(persisted.get(name, {}), dict) else {}
+        usage_count = len(matching_rows)
+        success_rate = round(
+            lifecycle_counts["applied"] / max(1, lifecycle_counts["applied"] + lifecycle_counts["rolled_back"]),
+            4,
+        ) if usage_count else 0.0
+        effectiveness_score = governance_score + int(persisted_row.get("manual_bonus", 0) or 0)
+        items.append(
+            {
+                "preset_name": name,
+                "selector": selector,
+                "usage_count": usage_count,
+                "lifecycle_counts": lifecycle_counts,
+                "last_lifecycle": str(last_row.get("lifecycle", "")),
+                "last_used_ts": str(last_row.get("ts", "")),
+                "success_rate": success_rate,
+                "governance_score": governance_score,
+                "effectiveness_score": effectiveness_score,
+                "manual_bonus": int(persisted_row.get("manual_bonus", 0) or 0),
+                "notes": list(persisted_row.get("notes", [])) if isinstance(persisted_row.get("notes", []), list) else [],
+            }
+        )
+    items.sort(
+        key=lambda item: (
+            -int(item.get("effectiveness_score", 0) or 0),
+            -int(item.get("usage_count", 0) or 0),
+            str(item.get("preset_name", "")),
+        )
+    )
+    for idx, item in enumerate(items, start=1):
+        item["effectiveness_rank"] = idx
+    return {
+        "presets_file": str(actual_presets_file),
+        "effectiveness_file": str(actual_effectiveness_file),
+        "count": len(items),
+        "items": items,
+    }
+
+
+def recommend_selector_preset_for_failure_report(
+    *,
+    data_dir: Path,
+    failure_report: Dict[str, Any],
+    presets_file: Path | None = None,
+    effectiveness_file: Path | None = None,
+) -> Dict[str, Any]:
+    inventory = build_repair_preset_inventory(
+        data_dir=data_dir,
+        presets_file=presets_file,
+        effectiveness_file=effectiveness_file,
+    )
+    actions = [item for item in failure_report.get("repair_actions", []) if isinstance(item, dict)]
+    candidates: List[Dict[str, Any]] = []
+    for item in inventory.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        selector = item.get("selector", {}) if isinstance(item.get("selector", {}), dict) else {}
+        matched = [action for action in actions if _selector_matches_action(selector, action)]
+        if not matched:
+            continue
+        action_score = sum(int(action.get("priority_score", 0) or 0) for action in matched)
+        specificity = _selector_specificity(selector)
+        effectiveness_score = int(item.get("effectiveness_score", 0) or 0)
+        total_score = action_score + effectiveness_score + (len(matched) * 3) + specificity
+        candidates.append(
+            {
+                "preset_name": str(item.get("preset_name", "")),
+                "selector": selector,
+                "matched_actions": [
+                    {
+                        "scope": str(action.get("scope", "")),
+                        "target": str(action.get("target", "")),
+                        "priority_score": int(action.get("priority_score", 0) or 0),
+                    }
+                    for action in matched[:5]
+                ],
+                "match_count": len(matched),
+                "action_score": action_score,
+                "effectiveness_score": effectiveness_score,
+                "specificity": specificity,
+                "total_score": total_score,
+            }
+        )
+    candidates.sort(
+        key=lambda item: (
+            -int(item.get("total_score", 0) or 0),
+            -int(item.get("effectiveness_score", 0) or 0),
+            -int(item.get("action_score", 0) or 0),
+            -int(item.get("specificity", 0) or 0),
+            str(item.get("preset_name", "")),
+        )
+    )
+    selected = candidates[0] if candidates else {}
+    return {
+        "selected_preset": str(selected.get("preset_name", "")),
+        "selected_selector": dict(selected.get("selector", {})) if isinstance(selected.get("selector", {}), dict) else {},
+        "candidate_count": len(candidates),
+        "candidates": candidates[:5],
+        "selection_reason": (
+            f"Selected preset {selected.get('preset_name', '')} with total_score={selected.get('total_score', 0)}"
+            if selected
+            else "No preset matched current repair actions."
+        ),
+    }
+
+
 def build_repair_preset_report(
     *,
     data_dir: Path,
@@ -224,7 +426,9 @@ def build_repair_preset_report(
     presets_file: Path | None = None,
 ) -> Dict[str, Any]:
     actual_presets_file = Path(presets_file) if presets_file else default_selector_presets_file()
-    current = load_selector_presets(actual_presets_file)
+    inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=actual_presets_file)
+    current = {str(item.get("preset_name", "")): dict(item.get("selector", {})) for item in inventory.get("items", []) if isinstance(item, dict)}
+    effectiveness_map = {str(item.get("preset_name", "")): item for item in inventory.get("items", []) if isinstance(item, dict)}
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
     by_run_id, by_strategy, by_task_kind = _failure_maps(failure_report)
     suggestions: List[Dict[str, Any]] = []
@@ -258,6 +462,7 @@ def build_repair_preset_report(
             "governance_history": history,
             "compare_note": compare_note,
             "save_action": "skip_unchanged" if status == "unchanged" else ("review_only" if str(history.get("last_lifecycle", "")).strip() == "rolled_back" else status),
+            "effectiveness": effectiveness_map.get(name, {}),
         }
         suggestions.append(suggestion)
     suggestions.sort(key=lambda item: (-int(item.get("priority_score", 0) or 0), int(item.get("rank", 0) or 0), str(item.get("preset_name", ""))))
@@ -269,11 +474,13 @@ def build_repair_preset_report(
             "window_days": max(1, int(days)),
             "limit": max(1, int(limit)),
             "existing_preset_count": len(current),
+            "ranked_preset_count": len(inventory.get("items", [])),
             "repair_action_count": len(failure_report.get("repair_actions", [])),
             "suggestion_count": len(suggestions),
             "auto_save_safe_count": sum(1 for item in suggestions if bool(item.get("auto_save_safe", False))),
         },
         "presets_file": str(actual_presets_file),
+        "preset_inventory": inventory.get("items", []),
         "current_presets": current,
         "failure_review_summary": failure_report.get("summary", {}),
         "suggestions": suggestions[:8],
@@ -289,9 +496,24 @@ def render_repair_preset_report_md(report: Dict[str, Any]) -> str:
         "",
         f"- presets_file: {report.get('presets_file', '')}",
         f"- existing_preset_count: {summary.get('existing_preset_count', 0)}",
+        f"- ranked_preset_count: {summary.get('ranked_preset_count', 0)}",
         f"- repair_action_count: {summary.get('repair_action_count', 0)}",
         f"- suggestion_count: {summary.get('suggestion_count', 0)}",
         f"- auto_save_safe_count: {summary.get('auto_save_safe_count', 0)}",
+        "",
+        "## Preset Ranking",
+        "",
+    ]
+    inventory = report.get("preset_inventory", []) if isinstance(report.get("preset_inventory", []), list) else []
+    if not inventory:
+        lines.append("- none")
+    for item in inventory[:8]:
+        if not isinstance(item, dict):
+            continue
+        lines.append(
+            f"- [#{item.get('effectiveness_rank', 0)}|score={item.get('effectiveness_score', 0)}] {item.get('preset_name', '')} | uses={item.get('usage_count', 0)} | last={item.get('last_lifecycle', '')} | success_rate={item.get('success_rate', 0.0)}"
+        )
+    lines += [
         "",
         "## Suggestions",
         "",
@@ -310,6 +532,11 @@ def render_repair_preset_report_md(report: Dict[str, Any]) -> str:
         lines.append(
             f"  selector: scopes={','.join(selector.get('scopes', []))} | strategies={','.join(selector.get('strategies', []))} | task_kinds={','.join(selector.get('task_kinds', []))} | exclude_scopes={','.join(selector.get('exclude_scopes', []))}"
         )
+        effectiveness = item.get("effectiveness", {}) if isinstance(item.get("effectiveness", {}), dict) else {}
+        if effectiveness:
+            lines.append(
+                f"  effectiveness: rank={effectiveness.get('effectiveness_rank', 0)} | score={effectiveness.get('effectiveness_score', 0)} | uses={effectiveness.get('usage_count', 0)} | last={effectiveness.get('last_lifecycle', '')}"
+            )
         lines.append(f"  reason: {item.get('reason', '')}")
         if item.get("selector_notes"):
             lines.append(f"  notes: {' '.join(str(x) for x in item.get('selector_notes', []))}")
@@ -327,13 +554,13 @@ def write_repair_preset_report_files(report: Dict[str, Any], out_dir: Path) -> D
     return {"json": str(json_path), "md": str(md_path)}
 
 
-def list_repair_presets(*, presets_file: Path | None = None) -> Dict[str, Any]:
-    actual_presets_file = Path(presets_file) if presets_file else default_selector_presets_file()
-    presets = load_selector_presets(actual_presets_file)
+def list_repair_presets(*, data_dir: Path, presets_file: Path | None = None) -> Dict[str, Any]:
+    inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=presets_file)
     return {
-        "presets_file": str(actual_presets_file),
-        "count": len(presets),
-        "items": [{"preset_name": name, "selector": selector} for name, selector in sorted(presets.items(), key=lambda item: item[0])],
+        "presets_file": str(inventory.get("presets_file", "")),
+        "effectiveness_file": str(inventory.get("effectiveness_file", "")),
+        "count": int(inventory.get("count", 0) or 0),
+        "items": list(inventory.get("items", [])),
     }
 
 
@@ -341,11 +568,14 @@ def save_repair_preset_report(
     report: Dict[str, Any],
     *,
     presets_file: Path,
+    effectiveness_file: Path | None = None,
     top_n: int = 3,
     allow_update: bool = True,
     include_review_only: bool = False,
 ) -> Dict[str, Any]:
     current = load_selector_presets(presets_file)
+    actual_effectiveness_file = Path(effectiveness_file) if effectiveness_file else default_selector_effectiveness_file()
+    effectiveness = load_selector_effectiveness(actual_effectiveness_file)
     suggestions = report.get("suggestions", []) if isinstance(report.get("suggestions", []), list) else []
     saved: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
@@ -370,11 +600,22 @@ def save_repair_preset_report(
             skipped.append({"preset_name": name, "reason": "update_blocked"})
             continue
         current[name] = selector
+        row = effectiveness.get(name, {}) if isinstance(effectiveness.get(name, {}), dict) else {}
+        row["last_saved_at"] = report.get("as_of", "")
+        row["save_count"] = int(row.get("save_count", 0) or 0) + 1
+        row["notes"] = list(row.get("notes", [])) if isinstance(row.get("notes", []), list) else []
+        if str(item.get("compare_note", "")).strip():
+            note = str(item.get("compare_note", "")).strip()
+            if note not in row["notes"]:
+                row["notes"] = [note] + row["notes"][:4]
+        effectiveness[name] = row
         saved.append({"preset_name": name, "status": status, "selector": selector})
     if saved:
         write_selector_presets(presets_file, current)
+        write_selector_effectiveness(actual_effectiveness_file, effectiveness)
     return {
         "presets_file": str(presets_file),
+        "effectiveness_file": str(actual_effectiveness_file),
         "saved": saved,
         "saved_count": len(saved),
         "skipped": skipped,

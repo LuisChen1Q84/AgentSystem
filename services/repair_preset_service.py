@@ -55,7 +55,7 @@ class RepairPresetService:
         actual_presets_file = Path(presets_file) if presets_file else default_selector_presets_file()
 
         if selected_mode == "list":
-            report = list_repair_presets(presets_file=actual_presets_file)
+            report = list_repair_presets(data_dir=base, presets_file=actual_presets_file)
             payload = annotate_payload(
                 "agent.repairs.presets",
                 {

@@ -619,6 +619,15 @@ class AgentServiceRegistryTest(unittest.TestCase):
             )
             self.assertTrue(saved.get("ok", False))
             self.assertEqual(saved.get("save_result", {}).get("saved_count"), 1)
+            listed = reg.execute(
+                "agent.repairs.presets",
+                mode="list",
+                data_dir=str(root),
+                presets_file=str(presets_file),
+            )
+            self.assertTrue(listed.get("ok", False))
+            self.assertEqual(listed.get("report", {}).get("count"), 1)
+            self.assertIn("effectiveness_score", listed.get("report", {}).get("items", [])[0])
 
     def test_execute_agent_run_inspect(self):
         with tempfile.TemporaryDirectory() as td:

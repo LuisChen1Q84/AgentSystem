@@ -75,6 +75,8 @@ class AgentRepairPresetsTest(unittest.TestCase):
             )
             presets_file = root / "selector_presets.json"
             presets_file.write_text("{}\n", encoding="utf-8")
+            effectiveness_file = root / "selector_effectiveness.json"
+            effectiveness_file.write_text("{}\n", encoding="utf-8")
 
             report = build_repair_preset_report(data_dir=root, days=14, limit=10, presets_file=presets_file)
             self.assertEqual(report["summary"]["existing_preset_count"], 0)
@@ -85,12 +87,20 @@ class AgentRepairPresetsTest(unittest.TestCase):
             self.assertEqual(first["selector"]["strategies"], ["mckinsey-ppt"])
             self.assertEqual(first["selector"]["task_kinds"], ["presentation"])
             self.assertTrue(first["auto_save_safe"])
+            self.assertEqual(report["summary"]["ranked_preset_count"], 0)
 
-            save_result = save_repair_preset_report(report, presets_file=presets_file, top_n=1, allow_update=True)
+            save_result = save_repair_preset_report(
+                report,
+                presets_file=presets_file,
+                effectiveness_file=effectiveness_file,
+                top_n=1,
+                allow_update=True,
+            )
             self.assertEqual(save_result["saved_count"], 1)
-            listed = list_repair_presets(presets_file=presets_file)
+            listed = list_repair_presets(data_dir=root, presets_file=presets_file)
             self.assertEqual(listed["count"], 1)
             self.assertEqual(listed["items"][0]["selector"]["strategies"], ["mckinsey-ppt"])
+            self.assertEqual(listed["items"][0]["effectiveness_score"], 0)
 
 
 if __name__ == "__main__":

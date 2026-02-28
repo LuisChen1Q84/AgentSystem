@@ -150,6 +150,49 @@ def _resolve_selector(
     }
 
 
+def _resolve_auto_selector_preset(
+    *,
+    data_dir: Path,
+    failure_report: Dict[str, Any],
+    selector_preset: str,
+    selector_presets_file: Path | None,
+) -> Dict[str, Any]:
+    requested = str(selector_preset).strip()
+    if requested != "auto":
+        return {
+            "requested_preset": requested,
+            "selected_preset": requested,
+            "auto_mode": False,
+            "candidate_count": 0,
+            "selection_reason": "",
+            "candidates": [],
+        }
+    try:
+        from core.kernel.repair_presets import recommend_selector_preset_for_failure_report
+    except Exception as exc:
+        return {
+            "requested_preset": requested,
+            "selected_preset": "",
+            "auto_mode": True,
+            "candidate_count": 0,
+            "selection_reason": f"auto preset unavailable: {exc}",
+            "candidates": [],
+        }
+    choice = recommend_selector_preset_for_failure_report(
+        data_dir=data_dir,
+        failure_report=failure_report,
+        presets_file=selector_presets_file,
+    )
+    return {
+        "requested_preset": requested,
+        "selected_preset": str(choice.get("selected_preset", "")),
+        "auto_mode": True,
+        "candidate_count": int(choice.get("candidate_count", 0) or 0),
+        "selection_reason": str(choice.get("selection_reason", "")),
+        "candidates": list(choice.get("candidates", [])) if isinstance(choice.get("candidates", []), list) else [],
+    }
+
+
 def _profile_payload(
     ts: str,
     existing: Dict[str, Any],
@@ -565,8 +608,19 @@ def build_repair_apply_plan(
     memory = load_memory(data_dir / "memory.json")
 
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
-    selector, selector_meta = _resolve_selector(
+    auto_selector = _resolve_auto_selector_preset(
+        data_dir=data_dir,
+        failure_report=failure_report,
         selector_preset=selector_preset,
+        selector_presets_file=selector_presets_file,
+    )
+    resolved_preset_name = (
+        str(auto_selector.get("selected_preset", ""))
+        if bool(auto_selector.get("auto_mode", False))
+        else str(selector_preset)
+    )
+    selector, selector_meta = _resolve_selector(
+        selector_preset=resolved_preset_name,
         selector_presets_file=selector_presets_file,
         scopes=scopes,
         strategies=strategies,
@@ -646,9 +700,14 @@ def build_repair_apply_plan(
             "min_priority_score": max(0, int(min_priority_score)),
             "max_actions": max(0, int(max_actions)),
             "selector": selector,
+            "selector_preset_requested": str(auto_selector.get("requested_preset", "")),
             "selector_preset": str(selector_meta.get("preset", "")),
             "selector_preset_found": bool(selector_meta.get("preset_found", False)),
             "selector_presets_file": str(selector_meta.get("presets_file", "")),
+            "selector_auto_mode": bool(auto_selector.get("auto_mode", False)),
+            "selector_auto_candidate_count": int(auto_selector.get("candidate_count", 0) or 0),
+            "selector_auto_reason": str(auto_selector.get("selection_reason", "")),
+            "selector_auto_candidates": list(auto_selector.get("candidates", []))[:5],
             "selected_scopes": sorted(selected_scopes),
             "selected_action_count": len(filtered_failure_report.get("repair_actions", [])),
             "skipped_action_count": len(filtered_failure_report.get("skipped_repair_actions", [])),
@@ -960,9 +1019,13 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- strict_block_candidates: {s.get('strict_block_candidates', 0)}",
         f"- min_priority_score: {selection.get('min_priority_score', 0)}",
         f"- max_actions: {selection.get('max_actions', 0)}",
+        f"- selector_preset_requested: {selection.get('selector_preset_requested', '')}",
         f"- selector_preset: {selection.get('selector_preset', '')}",
         f"- selector_preset_found: {selection.get('selector_preset_found', False)}",
         f"- selector_presets_file: {selection.get('selector_presets_file', '')}",
+        f"- selector_auto_mode: {selection.get('selector_auto_mode', False)}",
+        f"- selector_auto_candidate_count: {selection.get('selector_auto_candidate_count', 0)}",
+        f"- selector_auto_reason: {selection.get('selector_auto_reason', '')}",
         f"- selector_scopes: {','.join(selector.get('scopes', []))}",
         f"- selector_strategies: {','.join(selector.get('strategies', []))}",
         f"- selector_task_kinds: {','.join(selector.get('task_kinds', []))}",

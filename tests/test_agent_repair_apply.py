@@ -230,6 +230,22 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(preset_plan["selection"]["selector"]["exclude_scopes"], ["feedback"])
             self.assertEqual(preset_plan["selection"]["selected_scopes"], ["strategy", "task_kind"])
 
+            auto_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                selector_preset="auto",
+                selector_presets_file=presets_path,
+            )
+            self.assertTrue(auto_plan["selection"]["selector_auto_mode"])
+            self.assertEqual(auto_plan["selection"]["selector_preset_requested"], "auto")
+            self.assertEqual(auto_plan["selection"]["selector_preset"], "presentation_recovery")
+            self.assertGreaterEqual(auto_plan["selection"]["selector_auto_candidate_count"], 1)
+            self.assertEqual(auto_plan["selection"]["selector"]["strategies"], ["mckinsey-ppt"])
+
             no_op_plan = build_repair_apply_plan(
                 data_dir=root,
                 days=14,
