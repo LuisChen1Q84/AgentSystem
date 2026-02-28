@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.run_diagnostics import build_run_diagnostic, write_run_diagnostic_files
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import error_response, ok_response
 
 
@@ -35,8 +36,13 @@ class RunDiagnosticsService:
             )
         target_dir = Path(out_dir) if out_dir else base
         files = write_run_diagnostic_files(report, target_dir)
+        payload = annotate_payload(
+            "agent.run.inspect",
+            {"report": report, "deliver_assets": {"items": [{"path": files["json"]}, {"path": files["md"]}]}},
+            entrypoint="core.kernel.run_diagnostics",
+        )
         return ok_response(
             "agent.run.inspect",
-            payload={"report": report, "deliver_assets": {"items": [{"path": files["json"]}, {"path": files["md"]}]}},
+            payload=payload,
             meta={"data_dir": str(base), "out_dir": str(target_dir), "run_id": str(run_id)},
         )

@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from apps.datahub.app import DataHubApp
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, error_response, ok_response
 
 
@@ -26,13 +27,16 @@ class DataService:
     def query(self, params: Dict[str, Any]) -> ServiceEnvelope:
         payload = self.app.query(params)
         if not bool(payload.get("ok", False)):
+            diag_payload = annotate_payload("data.query", payload, entrypoint="apps.datahub")
             return error_response(
                 "data.query",
                 str(payload.get("error", "query_failed")),
                 code=str(payload.get("error_code", "query_failed")),
+                payload={"service_diagnostics": diag_payload.get("service_diagnostics", {})},
             )
+        out = {"filters": payload.get("filters", {}), "items": payload.get("items", [])}
         return ok_response(
             "data.query",
-            payload={"filters": payload.get("filters", {}), "items": payload.get("items", [])},
+            payload=annotate_payload("data.query", out, entrypoint="apps.datahub"),
             meta={"entrypoint": "apps.datahub"},
         )

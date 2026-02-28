@@ -15,6 +15,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, ok_response
 from scripts.agent_profile_recommender import recommend
 
@@ -47,4 +48,8 @@ class RecommendationService:
             days=max(1, int(days)),
             feedback_rows=_load_jsonl(base / "feedback.jsonl"),
         )
-        return ok_response("agent.recommend", payload={"report": report}, meta={"data_dir": str(base), "days": max(1, int(days))})
+        return ok_response(
+            "agent.recommend",
+            payload=annotate_payload("agent.recommend", {"report": report}, entrypoint="scripts.agent_profile_recommender"),
+            meta={"data_dir": str(base), "days": max(1, int(days))},
+        )

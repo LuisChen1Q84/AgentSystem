@@ -27,6 +27,9 @@ class AgentStudioTest(unittest.TestCase):
         a4 = parser.parse_args(["diagnostics"])
         self.assertEqual(a4.cmd, "diagnostics")
 
+        a42 = parser.parse_args(["failure-review"])
+        self.assertEqual(a42.cmd, "failure-review")
+
         a45 = parser.parse_args(["run-inspect", "--run-id", "r1"])
         self.assertEqual(a45.cmd, "run-inspect")
         self.assertEqual(a45.run_id, "r1")
@@ -126,6 +129,80 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertIn("report", payload)
+            self.assertIn("service_diagnostics", payload)
+
+    def test_failure_review_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "agent_run_20260228_100500.json"
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "mode": "strict",
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "request": {"text": "生成汇报PPT", "params": {}},
+                        "clarification": {"needed": True},
+                        "result": {
+                            "ok": False,
+                            "top_gap": 0.02,
+                            "selected": {"strategy": "mckinsey-ppt", "executor": "ppt"},
+                            "candidates": [{"strategy": "mckinsey-ppt", "executor": "ppt", "score": 0.56, "rank": 1}],
+                            "attempts": [{"strategy": "mckinsey-ppt", "executor": "ppt", "ok": False, "mode": "ppt", "result": {"ok": False}}],
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "selected_strategy": "mckinsey-ppt",
+                        "attempt_count": 1,
+                        "payload_path": str(payload_path),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "success": False,
+                        "quality_score": 0.28,
+                        "policy_signals": ["low_selection_confidence"],
+                        "policy_recommendations": ["Review failed strategy path and consider stricter allow-list for this task kind."],
+                        "eval_reason": "delegated_autonomy_failed",
+                        "ts": "2026-02-28 10:05:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._failure_review_cmd(reg, days=14, limit=10, data_dir=str(root), out_dir=str(root / "out"))
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("report", payload)
+            self.assertIn("service_diagnostics", payload)
 
     def test_policy_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -173,6 +250,7 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertIn("report", payload)
+            self.assertIn("service_diagnostics", payload)
 
     def test_run_inspect_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -229,6 +307,7 @@ class AgentStudioTest(unittest.TestCase):
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
             self.assertIn("report", payload)
+            self.assertIn("service_diagnostics", payload)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from apps.tooling_hub.app import ToolingHubApp
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, ok_response
 
 
@@ -27,7 +28,7 @@ class MCPService:
         payload = self.app.run_mcp(text, params)
         return ok_response(
             "mcp.run",
-            payload=payload,
+            payload=annotate_payload("mcp.run", payload, entrypoint="apps.tooling_hub"),
             meta={
                 "entrypoint": "apps.tooling_hub",
                 "top_k": int(params.get("top_k", 3)),

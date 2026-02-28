@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from apps.market_hub.app import MarketHubApp
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, ok_response
 
 
@@ -25,4 +26,8 @@ class MarketService:
 
     def run(self, text: str, params: Dict[str, Any]) -> ServiceEnvelope:
         payload = self.app.run_report(text, params)
-        return ok_response("market.report", payload=payload, meta={"entrypoint": "apps.market_hub"})
+        return ok_response(
+            "market.report",
+            payload=annotate_payload("market.report", payload, entrypoint="apps.market_hub"),
+            meta={"entrypoint": "apps.market_hub"},
+        )

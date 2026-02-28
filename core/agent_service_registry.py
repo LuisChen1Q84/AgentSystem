@@ -14,6 +14,7 @@ from core.registry.service_protocol import ServiceSpec, error_response
 from services.agent_runtime_service import AgentRuntimeService
 from services.data_service import DataService
 from services.diagnostics_service import DiagnosticsService
+from services.failure_review_service import FailureReviewService
 from services.feedback_service import FeedbackService
 from services.image_service import ImageService
 from services.market_service import MarketService
@@ -33,6 +34,7 @@ class AgentServiceRegistry:
         self.observe = ObservabilityService(root=self.root)
         self.feedback = FeedbackService(root=self.root)
         self.diagnostics = DiagnosticsService(root=self.root)
+        self.failure_review = FailureReviewService(root=self.root)
         self.recommend = RecommendationService(root=self.root)
         self.slo = SLOService(root=self.root)
         self.policy = PolicyService(root=self.root)
@@ -54,6 +56,7 @@ class AgentServiceRegistry:
             "agent.feedback.stats": ServiceSpec("agent.feedback.stats", "feedback", "Summarize collected feedback", "low"),
             "agent.feedback.pending": ServiceSpec("agent.feedback.pending", "feedback", "List runs pending feedback", "low"),
             "agent.diagnostics": ServiceSpec("agent.diagnostics", "observability", "Build agent diagnostics dashboard", "low"),
+            "agent.failures.review": ServiceSpec("agent.failures.review", "observability", "Review recent failed runs with grouped diagnostics", "low"),
             "mcp.run": ServiceSpec("mcp.run", "tooling", "Run MCP candidate routing and execution", "medium"),
             "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
             "image.generate": ServiceSpec("image.generate", "creative", "Generate image assets through image hub", "medium"),
@@ -128,6 +131,14 @@ class AgentServiceRegistry:
         return self.diagnostics.run(
             data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
             days=max(1, int(kwargs.get("days", 14))),
+            out_dir=str(kwargs.get("out_dir", "")),
+        ).to_dict()
+
+    def _exec_agent_failures_review(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.failure_review.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            limit=max(1, int(kwargs.get("limit", 10))),
             out_dir=str(kwargs.get("out_dir", "")),
         ).to_dict()
 

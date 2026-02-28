@@ -15,6 +15,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, ok_response
 from scripts.agent_os_observability import aggregate
 
@@ -43,4 +44,8 @@ class ObservabilityService:
     def run(self, data_dir: str, days: int) -> ServiceEnvelope:
         base = Path(data_dir) if data_dir else self.root / "日志/agent_os"
         report = aggregate(_load_jsonl(base / "agent_runs.jsonl"), days=max(1, int(days)))
-        return ok_response("agent.observe", payload={"report": report}, meta={"data_dir": str(base), "days": max(1, int(days))})
+        return ok_response(
+            "agent.observe",
+            payload=annotate_payload("agent.observe", {"report": report}, entrypoint="scripts.agent_os_observability"),
+            meta={"data_dir": str(base), "days": max(1, int(days))},
+        )

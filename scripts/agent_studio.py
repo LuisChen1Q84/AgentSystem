@@ -100,6 +100,19 @@ def _diagnostics_cmd(reg: AgentServiceRegistry, days: int, data_dir: str, out_di
     return 0
 
 
+def _failure_review_cmd(reg: AgentServiceRegistry, days: int, limit: int, data_dir: str, out_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.failures.review",
+            days=days,
+            limit=limit,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+        )
+    )
+    return 0
+
+
 def _run_inspect_cmd(reg: AgentServiceRegistry, run_id: str, data_dir: str, out_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -189,7 +202,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "failure-review [days], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -218,6 +231,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "diagnostics":
             _diagnostics_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="")
+            continue
+        if cmd == "failure-review":
+            _failure_review_cmd(reg, days=int(args[0]) if args else 14, limit=10, data_dir=data_dir, out_dir="")
             continue
         if cmd == "run-inspect":
             if not args:
@@ -281,6 +297,11 @@ def build_cli() -> argparse.ArgumentParser:
     diag.add_argument("--days", type=int, default=14)
     diag.add_argument("--out-dir", default="")
 
+    frev = sp.add_parser("failure-review")
+    frev.add_argument("--days", type=int, default=14)
+    frev.add_argument("--limit", type=int, default=10)
+    frev.add_argument("--out-dir", default="")
+
     inspect = sp.add_parser("run-inspect")
     inspect.add_argument("--run-id", required=True)
     inspect.add_argument("--out-dir", default="")
@@ -327,6 +348,8 @@ def main() -> int:
         return _recommend_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "diagnostics":
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "failure-review":
+        return _failure_review_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "run-inspect":
         return _run_inspect_cmd(reg, run_id=str(args.run_id), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "slo":

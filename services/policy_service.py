@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 from core.kernel.memory_store import load_memory
 from core.kernel.policy_tuner import tune_policy
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ok_response
 
 
@@ -50,8 +51,9 @@ class PolicyService:
             memory=load_memory(mem_path),
             days=max(1, int(days)),
         )
+        payload = annotate_payload("agent.policy.tune", {"report": report}, entrypoint="core.kernel.policy_tuner")
         return ok_response(
             "agent.policy.tune",
-            payload={"report": report},
+            payload=payload,
             meta={"data_dir": str(base), "memory_file": str(mem_path), "days": max(1, int(days))},
         )

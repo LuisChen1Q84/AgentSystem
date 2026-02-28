@@ -14,6 +14,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, ok_response
 from scripts.agent_feedback import add_feedback, list_pending_feedback, summarize
 
@@ -36,7 +37,11 @@ class FeedbackService:
             profile=profile,
             task_kind=task_kind,
         )
-        return ok_response("agent.feedback.add", payload={"item": item}, meta={"data_dir": str(base)})
+        return ok_response(
+            "agent.feedback.add",
+            payload=annotate_payload("agent.feedback.add", {"item": item, "summary": "feedback recorded"}, entrypoint="scripts.agent_feedback"),
+            meta={"data_dir": str(base)},
+        )
 
     def stats(self, *, data_dir: str) -> ServiceEnvelope:
         base = self._data_dir(data_dir)
@@ -50,7 +55,11 @@ class FeedbackService:
                 items.append(json.loads(row))
             except Exception:
                 continue
-        return ok_response("agent.feedback.stats", payload={"summary": summarize(items)}, meta={"data_dir": str(base)})
+        return ok_response(
+            "agent.feedback.stats",
+            payload=annotate_payload("agent.feedback.stats", {"summary": summarize(items)}, entrypoint="scripts.agent_feedback"),
+            meta={"data_dir": str(base)},
+        )
 
     def pending(self, *, data_dir: str, limit: int, task_kind: str, profile: str) -> ServiceEnvelope:
         base = self._data_dir(data_dir)
@@ -61,4 +70,8 @@ class FeedbackService:
             task_kind=task_kind,
             profile=profile,
         )
-        return ok_response("agent.feedback.pending", payload={"rows": rows}, meta={"data_dir": str(base), "limit": max(1, int(limit))})
+        return ok_response(
+            "agent.feedback.pending",
+            payload=annotate_payload("agent.feedback.pending", {"rows": rows, "summary": f"{len(rows)} pending feedback runs"}, entrypoint="scripts.agent_feedback"),
+            meta={"data_dir": str(base), "limit": max(1, int(limit))},
+        )

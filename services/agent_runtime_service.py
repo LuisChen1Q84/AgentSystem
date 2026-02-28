@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.kernel.agent_kernel import AgentKernel
+from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ServiceEnvelope, ok_response
 
 
@@ -25,4 +26,8 @@ class AgentRuntimeService:
 
     def run(self, text: str, params: Dict[str, Any]) -> ServiceEnvelope:
         payload = self.kernel.run(text, params)
-        return ok_response("agent.run", payload=payload, meta={"entrypoint": "agent_kernel"})
+        return ok_response(
+            "agent.run",
+            payload=annotate_payload("agent.run", payload, entrypoint="agent_kernel"),
+            meta={"entrypoint": "agent_kernel"},
+        )
