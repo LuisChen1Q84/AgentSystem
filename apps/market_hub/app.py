@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.stock_market_hub import CFG_DEFAULT, load_cfg, pick_symbols, run_committee, run_report
+from scripts.research_source_adapters import lookup_sources
 
 
 class MarketHubApp:
@@ -39,4 +40,13 @@ class MarketHubApp:
         query = str(params.get("query", text)).strip() or text
         universe = str(params.get("universe", cfg.get("defaults", {}).get("default_universe", "global_core"))).strip()
         symbols = pick_symbols(cfg, query, str(params.get("symbols", "")))
-        return run_committee(cfg, query, universe, symbols, bool(params.get("no_sync", False)))
+        payload = run_committee(cfg, query, universe, symbols, bool(params.get("no_sync", False)))
+        lookup_params = dict(params)
+        if not lookup_params.get("source_connectors"):
+            lookup_params["source_connectors"] = ["knowledge"] + (["sec"] if str(params.get("ticker", "")).strip() or str(params.get("company", "")).strip() else [])
+        source_intel = lookup_sources(query, lookup_params)
+        payload["source_intel"] = source_intel
+        if isinstance(payload.get("market_committee", {}), dict):
+            payload["market_committee"]["source_connectors"] = source_intel.get("connectors", [])
+            payload["market_committee"]["source_item_count"] = len(source_intel.get("items", []))
+        return payload

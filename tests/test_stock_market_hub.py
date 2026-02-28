@@ -88,6 +88,7 @@ class StockMarketHubTest(unittest.TestCase):
             self.assertIn("bull_researcher", roles)
             self.assertIn("bear_researcher", roles)
             self.assertIn("risk_committee", roles)
+            self.assertGreaterEqual(len(committee.get("factor_explanations", [])), 1)
 
 
 if __name__ == "__main__":

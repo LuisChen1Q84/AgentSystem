@@ -150,6 +150,23 @@ def _committee_payload(
     vote_score += 0 if macro_stance == "neutral" else -1
     decision = "accumulate_small" if vote_score >= 2 and not risk_flags else ("watchlist_only" if vote_score >= 0 else "defensive")
     conviction = "high" if decision == "accumulate_small" and len(risk_flags) == 0 else ("medium" if decision == "watchlist_only" else "low")
+    factor_explanations = []
+    for row in rows[:5]:
+        symbol = str(row.get("symbol", "")).strip()
+        factor_score = _to_float(row.get("factor_score"))
+        rsi = _to_float(row.get("rsi14"))
+        mom = _to_float(row.get("mom20_pct"))
+        bias = "high_quality" if (factor_score or 0) >= 65 else ("mixed" if (factor_score or 0) >= 45 else "weak")
+        factor_explanations.append(
+            {
+                "symbol": symbol,
+                "factor_score": factor_score,
+                "factor_bias": bias,
+                "technical_note": signal_note(row),
+                "momentum_note": "Positive medium-term momentum" if (mom or 0) > 0 else ("Flat momentum" if mom == 0 else "Negative medium-term momentum"),
+                "rsi_note": "RSI suggests room to run" if (rsi or 50) >= 50 else "RSI remains fragile",
+            }
+        )
     return {
         "query": query,
         "universe": universe,
@@ -226,6 +243,7 @@ def _committee_payload(
             {"source": "stock_quant.backtest", "count": len(bt_rows)},
             {"source": "mcp_freefirst_hub", "coverage_rate": round(coverage, 2)},
         ],
+        "factor_explanations": factor_explanations,
     }
 
 
@@ -372,6 +390,7 @@ def render_md(payload: Dict[str, Any]) -> str:
         decision = committee.get("decision", {}) if isinstance(committee.get("decision", {}), dict) else {}
         debate = committee.get("debate_summary", {}) if isinstance(committee.get("debate_summary", {}), dict) else {}
         risk_gate = committee.get("risk_gate", {}) if isinstance(committee.get("risk_gate", {}), dict) else {}
+        source_intel = payload.get("source_intel", {}) if isinstance(payload.get("source_intel", {}), dict) else {}
         lines.extend([
             "## Market Committee",
             "",
@@ -387,6 +406,14 @@ def render_md(payload: Dict[str, Any]) -> str:
         ])
         for item in committee.get("participants", []):
             lines.append(f"| {item.get('role','')} | {item.get('stance','')} | {item.get('thesis','')} |")
+        if committee.get("factor_explanations"):
+            lines.extend(["", "| Symbol | Factor Bias | Technical Note |", "|---|---|---|"])
+            for item in committee.get("factor_explanations", []):
+                lines.append(f"| {item.get('symbol','')} | {item.get('factor_bias','')} | {item.get('technical_note','')} |")
+        if source_intel.get("items"):
+            lines.extend(["", "### Source Intel", ""])
+            for item in source_intel.get("items", [])[:6]:
+                lines.append(f"- {item.get('title','')} | {item.get('connector','')} | {item.get('url','') or item.get('path','')}")
         lines.extend(["", ""])
     return "\n".join(lines)
 

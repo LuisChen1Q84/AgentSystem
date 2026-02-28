@@ -27,6 +27,10 @@ def render_research_html(payload: Dict[str, Any], out_path: Path) -> Path:
     review = payload.get("peer_review_findings", []) if isinstance(payload.get("peer_review_findings", []), list) else []
     citations = payload.get("citation_block", []) if isinstance(payload.get("citation_block", []), list) else []
     ppt_bridge = payload.get("ppt_bridge", {}) if isinstance(payload.get("ppt_bridge", {}), dict) else {}
+    systematic = payload.get("systematic_review", {}) if isinstance(payload.get("systematic_review", {}), dict) else {}
+    prisma = systematic.get("prisma_flow", []) if isinstance(systematic.get("prisma_flow", []), list) else []
+    scorecard = systematic.get("quality_scorecard", []) if isinstance(systematic.get("quality_scorecard", []), list) else []
+    appendix = systematic.get("citation_appendix", []) if isinstance(systematic.get("citation_appendix", []), list) else []
 
     html_text = f"""<!DOCTYPE html>
 <html lang="en">
@@ -59,6 +63,11 @@ def render_research_html(payload: Dict[str, Any], out_path: Path) -> Path:
     .section-list {{ display: grid; gap: 14px; }}
     ul {{ margin: 0; padding-left: 18px; }}
     .footnote {{ font-size: 12px; color: var(--muted); }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    th, td {{ text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(15,23,42,0.08); vertical-align: top; }}
+    .flow {{ display: grid; gap: 12px; }}
+    .flow-step {{ display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px; background: rgba(255,255,255,0.84); border: 1px solid rgba(15,23,42,0.06); }}
+    .flow-count {{ min-width: 64px; padding: 8px 10px; border-radius: 999px; background: rgba(15,118,110,0.12); color: var(--accent); font-weight: 700; text-align: center; }}
     @media (max-width: 900px) {{ .grid-2, .grid-3 {{ grid-template-columns: 1fr; }} .shell {{ width: min(100vw - 20px, 100%); }} }}
   </style>
 </head>
@@ -116,6 +125,34 @@ def render_research_html(payload: Dict[str, Any], out_path: Path) -> Path:
       <h2>Citations</h2>
       <ul>{_list_items([f"[{item.get('id', '')}] {item.get('title', '')}" for item in citations])}</ul>
     </section>
+    {f'''
+    <section class="grid-2">
+      <div class="panel">
+        <h2>PRISMA Flow</h2>
+        <div class="flow">
+          {''.join(f'<div class="flow-step"><span class="flow-count">{_esc(item.get("count", 0))}</span><div><strong>{_esc(item.get("stage", ""))}</strong></div></div>' for item in prisma)}
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Quality Scorecard</h2>
+        <table>
+          <thead><tr><th>Study</th><th>Tool</th><th>Bias</th><th>Certainty</th></tr></thead>
+          <tbody>
+            {''.join(f'<tr><td>{_esc(item.get("study_id", ""))}</td><td>{_esc(item.get("tool", ""))}</td><td>{_esc(item.get("risk_of_bias", ""))}</td><td>{_esc(item.get("certainty", ""))}</td></tr>' for item in scorecard)}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Citation Appendix</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Title</th><th>Type</th><th>URL</th></tr></thead>
+        <tbody>
+          {''.join(f'<tr><td>{_esc(item.get("id", ""))}</td><td>{_esc(item.get("title", ""))}</td><td>{_esc(item.get("type", ""))}</td><td>{_esc(item.get("url", ""))}</td></tr>' for item in appendix)}
+        </tbody>
+      </table>
+    </section>
+    ''' if systematic else ''}
   </div>
 </body>
 </html>

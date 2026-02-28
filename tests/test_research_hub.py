@@ -25,6 +25,10 @@ class ResearchHubTest(unittest.TestCase):
             self.assertIn("search_strategy", analysis)
             self.assertIn("database_coverage", analysis)
             self.assertIn("prisma_flow", analysis)
+            self.assertIn("systematic_review", out)
+            self.assertTrue(Path(out.get("appendix_md_path", "")).exists())
+            html_text = Path(out["html_path"]).read_text(encoding="utf-8")
+            self.assertIn("PRISMA Flow", html_text)
             self.assertTrue(any(item.get("severity") == "high" for item in out.get("peer_review_findings", [])))
 
     def test_market_sizing_generates_structured_outputs(self):
