@@ -178,9 +178,14 @@ def _storyline(req: Dict[str, Any], lang: str) -> List[Dict[str, Any]]:
 
 def _design_system(lang: str, req: Dict[str, Any], catalog: Dict[str, Any]) -> Dict[str, Any]:
     themes = catalog.get("themes", {}) if isinstance(catalog.get("themes", {}), dict) else {}
-    theme = themes.get(req["theme"], {}) if isinstance(themes.get(req["theme"], {}), dict) else {}
+    theme_key = req["theme"] if req["theme"] in themes else "boardroom-signal"
+    theme = themes.get(theme_key, {}) if isinstance(themes.get(theme_key, {}), dict) else {}
     return {
-        "theme": req["theme"],
+        "theme": theme_key,
+        "theme_label": str(theme.get("label", theme_key)),
+        "theme_use_case": str(theme.get("use_case", "")),
+        "theme_mood": str(theme.get("review_mood", "")),
+        "available_themes": sorted(themes.keys()),
         "style": req["style"],
         "brand": req["brand"],
         "principles": [
@@ -469,6 +474,9 @@ def _build_slides(req: Dict[str, Any], lang: str, catalog: Dict[str, Any]) -> Li
                 "只强调一条真正改变决策的证据，不要解释所有素材。",
                 "最后落到动作、owner 或需要批准的事项。",
             ]
+        title_text = str(blueprint["title_assertion"]).strip()
+        title_words = len(title_text.replace(" ", "")) if lang == "zh" else len(title_text.replace("/", " ").split())
+        emphasis = req["key_metrics"][:2]
         slides.append(
             {
                 "index": index,
@@ -491,6 +499,24 @@ def _build_slides(req: Dict[str, Any], lang: str, catalog: Dict[str, Any]) -> Li
                 "speaker_notes": speaker_notes,
                 "ten_second_test": "pass" if density != "dense" else "watch",
                 "kpi_callout": req["key_metrics"][:3],
+                "designer_handoff": {
+                    "primary_visual": str(layout_meta.get("primary_chart", layout_name)),
+                    "module_priority": list(layout_meta.get("visual_modules", []))[:3]
+                    if isinstance(layout_meta.get("visual_modules", []), list)
+                    else [],
+                    "copy_blocks": {
+                        "headline": blueprint["title_assertion"],
+                        "evidence_chips": evidence_needed[:3],
+                        "decision_bar": blueprint["decision_link"],
+                    },
+                    "headline_word_count": title_words,
+                    "headline_density_flag": "tight" if title_words <= (24 if lang == "zh" else 14) else "trim",
+                    "accent_targets": emphasis,
+                    "asset_requests": [
+                        f"Need chart or evidence artifact for {evidence_needed[0]}" if evidence_needed else "Need one core proof artifact",
+                        f"Use layout {layout_name} with {str(layout_meta.get('composition', 'clear composition'))}",
+                    ],
+                },
             }
         )
     return slides
@@ -501,6 +527,7 @@ def _quality_review(slides: List[Dict[str, Any]], req: Dict[str, Any], storyline
     assertion_titles = sum(1 for slide in slides if str(slide.get("title_assertion", "")).strip())
     evidence_rich = sum(1 for slide in slides if len(slide.get("evidence_needed", [])) >= 2)
     sections = {str(slide.get("section", "")).strip() for slide in slides if str(slide.get("section", "")).strip()}
+    layout_variety = len({str(slide.get("layout", "")).strip() for slide in slides if str(slide.get("layout", "")).strip()})
     density_flags = []
     for slide in slides:
         if slide.get("layout_meta", {}).get("density") == "dense":
@@ -527,13 +554,26 @@ def _quality_review(slides: List[Dict[str, Any]], req: Dict[str, Any], storyline
     score += min(len(storyline), 5) * 2.0
     score += 5.0 if "Roadmap" in sections else 0.0
     score += 5.0 if "Risk & Governance" in sections else 0.0
+    score += min(layout_variety, 8) * 0.8
     score -= len(density_flags) * 2.0
     score -= len(cheapness_risk_flags) * 3.0
     score = max(0.0, min(95.0, round(score, 1)))
+    story_continuity = min(1.0, round(len(storyline) / 5.0, 2))
+    visual_variety = min(1.0, round(layout_variety / max(min(total, 8), 1), 2))
+    decision_pressure = min(
+        1.0,
+        round(
+            sum(1 for slide in slides if str(slide.get("decision_link", "")).strip()) / total,
+            2,
+        ),
+    )
     return {
         "consulting_score": score,
         "assertion_title_coverage": round(assertion_titles / total, 2),
         "evidence_coverage": round(evidence_rich / total, 2),
+        "story_continuity_score": story_continuity,
+        "visual_variety_score": visual_variety,
+        "decision_pressure_score": decision_pressure,
         "storyline_blocks": len(storyline),
         "density_flags": density_flags,
         "cheapness_risk_flags": cheapness_risk_flags,
@@ -551,6 +591,91 @@ def _quality_review(slides: List[Dict[str, Any]], req: Dict[str, Any], storyline
         "request_focus": {
             "decision_ask": req["decision_ask"],
             "deliverable": req["deliverable"],
+        },
+    }
+
+
+def _design_handoff(
+    req: Dict[str, Any],
+    design: Dict[str, Any],
+    slides: List[Dict[str, Any]],
+    quality_review: Dict[str, Any],
+    lang: str,
+) -> Dict[str, Any]:
+    nav = [
+        {
+            "index": slide["index"],
+            "section": slide["section"],
+            "title_short": str(slide["title_assertion"])[:48],
+            "layout": slide["layout"],
+        }
+        for slide in slides
+    ]
+    asset_requests: List[str] = []
+    seen = set()
+    for slide in slides:
+        for item in slide.get("designer_handoff", {}).get("asset_requests", []):
+            clean = str(item).strip()
+            if clean and clean not in seen:
+                seen.add(clean)
+                asset_requests.append(clean)
+    if lang == "zh":
+        copy_rules = [
+            "每页标题必须先给判断，再给对象，不要写主题词。",
+            "每个正文区块只保留一个主要句群，避免左右两侧都过密。",
+            "数字优先高亮，形容词退后。",
+            "保留留白，不要为了填满页面而塞次要信息。",
+        ]
+        review_sequence = [
+            "先审标题是否像结论",
+            "再审图表是否真的支撑决策",
+            "再审动作、owner、时间是否明确",
+        ]
+        html_review_focus = [
+            "先看封面和 summary 是否已经像董事会材料。",
+            "逐页看 evidence chips 是否存在假大空描述。",
+            "最后看 roadmap 和 risk 页面是否能直接拿去决策会。",
+        ]
+    else:
+        copy_rules = [
+            "Make the title the verdict, not the topic label.",
+            "Keep one dominant text cluster per slide to preserve hierarchy.",
+            "Highlight numbers before adjectives.",
+            "Protect whitespace; do not fill panels with secondary detail.",
+        ]
+        review_sequence = [
+            "Check whether every title reads like a conclusion.",
+            "Check whether every chart changes a decision.",
+            "Check whether owner, timing, and next steps are explicit.",
+        ]
+        html_review_focus = [
+            "Review the cover and summary first for board-level tone.",
+            "Scan evidence chips for generic language or missing proof.",
+            "Confirm roadmap and risk slides are ready for a decision room.",
+        ]
+    return {
+        "theme_summary": {
+            "name": design.get("theme"),
+            "label": design.get("theme_label"),
+            "use_case": design.get("theme_use_case"),
+            "mood": design.get("theme_mood"),
+        },
+        "copy_rules": copy_rules,
+        "review_sequence": review_sequence,
+        "html_review_focus": html_review_focus,
+        "asset_requests": asset_requests[:10],
+        "slide_navigation": nav,
+        "deck_controls": {
+            "preferred_export_path": "review HTML -> freeze copy -> export PPTX",
+            "page_count": len(slides),
+            "consulting_score": quality_review.get("consulting_score", 0),
+            "quality_gate": quality_review.get("readiness", ""),
+        },
+        "designer_brief": {
+            "brand": req["brand"],
+            "theme": design.get("theme_label", design.get("theme", "")),
+            "decision_ask": req["decision_ask"],
+            "must_include": req["must_include"],
         },
     }
 
@@ -574,6 +699,9 @@ def _markdown_report(req: Dict[str, Any], payload: Dict[str, Any]) -> str:
             f"- consulting_score: {review['consulting_score']}",
             f"- assertion_title_coverage: {review['assertion_title_coverage']}",
             f"- evidence_coverage: {review['evidence_coverage']}",
+            f"- story_continuity_score: {review['story_continuity_score']}",
+            f"- visual_variety_score: {review['visual_variety_score']}",
+            f"- decision_pressure_score: {review['decision_pressure_score']}",
             f"- readiness: {review['readiness']}",
         ]
     )
@@ -591,6 +719,7 @@ def _markdown_report(req: Dict[str, Any], payload: Dict[str, Any]) -> str:
                 f"- decision_link: {slide['decision_link']}",
                 f"- evidence_needed: {', '.join(slide['evidence_needed'])}",
                 f"- visual_brief: {slide['visual_brief']}",
+                f"- primary_visual: {slide['designer_handoff']['primary_visual']}",
                 "",
             ]
         )
@@ -608,6 +737,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     design = _design_system(lang, req, layout_catalog)
     slides = _build_slides(req, lang, layout_catalog)
     quality_review = _quality_review(slides, req, storyline, lang)
+    design_handoff = _design_handoff(req, design, slides, quality_review, lang)
 
     prompt_packet = compose_prompt_v2(
         objective=f"Build premium strategy deck for {req['topic']}",
@@ -654,6 +784,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             "story_patterns": story_reference[:5],
         },
         "quality_review": quality_review,
+        "design_handoff": design_handoff,
         "slides": slides,
         "prompt_packet": prompt_packet,
     }
@@ -679,6 +810,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "storyline": storyline,
         "design_system": design,
         "reference_digest": payload["reference_digest"],
+        "design_handoff": design_handoff,
         "slides": slides,
         "quality_score": round(float(quality_review["consulting_score"]) / 100.0, 2),
         "json_path": str(out_json),

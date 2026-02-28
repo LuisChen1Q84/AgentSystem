@@ -28,6 +28,30 @@
 - HTML 预览现在可以作为正式审稿入口，而不是只看 JSON/Markdown。
 - 后续若继续升级 PPTX 导出，可以直接复用这份 deck spec 和 layout catalog。
 
+## 第二轮优化（同日继续）
+- 扩展主题体系：
+  - `boardroom-signal`
+  - `ivory-ledger`
+  - `harbor-brief`
+- 新增 `design_handoff`：
+  - `theme_summary`
+  - `review_sequence`
+  - `html_review_focus`
+  - `asset_requests`
+  - `slide_navigation`
+- 每页新增 `designer_handoff`，让设计师或后续导出器能直接消费：
+  - `primary_visual`
+  - `module_priority`
+  - `headline_density_flag`
+  - `accent_targets`
+  - `asset_requests`
+- HTML 审稿界面新增：
+  - 左侧 review rail
+  - slide map 导航
+  - designer brief
+  - handoff strip
+  - 更强的质量/风险提示
+
 ## 后续建议
 - 若要继续提升成品质量，下一步应该做 PPTX 原生导出模板，而不是再扩提示词。
 - 若要适配多个审美方向，应在 `assets/mckinsey_ppt/` 下继续扩主题与布局，而不是在 engine 里写分支。

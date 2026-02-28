@@ -38,7 +38,91 @@ def _render_storyline(storyline: List[Dict[str, Any]]) -> str:
             f'<div class="story-implication">{_esc(item.get("implication", ""))}</div>'
             "</li>"
         )
-    return "<ol class=\"storyline-ribbon\">" + "".join(items) + "</ol>"
+    return '<ol class="storyline-ribbon">' + "".join(items) + "</ol>"
+
+
+def _render_review_rail(payload: Dict[str, Any]) -> str:
+    review = payload.get("quality_review", {}) if isinstance(payload.get("quality_review", {}), dict) else {}
+    handoff = payload.get("design_handoff", {}) if isinstance(payload.get("design_handoff", {}), dict) else {}
+    theme = handoff.get("theme_summary", {}) if isinstance(handoff.get("theme_summary", {}), dict) else {}
+    cheapness = review.get("cheapness_risk_flags", []) if isinstance(review.get("cheapness_risk_flags", []), list) else []
+    density = review.get("density_flags", []) if isinstance(review.get("density_flags", []), list) else []
+    html_focus = handoff.get("html_review_focus", []) if isinstance(handoff.get("html_review_focus", []), list) else []
+    return (
+        '<aside class="review-rail">'
+        '<div class="rail-card">'
+        '<div class="rail-label">Theme</div>'
+        f'<div class="rail-title">{_esc(theme.get("label", theme.get("name", "")))}</div>'
+        f'<p>{_esc(theme.get("use_case", ""))}</p>'
+        '<div class="chip-row">'
+        f'<span class="chip accent">{_esc(theme.get("mood", ""))}</span>'
+        f'<span class="chip muted">{_esc(review.get("readiness", ""))}</span>'
+        '</div>'
+        '</div>'
+        '<div class="rail-card">'
+        '<div class="rail-label">Review Focus</div>'
+        '<ul>' + ''.join(f'<li>{_esc(item)}</li>' for item in html_focus[:3]) + '</ul>'
+        '</div>'
+        '<div class="rail-card">'
+        '<div class="rail-label">Risk Flags</div>'
+        '<ul>'
+        + ''.join(f'<li>{_esc(item)}</li>' for item in cheapness[:3])
+        + ''.join(f'<li>{_esc(item.get("reason", ""))}</li>' for item in density[:2])
+        + ('<li>No major cheapness flags.</li>' if not cheapness and not density else '')
+        + '</ul>'
+        '</div>'
+        '</aside>'
+    )
+
+
+def _render_navigation(payload: Dict[str, Any]) -> str:
+    handoff = payload.get("design_handoff", {}) if isinstance(payload.get("design_handoff", {}), dict) else {}
+    navigation = handoff.get("slide_navigation", []) if isinstance(handoff.get("slide_navigation", []), list) else []
+    return (
+        '<nav class="slide-nav">'
+        '<div class="nav-title">Slide Map</div>'
+        + ''.join(
+            '<a class="nav-item" href="#slide-{index}">'
+            '<span class="nav-index">{index}</span>'
+            '<span class="nav-copy">'
+            '<strong>{section}</strong>'
+            '<small>{title}</small>'
+            '</span>'
+            '</a>'.format(
+                index=_esc(item.get("index", "")),
+                section=_esc(item.get("section", "")),
+                title=_esc(item.get("title_short", "")),
+            )
+            for item in navigation
+        )
+        + '</nav>'
+    )
+
+
+def _render_handoff(payload: Dict[str, Any]) -> str:
+    handoff = payload.get("design_handoff", {}) if isinstance(payload.get("design_handoff", {}), dict) else {}
+    brief = handoff.get("designer_brief", {}) if isinstance(handoff.get("designer_brief", {}), dict) else {}
+    controls = handoff.get("deck_controls", {}) if isinstance(handoff.get("deck_controls", {}), dict) else {}
+    return (
+        '<section class="handoff-strip">'
+        '<div class="panel primary">'
+        '<h3>Designer Brief</h3>'
+        f'<p><strong>Brand:</strong> {_esc(brief.get("brand", ""))}</p>'
+        f'<p><strong>Theme:</strong> {_esc(brief.get("theme", ""))}</p>'
+        f'<p><strong>Decision Ask:</strong> {_esc(brief.get("decision_ask", ""))}</p>'
+        '</div>'
+        '<div class="panel">'
+        '<h3>Review Sequence</h3>'
+        '<ul>' + ''.join(f'<li>{_esc(item)}</li>' for item in handoff.get("review_sequence", [])[:3]) + '</ul>'
+        '</div>'
+        '<div class="panel">'
+        '<h3>Deck Controls</h3>'
+        f'<p><strong>Slides:</strong> {_esc(controls.get("page_count", ""))}</p>'
+        f'<p><strong>Quality Gate:</strong> {_esc(controls.get("quality_gate", ""))}</p>'
+        f'<p><strong>Export Path:</strong> {_esc(controls.get("preferred_export_path", ""))}</p>'
+        '</div>'
+        '</section>'
+    )
 
 
 def _render_slide(slide: Dict[str, Any]) -> str:
@@ -47,18 +131,20 @@ def _render_slide(slide: Dict[str, Any]) -> str:
     kpis = slide.get("kpi_callout", []) if isinstance(slide.get("kpi_callout", []), list) else []
     evidence = slide.get("evidence_needed", []) if isinstance(slide.get("evidence_needed", []), list) else []
     speaker_notes = slide.get("speaker_notes", []) if isinstance(slide.get("speaker_notes", []), list) else []
+    handoff = slide.get("designer_handoff", {}) if isinstance(slide.get("designer_handoff", {}), dict) else {}
     return (
-        f'<article class="slide-card layout-{_esc(slide.get("layout", "standard"))}">'
+        f'<article id="slide-{_esc(slide.get("index", ""))}" class="slide-card layout-{_esc(slide.get("layout", "standard"))}">'
         '<div class="slide-rail">'
         f'<div class="slide-index">{_esc(slide.get("index", ""))}</div>'
         f'<div class="slide-section">{_esc(slide.get("section", ""))}</div>'
         f'<div class="slide-density">{_esc(layout_meta.get("density", "medium"))}</div>'
-        "</div>"
+        '</div>'
         '<div class="slide-main">'
         '<div class="slide-topline">'
         f'<span class="eyebrow">{_esc(slide.get("layout", ""))}</span>'
         f'<span class="eyebrow soft">{_esc(layout_meta.get("intent", ""))}</span>'
-        "</div>"
+        f'<span class="eyebrow soft">headline {int(handoff.get("headline_word_count", 0) or 0)}w</span>'
+        '</div>'
         f'<h2 class="slide-title">{_esc(slide.get("title_assertion", ""))}</h2>'
         f'<p class="slide-sowhat">{_esc(slide.get("so_what", ""))}</p>'
         '<div class="slide-grid">'
@@ -67,19 +153,17 @@ def _render_slide(slide: Dict[str, Any]) -> str:
         f'<p>{_esc(slide.get("decision_link", ""))}</p>'
         '<h3>Visual Brief</h3>'
         f'<p>{_esc(slide.get("visual_brief", ""))}</p>'
-        "</section>"
+        '</section>'
         '<section class="panel">'
         '<h3>Evidence Needed</h3>'
         f'<div class="chip-row">{_join_badges(evidence, "chip")}</div>'
         '<h3>Modules</h3>'
         f'<div class="chip-row">{_join_badges(modules, "chip muted")}</div>'
-        "</section>"
+        '</section>'
         '<section class="panel">'
         '<h3>Speaker Notes</h3>'
-        "<ul>"
-        + "".join(f"<li>{_esc(note)}</li>" for note in speaker_notes)
-        + "</ul>"
-        "</section>"
+        '<ul>' + ''.join(f'<li>{_esc(note)}</li>' for note in speaker_notes) + '</ul>'
+        '</section>'
         '<section class="panel kpi-panel">'
         '<h3>KPI Callouts</h3>'
         f'<div class="chip-row">{_join_badges(kpis, "chip accent")}</div>'
@@ -87,11 +171,20 @@ def _render_slide(slide: Dict[str, Any]) -> str:
         f'<div><span>Chart</span><strong>{_esc(slide.get("chart_recommendation", ""))}</strong></div>'
         f'<div><span>10s Test</span><strong>{_esc(slide.get("ten_second_test", ""))}</strong></div>'
         f'<div><span>Composition</span><strong>{_esc(layout_meta.get("composition", ""))}</strong></div>'
-        "</div>"
-        "</section>"
-        "</div>"
-        "</div>"
-        "</article>"
+        '</div>'
+        '</section>'
+        '<section class="panel handoff-panel">'
+        '<h3>Designer Handoff</h3>'
+        f'<p><strong>Primary Visual:</strong> {_esc(handoff.get("primary_visual", ""))}</p>'
+        f'<p><strong>Headline Trim:</strong> {_esc(handoff.get("headline_density_flag", ""))}</p>'
+        '<h3>Accent Targets</h3>'
+        f'<div class="chip-row">{_join_badges(handoff.get("accent_targets", []), "chip accent")}</div>'
+        '<h3>Asset Requests</h3>'
+        '<ul>' + ''.join(f'<li>{_esc(item)}</li>' for item in handoff.get("asset_requests", [])[:2]) + '</ul>'
+        '</section>'
+        '</div>'
+        '</div>'
+        '</article>'
     )
 
 
@@ -103,40 +196,84 @@ def render_deck_html(payload: Dict[str, Any], out_path: Path) -> Path:
     slides = payload.get("slides", []) if isinstance(payload.get("slides", []), list) else []
     storyline = payload.get("storyline", []) if isinstance(payload.get("storyline", []), list) else []
     html_text = f"""<!DOCTYPE html>
-<html lang="{_esc(payload.get("language", "en"))}">
+<html lang="{_esc(payload.get('language', 'en'))}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{_esc(request.get("topic", "Premium deck preview"))}</title>
+  <title>{_esc(request.get('topic', 'Premium deck preview'))}</title>
   <style>
     :root {{
-      --ink: {_esc(colors.get("ink", "#0F172A"))};
-      --accent: {_esc(colors.get("accent", "#0F766E"))};
-      --accent-soft: {_esc(colors.get("accent_soft", "#D6F3EE"))};
-      --warn: {_esc(colors.get("warn", "#B45309"))};
-      --paper: {_esc(colors.get("paper", "#F7F4ED"))};
-      --panel: {_esc(colors.get("panel", "#FFFDFC"))};
-      --line: {_esc(colors.get("line", "#D7CEC2"))};
-      --muted: {_esc(colors.get("muted", "#667085"))};
+      --ink: {_esc(colors.get('ink', '#0F172A'))};
+      --accent: {_esc(colors.get('accent', '#0F766E'))};
+      --accent-soft: {_esc(colors.get('accent_soft', '#D6F3EE'))};
+      --warn: {_esc(colors.get('warn', '#B45309'))};
+      --paper: {_esc(colors.get('paper', '#F7F4ED'))};
+      --panel: {_esc(colors.get('panel', '#FFFDFC'))};
+      --line: {_esc(colors.get('line', '#D7CEC2'))};
+      --muted: {_esc(colors.get('muted', '#667085'))};
       --shadow: 0 24px 80px rgba(15, 23, 42, 0.12);
       --radius-xl: 28px;
       --radius-lg: 20px;
       --radius-sm: 999px;
     }}
     * {{ box-sizing: border-box; }}
+    html {{ scroll-behavior: smooth; }}
     body {{
       margin: 0;
       color: var(--ink);
       background:
-        radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
-        radial-gradient(circle at right center, rgba(180, 83, 9, 0.12), transparent 18%),
-        linear-gradient(180deg, #f7f4ed 0%, #efe7da 100%);
+        radial-gradient(circle at top left, color-mix(in srgb, var(--accent) 14%, transparent), transparent 28%),
+        radial-gradient(circle at right center, color-mix(in srgb, var(--warn) 14%, transparent), transparent 18%),
+        linear-gradient(180deg, var(--paper) 0%, color-mix(in srgb, var(--paper) 92%, #e8dfd1) 100%);
       font-family: "Avenir Next", "PingFang SC", "Source Han Sans SC", "IBM Plex Sans", sans-serif;
     }}
-    .deck-shell {{
-      width: min(1320px, calc(100vw - 32px));
+    .app-shell {{
+      width: min(1520px, calc(100vw - 32px));
       margin: 24px auto 40px;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
     }}
+    .sidebar {{ position: sticky; top: 18px; display: grid; gap: 14px; }}
+    .review-rail, .slide-nav {{ display: grid; gap: 14px; }}
+    .rail-card, .slide-nav {{
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: 0 18px 60px rgba(15, 23, 42, 0.08);
+      backdrop-filter: blur(8px);
+    }}
+    .rail-label, .nav-title {{
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }}
+    .rail-title {{ margin-top: 8px; font-size: 22px; font-weight: 800; }}
+    .rail-card p, .rail-card li {{ color: var(--muted); font-size: 13px; line-height: 1.6; }}
+    .slide-nav {{ gap: 10px; }}
+    .nav-item {{
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 0;
+      border-top: 1px solid rgba(15,23,42,0.06);
+      color: inherit;
+      text-decoration: none;
+    }}
+    .nav-item:first-of-type {{ border-top: 0; }}
+    .nav-index {{
+      width: 34px; height: 34px; border-radius: 12px;
+      background: var(--accent-soft); color: var(--accent);
+      display: grid; place-items: center; font-weight: 800; font-size: 13px;
+    }}
+    .nav-copy strong {{ display: block; font-size: 13px; }}
+    .nav-copy small {{ display: block; margin-top: 4px; color: var(--muted); line-height: 1.45; }}
+    .main {{ display: grid; gap: 20px; }}
     .hero {{
       background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(255,253,252,0.8));
       border: 1px solid rgba(15, 23, 42, 0.08);
@@ -149,322 +286,103 @@ def render_deck_html(payload: Dict[str, Any], out_path: Path) -> Path:
     .hero::after {{
       content: "";
       position: absolute;
-      right: -64px;
-      top: -64px;
-      width: 220px;
-      height: 220px;
-      border-radius: 50%;
-      background: linear-gradient(180deg, rgba(15, 118, 110, 0.22), rgba(15, 118, 110, 0));
+      right: -64px; top: -64px;
+      width: 240px; height: 240px; border-radius: 50%;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 24%, transparent), rgba(255,255,255,0));
       filter: blur(12px);
     }}
     .eyebrow {{
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border-radius: var(--radius-sm);
-      padding: 6px 12px;
-      background: rgba(15, 118, 110, 0.08);
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
+      display: inline-flex; align-items: center; gap: 8px;
+      border-radius: var(--radius-sm); padding: 6px 12px;
+      background: color-mix(in srgb, var(--accent) 10%, white);
+      color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
     }}
-    .eyebrow.soft {{
-      background: rgba(15, 23, 42, 0.06);
-      color: var(--muted);
-    }}
-    .hero-grid {{
-      display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 24px;
-      align-items: end;
-      position: relative;
-      z-index: 1;
-    }}
-    .hero h1 {{
-      margin: 16px 0 12px;
-      font-size: clamp(32px, 5vw, 56px);
-      line-height: 1.02;
-      max-width: 10ch;
-    }}
-    .hero p {{
-      margin: 0;
-      max-width: 720px;
-      color: var(--muted);
-      font-size: 16px;
-      line-height: 1.6;
-    }}
-    .metric-row {{
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 24px;
-    }}
-    .metric-card {{
-      background: rgba(255, 255, 255, 0.75);
-      border: 1px solid rgba(15, 23, 42, 0.06);
-      border-radius: 18px;
-      padding: 16px;
-      backdrop-filter: blur(8px);
-    }}
-    .metric-label {{
-      color: var(--muted);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }}
-    .metric-value {{
-      margin-top: 8px;
-      font-size: 28px;
-      font-weight: 800;
-    }}
-    .storyline-ribbon {{
-      list-style: none;
-      padding: 0;
-      margin: 24px 0 0;
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 12px;
-    }}
-    .storyline-ribbon li {{
-      background: rgba(255,255,255,0.72);
-      border: 1px solid rgba(15, 23, 42, 0.06);
-      border-radius: 18px;
-      padding: 16px;
-      min-height: 156px;
-    }}
-    .story-kicker {{
-      color: var(--accent);
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      font-weight: 700;
-    }}
-    .story-headline {{
-      margin-top: 10px;
-      font-size: 17px;
-      font-weight: 700;
-      line-height: 1.35;
-    }}
-    .story-implication {{
-      margin-top: 10px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.55;
-    }}
-    .section-header {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      margin: 28px 0 16px;
-    }}
-    .section-header h2 {{
-      margin: 0;
-      font-size: 20px;
-    }}
-    .slide-stack {{
-      display: grid;
-      gap: 18px;
-    }}
-    .slide-card {{
-      display: grid;
-      grid-template-columns: 120px 1fr;
-      gap: 20px;
-      background: rgba(255, 253, 252, 0.9);
-      border: 1px solid rgba(15, 23, 42, 0.06);
-      border-radius: var(--radius-lg);
-      box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
-      overflow: hidden;
-    }}
-    .slide-rail {{
-      background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(15, 118, 110, 0.02));
-      padding: 24px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      align-items: flex-start;
-      border-right: 1px solid rgba(15, 23, 42, 0.06);
-    }}
-    .slide-index {{
-      font-size: 34px;
-      font-weight: 800;
-      line-height: 1;
-    }}
-    .slide-section,
-    .slide-density {{
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }}
-    .slide-main {{
-      padding: 24px 24px 28px;
-    }}
-    .slide-topline {{
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }}
-    .slide-title {{
-      margin: 16px 0 10px;
-      font-size: clamp(24px, 3vw, 34px);
-      line-height: 1.12;
-    }}
-    .slide-sowhat {{
-      margin: 0 0 18px;
-      color: var(--muted);
-      font-size: 15px;
-      line-height: 1.65;
-      max-width: 72ch;
-    }}
-    .slide-grid {{
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }}
-    .panel {{
-      background: rgba(255,255,255,0.84);
-      border: 1px solid rgba(15, 23, 42, 0.06);
-      border-radius: 18px;
-      padding: 18px;
-    }}
-    .panel.primary {{
-      background: linear-gradient(180deg, rgba(15,118,110,0.08), rgba(255,255,255,0.84));
-    }}
-    .panel h3 {{
-      margin: 0 0 10px;
-      font-size: 12px;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      text-transform: uppercase;
-    }}
-    .panel p,
-    .panel li {{
-      margin: 0;
-      font-size: 14px;
-      line-height: 1.65;
-    }}
-    .panel ul {{
-      margin: 0;
-      padding-left: 18px;
-      display: grid;
-      gap: 8px;
-    }}
-    .chip-row {{
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }}
-    .chip {{
-      display: inline-flex;
-      padding: 8px 12px;
-      border-radius: var(--radius-sm);
-      background: rgba(15, 23, 42, 0.06);
-      color: var(--ink);
-      font-size: 12px;
-      line-height: 1;
-      font-weight: 600;
-    }}
-    .chip.muted {{
-      background: rgba(15, 23, 42, 0.04);
-      color: var(--muted);
-    }}
-    .chip.accent {{
-      background: var(--accent-soft);
-      color: var(--accent);
-    }}
-    .meta-grid {{
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 12px;
-      margin-top: 18px;
-    }}
-    .meta-grid span {{
-      display: block;
-      color: var(--muted);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 6px;
-    }}
-    .meta-grid strong {{
-      font-size: 14px;
-      line-height: 1.4;
-    }}
-    .footer-note {{
-      margin: 22px 0 0;
-      color: var(--muted);
-      font-size: 13px;
-    }}
-    @media (max-width: 1080px) {{
-      .hero-grid,
-      .storyline-ribbon,
-      .slide-grid,
-      .metric-row,
-      .meta-grid {{
-        grid-template-columns: 1fr;
-      }}
-    }}
-    @media (max-width: 820px) {{
-      .deck-shell {{
-        width: min(100vw - 20px, 100%);
-        margin: 10px auto 24px;
-      }}
-      .hero {{
-        padding: 22px;
-      }}
-      .slide-card {{
-        grid-template-columns: 1fr;
-      }}
-      .slide-rail {{
-        border-right: 0;
-        border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-      }}
-      .slide-main {{
-        padding: 20px;
-      }}
-    }}
+    .eyebrow.soft {{ background: rgba(15, 23, 42, 0.06); color: var(--muted); }}
+    .hero-grid {{ display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 24px; align-items: end; position: relative; z-index: 1; }}
+    .hero h1 {{ margin: 16px 0 12px; font-size: clamp(34px, 5vw, 60px); line-height: 1.01; max-width: 10ch; }}
+    .hero p {{ margin: 0; max-width: 720px; color: var(--muted); font-size: 16px; line-height: 1.6; }}
+    .metric-row {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }}
+    .metric-card {{ background: rgba(255,255,255,0.78); border: 1px solid rgba(15,23,42,0.06); border-radius: 18px; padding: 16px; backdrop-filter: blur(8px); }}
+    .metric-label {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}
+    .metric-value {{ margin-top: 8px; font-size: 28px; font-weight: 800; }}
+    .storyline-ribbon {{ list-style: none; padding: 0; margin: 24px 0 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }}
+    .storyline-ribbon li {{ background: rgba(255,255,255,0.72); border: 1px solid rgba(15,23,42,0.06); border-radius: 18px; padding: 16px; min-height: 156px; }}
+    .story-kicker {{ color: var(--accent); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }}
+    .story-headline {{ margin-top: 10px; font-size: 17px; font-weight: 700; line-height: 1.35; }}
+    .story-implication {{ margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.55; }}
+    .handoff-strip, .section-header, .slide-stack {{ display: grid; gap: 18px; }}
+    .handoff-strip {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+    .section-header {{ margin-top: 8px; }}
+    .section-header h2 {{ margin: 0; font-size: 20px; }}
+    .slide-card {{ display: grid; grid-template-columns: 120px 1fr; gap: 20px; background: rgba(255,253,252,0.92); border: 1px solid rgba(15,23,42,0.06); border-radius: var(--radius-lg); box-shadow: 0 14px 40px rgba(15,23,42,0.08); overflow: hidden; }}
+    .slide-rail {{ background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, white), rgba(255,255,255,0.4)); padding: 24px 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; border-right: 1px solid rgba(15,23,42,0.06); }}
+    .slide-index {{ font-size: 34px; font-weight: 800; line-height: 1; }}
+    .slide-section, .slide-density {{ font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }}
+    .slide-main {{ padding: 24px 24px 28px; }}
+    .slide-topline {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+    .slide-title {{ margin: 16px 0 10px; font-size: clamp(24px, 3vw, 34px); line-height: 1.12; }}
+    .slide-sowhat {{ margin: 0 0 18px; color: var(--muted); font-size: 15px; line-height: 1.65; max-width: 72ch; }}
+    .slide-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }}
+    .panel {{ background: rgba(255,255,255,0.86); border: 1px solid rgba(15,23,42,0.06); border-radius: 18px; padding: 18px; }}
+    .panel.primary {{ background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, white), rgba(255,255,255,0.92)); }}
+    .panel h3 {{ margin: 0 0 10px; font-size: 12px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }}
+    .panel p, .panel li {{ margin: 0; font-size: 14px; line-height: 1.65; }}
+    .panel ul {{ margin: 0; padding-left: 18px; display: grid; gap: 8px; }}
+    .chip-row {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+    .chip {{ display: inline-flex; padding: 8px 12px; border-radius: var(--radius-sm); background: rgba(15,23,42,0.06); color: var(--ink); font-size: 12px; line-height: 1; font-weight: 600; }}
+    .chip.muted {{ background: rgba(15,23,42,0.04); color: var(--muted); }}
+    .chip.accent {{ background: var(--accent-soft); color: var(--accent); }}
+    .meta-grid {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }}
+    .meta-grid span {{ display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }}
+    .meta-grid strong {{ font-size: 14px; line-height: 1.4; }}
+    .footer-note {{ margin: 22px 0 0; color: var(--muted); font-size: 13px; }}
+    @media (max-width: 1240px) {{ .app-shell {{ grid-template-columns: 1fr; }} .sidebar {{ position: static; grid-template-columns: 1fr 1fr; }} }}
+    @media (max-width: 1080px) {{ .hero-grid, .storyline-ribbon, .slide-grid, .metric-row, .meta-grid, .handoff-strip, .sidebar {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 820px) {{ .app-shell {{ width: min(100vw - 20px, 100%); margin: 10px auto 24px; }} .hero {{ padding: 22px; }} .slide-card {{ grid-template-columns: 1fr; }} .slide-rail {{ border-right: 0; border-bottom: 1px solid rgba(15,23,42,0.06); flex-direction: row; align-items: center; justify-content: space-between; }} .slide-main {{ padding: 20px; }} }}
   </style>
 </head>
 <body>
-  <main class="deck-shell">
-    <section class="hero">
-      <div class="hero-grid">
-        <div>
-          <span class="eyebrow">{_esc(design.get("theme", "boardroom"))}</span>
-          <h1>{_esc(request.get("topic", "Premium Strategy Deck"))}</h1>
-          <p>{_esc(payload.get("summary", ""))}</p>
-          <div class="metric-row">
-            {_metric("Consulting Score", review.get("consulting_score", "n/a"))}
-            {_metric("Assertion Coverage", review.get("assertion_title_coverage", "n/a"))}
-            {_metric("Evidence Coverage", review.get("evidence_coverage", "n/a"))}
+  <div class="app-shell">
+    <div class="sidebar">
+      {_render_review_rail(payload)}
+      {_render_navigation(payload)}
+    </div>
+    <main class="main">
+      <section class="hero">
+        <div class="hero-grid">
+          <div>
+            <span class="eyebrow">{_esc(design.get('theme_label', design.get('theme', 'boardroom')))}</span>
+            <h1>{_esc(request.get('topic', 'Premium Strategy Deck'))}</h1>
+            <p>{_esc(payload.get('summary', ''))}</p>
+            <div class="metric-row">
+              {_metric('Consulting Score', review.get('consulting_score', 'n/a'))}
+              {_metric('Assertion Coverage', review.get('assertion_title_coverage', 'n/a'))}
+              {_metric('Evidence Coverage', review.get('evidence_coverage', 'n/a'))}
+              {_metric('Story Continuity', review.get('story_continuity_score', 'n/a'))}
+            </div>
+          </div>
+          <div class="panel primary">
+            <h3>Decision Ask</h3>
+            <p>{_esc(request.get('decision_ask', ''))}</p>
+            <h3 style="margin-top:16px;">Deliverable</h3>
+            <p>{_esc(request.get('deliverable', ''))}</p>
+            <h3 style="margin-top:16px;">Must Fix Before PPTX</h3>
+            <ul>{''.join(f'<li>{_esc(item)}</li>' for item in review.get('must_fix_before_pptx', [])[:3])}</ul>
           </div>
         </div>
-        <div class="panel primary">
-          <h3>Decision Ask</h3>
-          <p>{_esc(request.get("decision_ask", ""))}</p>
-          <h3 style="margin-top:16px;">Deliverable</h3>
-          <p>{_esc(request.get("deliverable", ""))}</p>
-          <h3 style="margin-top:16px;">Must Fix Before PPTX</h3>
-          <ul>{"".join(f"<li>{_esc(item)}</li>" for item in review.get("must_fix_before_pptx", [])[:3])}</ul>
-        </div>
+        {_render_storyline(storyline)}
+      </section>
+      {_render_handoff(payload)}
+      <div class="section-header">
+        <h2>Slide Preview</h2>
+        <span class="eyebrow soft">{_esc(len(slides))} slides</span>
       </div>
-      {_render_storyline(storyline)}
-    </section>
-    <div class="section-header">
-      <h2>Slide Preview</h2>
-      <span class="eyebrow soft">{_esc(len(slides))} slides</span>
-    </div>
-    <section class="slide-stack">
-      {"".join(_render_slide(slide) for slide in slides)}
-    </section>
-    <p class="footer-note">This preview is intentionally styled as a boardroom-quality HTML deck so the review step exposes hierarchy, density, and evidence gaps before PPTX export.</p>
-  </main>
+      <section class="slide-stack">
+        {''.join(_render_slide(slide) for slide in slides)}
+      </section>
+      <p class="footer-note">This preview is intentionally styled as a boardroom-quality HTML deck so the review step exposes hierarchy, density, evidence gaps, and designer handoff requirements before PPTX export.</p>
+    </main>
+  </div>
 </body>
 </html>
 """

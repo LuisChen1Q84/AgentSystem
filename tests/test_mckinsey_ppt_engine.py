@@ -32,8 +32,11 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
             self.assertIn("quality_review", out)
+            self.assertIn("design_handoff", out)
             self.assertIn("html_path", out)
             self.assertEqual(out["request"]["page_count"], 8)
+            self.assertIn("theme_label", out["design_system"])
+            self.assertIn("slide_navigation", out["design_handoff"])
 
             items = out["deliver_assets"]["items"]
             self.assertEqual(len(items), 3)
@@ -43,17 +46,22 @@ class McKinseyPptEngineTest(unittest.TestCase):
             spec = json.loads(Path(out["json_path"]).read_text(encoding="utf-8"))
             self.assertIn("quality_review", spec)
             self.assertIn("slides", spec)
+            self.assertIn("design_handoff", spec)
             self.assertGreaterEqual(spec["quality_review"]["consulting_score"], 60)
             self.assertEqual(len(spec["slides"]), 8)
             self.assertIn("decision_link", spec["slides"][0])
+            self.assertIn("designer_handoff", spec["slides"][0])
+            self.assertIn("theme_summary", spec["design_handoff"])
 
             html_text = Path(out["html_path"]).read_text(encoding="utf-8")
             self.assertIn("slide-card", html_text)
             self.assertIn("--accent", html_text)
             self.assertIn("Slide Preview", html_text)
+            self.assertIn("Slide Map", html_text)
+            self.assertIn("Designer Brief", html_text)
 
     def test_page_count_is_bounded_and_quality_review_exists(self):
-        out = run_request("Growth strategy", {"page_count": 99})
+        out = run_request("Growth strategy", {"page_count": 99, "theme": "ivory-ledger"})
         self.assertTrue(out["ok"])
         self.assertEqual(out["request"]["page_count"], 20)
         self.assertIn("delivery_bundle", out)
@@ -61,6 +69,8 @@ class McKinseyPptEngineTest(unittest.TestCase):
         self.assertIn("delivery_protocol", out)
         self.assertIn("quality_review", out)
         self.assertIn("consulting_score", out["quality_review"])
+        self.assertEqual(out["design_system"]["theme"], "ivory-ledger")
+        self.assertIn("visual_variety_score", out["quality_review"])
 
 
 if __name__ == "__main__":

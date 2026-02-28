@@ -1,6 +1,9 @@
 {
   "themes": {
     "boardroom-signal": {
+      "label": "Boardroom Signal",
+      "use_case": "General executive strategy and investment review",
+      "review_mood": "crisp, analytical, calm",
       "ink": "#0F172A",
       "accent": "#0F766E",
       "accent_soft": "#D6F3EE",
@@ -9,6 +12,32 @@
       "panel": "#FFFDFC",
       "line": "#D7CEC2",
       "muted": "#667085"
+    },
+    "ivory-ledger": {
+      "label": "Ivory Ledger",
+      "use_case": "Finance, board packs, regulatory or audit-heavy reviews",
+      "review_mood": "measured, premium, text-led",
+      "ink": "#1C1917",
+      "accent": "#8C4A2F",
+      "accent_soft": "#F6E6DA",
+      "warn": "#A16207",
+      "paper": "#FBF7F1",
+      "panel": "#FFFDF9",
+      "line": "#DDD0C3",
+      "muted": "#6B6259"
+    },
+    "harbor-brief": {
+      "label": "Harbor Brief",
+      "use_case": "Growth, product, operating model, transformation narratives",
+      "review_mood": "forward, structured, energetic",
+      "ink": "#0B132B",
+      "accent": "#1D4ED8",
+      "accent_soft": "#DFEAFF",
+      "warn": "#C2410C",
+      "paper": "#F5F7FB",
+      "panel": "#FFFFFF",
+      "line": "#D6DDEA",
+      "muted": "#5B6476"
     }
   },
   "layouts": {
