@@ -22,6 +22,7 @@ from services.observability_service import ObservabilityService
 from services.policy_service import PolicyService
 from services.ppt_service import PPTService
 from services.recommendation_service import RecommendationService
+from services.run_diagnostics_service import RunDiagnosticsService
 from services.slo_service import SLOService
 
 
@@ -35,6 +36,7 @@ class AgentServiceRegistry:
         self.recommend = RecommendationService(root=self.root)
         self.slo = SLOService(root=self.root)
         self.policy = PolicyService(root=self.root)
+        self.run_diagnostics = RunDiagnosticsService(root=self.root)
         self.mcp = MCPService(root=self.root)
         self.ppt = PPTService(root=self.root)
         self.image = ImageService(root=self.root)
@@ -47,6 +49,7 @@ class AgentServiceRegistry:
             "agent.recommend": ServiceSpec("agent.recommend", "optimization", "Recommend profile by task kind", "low"),
             "agent.slo": ServiceSpec("agent.slo", "governance", "Evaluate SLO guard", "low"),
             "agent.policy.tune": ServiceSpec("agent.policy.tune", "governance", "Tune agent policy from recent runs", "low"),
+            "agent.run.inspect": ServiceSpec("agent.run.inspect", "observability", "Inspect one agent run with strategy diagnostics", "low"),
             "agent.feedback.add": ServiceSpec("agent.feedback.add", "feedback", "Append feedback for a run", "low"),
             "agent.feedback.stats": ServiceSpec("agent.feedback.stats", "feedback", "Summarize collected feedback", "low"),
             "agent.feedback.pending": ServiceSpec("agent.feedback.pending", "feedback", "List runs pending feedback", "low"),
@@ -91,6 +94,13 @@ class AgentServiceRegistry:
             data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
             days=max(1, int(kwargs.get("days", 14))),
             memory_file=str(kwargs.get("memory_file", "")),
+        ).to_dict()
+
+    def _exec_agent_run_inspect(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.run_diagnostics.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            run_id=str(kwargs.get("run_id", "")),
+            out_dir=str(kwargs.get("out_dir", "")),
         ).to_dict()
 
     def _exec_agent_feedback_add(self, **kwargs: Any) -> Dict[str, Any]:

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,6 +31,12 @@ class AgentKernelTest(unittest.TestCase):
             items = out.get("deliver_assets", {}).get("items", [])
             self.assertGreaterEqual(len(items), 4)
             self.assertTrue((root / "agent" / "agent_evaluations.jsonl").exists())
+            runs_rows = (root / "agent" / "agent_runs.jsonl").read_text(encoding="utf-8").strip().splitlines()
+            self.assertTrue(runs_rows)
+            latest = json.loads(runs_rows[-1])
+            self.assertIn("payload_path", latest)
+            self.assertIn("candidate_count", latest)
+            self.assertIn("selection_confidence", latest)
 
 
 if __name__ == "__main__":

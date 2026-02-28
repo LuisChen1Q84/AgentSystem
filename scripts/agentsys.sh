@@ -1069,6 +1069,51 @@ run_agent_recommend() {
   automation_log "INFO" "agent-recommend" "done"
 }
 
+run_agent_run_inspect() {
+  automation_log "INFO" "agent-run-inspect" "start"
+  local data_dir=""
+  local run_id=""
+  local out_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir)
+        data_dir="${2:-}"
+        shift 2 || true
+        ;;
+      --run-id)
+        run_id="${2:-}"
+        shift 2 || true
+        ;;
+      --out-dir)
+        out_dir="${2:-}"
+        shift 2 || true
+        ;;
+      *)
+        extra+=("$1")
+        shift || true
+        ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then
+    cmd+=(--data-dir "${data_dir}")
+  fi
+  cmd+=(run-inspect)
+  if [ -n "${run_id}" ]; then
+    cmd+=(--run-id "${run_id}")
+  fi
+  if [ -n "${out_dir}" ]; then
+    cmd+=(--out-dir "${out_dir}")
+  fi
+  if [ "${#extra[@]}" -gt 0 ]; then
+    cmd+=("${extra[@]}")
+  fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-run-inspect" "done"
+}
+
 run_agent_policy() {
   automation_log "INFO" "agent-policy" "start"
   local data_dir=""
@@ -1320,6 +1365,7 @@ Usage:
   scripts/agentsys.sh agent "<task>" ['{"profile":"strict","dry_run":true}']
   scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
+  scripts/agentsys.sh agent-run-inspect --run-id <run_id> [--data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-policy [--days N --memory-file <path> --data-dir <path>]
   scripts/agentsys.sh agent-pack [list|enable|disable] [--name <pack>] [--cfg <path>]
   scripts/agentsys.sh agent-slo-guard [--enforce --cfg <path>]
@@ -1328,7 +1374,7 @@ Usage:
   scripts/agentsys.sh agent-feedback [add|stats|pending] [args...]
   scripts/agentsys.sh agent-learn [--apply --cfg <path>]
   scripts/agentsys.sh skill-contract-lint [--strict --cfg <path>]
-  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
+  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
@@ -1429,6 +1475,7 @@ case "${cmd}" in
   agent) shift; run_agent_os "${1:-}" "${2:-}" ;;
   agent-observe) shift; run_agent_observe "$@" ;;
   agent-recommend) shift; run_agent_recommend "$@" ;;
+  agent-run-inspect) shift; run_agent_run_inspect "$@" ;;
   agent-policy) shift; run_agent_policy "$@" ;;
   agent-pack) shift; run_agent_pack "${1:-list}" "${@:2}" ;;
   agent-slo-guard) shift; run_agent_slo_guard "$@" ;;

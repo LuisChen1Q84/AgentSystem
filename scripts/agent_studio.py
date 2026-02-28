@@ -100,6 +100,18 @@ def _diagnostics_cmd(reg: AgentServiceRegistry, days: int, data_dir: str, out_di
     return 0
 
 
+def _run_inspect_cmd(reg: AgentServiceRegistry, run_id: str, data_dir: str, out_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.run.inspect",
+            run_id=run_id,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+        )
+    )
+    return 0
+
+
 def _slo_cmd(reg: AgentServiceRegistry, data_dir: str) -> int:
     _print_json(reg.execute("agent.slo", data_dir=data_dir or str(ROOT / "日志/agent_os"), cfg={"defaults": {}}))
     return 0
@@ -177,7 +189,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -206,6 +218,12 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "diagnostics":
             _diagnostics_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, out_dir="")
+            continue
+        if cmd == "run-inspect":
+            if not args:
+                print("usage: run-inspect <run_id>")
+                continue
+            _run_inspect_cmd(reg, run_id=str(args[0]), data_dir=data_dir, out_dir="")
             continue
         if cmd == "policy":
             _policy_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir, memory_file="")
@@ -263,6 +281,10 @@ def build_cli() -> argparse.ArgumentParser:
     diag.add_argument("--days", type=int, default=14)
     diag.add_argument("--out-dir", default="")
 
+    inspect = sp.add_parser("run-inspect")
+    inspect.add_argument("--run-id", required=True)
+    inspect.add_argument("--out-dir", default="")
+
     sp.add_parser("slo")
 
     pol = sp.add_parser("policy")
@@ -305,6 +327,8 @@ def main() -> int:
         return _recommend_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "diagnostics":
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "run-inspect":
+        return _run_inspect_cmd(reg, run_id=str(args.run_id), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "slo":
         return _slo_cmd(reg, data_dir=data_dir)
     if args.cmd == "policy":

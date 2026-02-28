@@ -112,6 +112,7 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
     card_md.write_text(render_delivery_md(delivery_bundle.delivery_card), encoding="utf-8")
 
     evaluation = build_evaluation_record(payload, delivery_bundle.quality_score)
+    eval_report = evaluate_payload(payload)
     _append_jsonl(
         log_dir / "agent_runs.jsonl",
         {
@@ -122,8 +123,14 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
             "task_kind": payload.get("task_kind", ""),
             "duration_ms": int(payload.get("duration_ms", 0) or 0),
             "selected_strategy": _selected_strategy(payload),
-            "attempt_count": len(payload.get("result", {}).get("attempts", [])) if isinstance(payload.get("result", {}), dict) else 0,
+            "attempt_count": int(eval_report.get("attempt_count", 0) or 0),
+            "candidate_count": int(eval_report.get("candidate_count", 0) or 0),
+            "fallback_depth": int(eval_report.get("fallback_depth", 0) or 0),
+            "top_gap": float(payload.get("result", {}).get("top_gap", 0.0)) if isinstance(payload.get("result", {}), dict) else 0.0,
+            "selection_confidence": float(eval_report.get("selection_confidence", 0.0) or 0.0),
+            "quality_score": float(delivery_bundle.quality_score),
             "clarify_needed": bool(payload.get("clarification", {}).get("needed", False)) if isinstance(payload.get("clarification", {}), dict) else False,
+            "payload_path": str(out_file),
         },
     )
     _append_jsonl(log_dir / "agent_evaluations.jsonl", evaluation.to_dict())

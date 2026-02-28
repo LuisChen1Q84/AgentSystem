@@ -27,6 +27,10 @@ class AgentStudioTest(unittest.TestCase):
         a4 = parser.parse_args(["diagnostics"])
         self.assertEqual(a4.cmd, "diagnostics")
 
+        a45 = parser.parse_args(["run-inspect", "--run-id", "r1"])
+        self.assertEqual(a45.cmd, "run-inspect")
+        self.assertEqual(a45.run_id, "r1")
+
         a5 = parser.parse_args(["policy"])
         self.assertEqual(a5.cmd, "policy")
 
@@ -165,6 +169,62 @@ class AgentStudioTest(unittest.TestCase):
             buf = io.StringIO()
             with redirect_stdout(buf):
                 code = agent_studio._policy_cmd(reg, days=14, data_dir=str(root), memory_file="")
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("report", payload)
+
+    def test_run_inspect_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "agent_run_20260228_100000.json"
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": True,
+                        "mode": "strict",
+                        "profile": "strict",
+                        "task_kind": "report",
+                        "duration_ms": 100,
+                        "request": {"text": "生成周报框架", "params": {}},
+                        "clarification": {"needed": False},
+                        "result": {
+                            "ok": True,
+                            "top_gap": 0.12,
+                            "selected": {"strategy": "mcp-generalist", "executor": "mcp"},
+                            "candidates": [{"strategy": "mcp-generalist", "executor": "mcp", "score": 0.81, "rank": 1}],
+                            "attempts": [{"strategy": "mcp-generalist", "executor": "mcp", "ok": True, "mode": "mcp", "result": {"ok": True}}],
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r1",
+                        "ts": "2026-02-28 10:00:00",
+                        "ok": True,
+                        "profile": "strict",
+                        "task_kind": "report",
+                        "duration_ms": 100,
+                        "selected_strategy": "mcp-generalist",
+                        "attempt_count": 1,
+                        "payload_path": str(payload_path),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._run_inspect_cmd(reg, run_id="r1", data_dir=str(root), out_dir=str(root / "out"))
             self.assertEqual(code, 0)
             payload = json.loads(buf.getvalue())
             self.assertTrue(payload.get("ok", False))
