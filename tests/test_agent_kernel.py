@@ -35,6 +35,8 @@ class AgentKernelTest(unittest.TestCase):
             items = out.get("deliver_assets", {}).get("items", [])
             self.assertGreaterEqual(len(items), 4)
             self.assertTrue((root / "agent" / "agent_evaluations.jsonl").exists())
+            self.assertTrue((root / "agent" / "agent_run_objects.jsonl").exists())
+            self.assertTrue((root / "agent" / "agent_evidence_objects.jsonl").exists())
             runs_rows = (root / "agent" / "agent_runs.jsonl").read_text(encoding="utf-8").strip().splitlines()
             self.assertTrue(runs_rows)
             latest = json.loads(runs_rows[-1])

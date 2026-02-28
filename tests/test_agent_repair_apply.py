@@ -6,8 +6,10 @@ from pathlib import Path
 
 from core.kernel.repair_apply import (
     apply_repair_plan,
+    approve_repair_plan,
     build_repair_apply_plan,
     compare_repair_snapshots,
+    load_repair_plan,
     list_repair_snapshots,
     rollback_repair_plan,
     write_repair_plan_files,
@@ -134,6 +136,18 @@ class AgentRepairApplyTest(unittest.TestCase):
             files = write_repair_plan_files(plan, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())
+            self.assertTrue(Path(files["snapshot_json"]).exists())
+            self.assertTrue(Path(files["snapshot_md"]).exists())
+            loaded = load_repair_plan(backup_dir=root / "repair_backups", snapshot_id=plan["targets"]["snapshot_id"])
+            self.assertEqual(loaded["targets"]["snapshot_id"], plan["targets"]["snapshot_id"])
+
+            approval = approve_repair_plan(
+                plan=plan,
+                backup_dir=root / "repair_backups",
+                approve_code=plan["approval"]["code"],
+            )
+            self.assertEqual(approval["snapshot_id"], plan["targets"]["snapshot_id"])
+            self.assertTrue(approval["receipt"]["event_id"])
 
             applied = apply_repair_plan(plan)
             self.assertTrue(Path(applied["profile_overrides_file"]).exists())

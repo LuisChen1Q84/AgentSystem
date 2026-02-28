@@ -112,11 +112,17 @@ def build_run_diagnostic(*, data_dir: Path, run_id: str) -> Dict[str, Any]:
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     eval_rows = _load_jsonl(data_dir / "agent_evaluations.jsonl")
     delivery_rows = _load_jsonl(data_dir / "agent_deliveries.jsonl")
+    run_object_rows = _load_jsonl(data_dir / "agent_run_objects.jsonl")
+    evidence_rows = _load_jsonl(data_dir / "agent_evidence_objects.jsonl")
+    delivery_object_rows = _load_jsonl(data_dir / "agent_delivery_objects.jsonl")
     feedback_rows = _load_jsonl(data_dir / "feedback.jsonl")
 
     run_row = _find_latest(run_rows, run_id)
     eval_row = _find_latest(eval_rows, run_id)
     delivery_row = _find_latest(delivery_rows, run_id)
+    run_object_row = _find_latest(run_object_rows, run_id)
+    evidence_row = _find_latest(evidence_rows, run_id)
+    delivery_object_row = _find_latest(delivery_object_rows, run_id)
     feedback_row = _find_latest(feedback_rows, run_id)
     payload = _payload_from_summary(run_row, data_dir) if run_row else {}
     eval_report = evaluate_payload(payload) if payload else {}
@@ -186,12 +192,20 @@ def build_run_diagnostic(*, data_dir: Path, run_id: str) -> Dict[str, Any]:
             "summary": str(delivery_row.get("summary", delivery_bundle.get("summary", ""))) if delivery_row or delivery_bundle else "",
             "artifacts": delivery_files,
         },
+        "objects": {
+            "run_object": run_object_row,
+            "evidence_object": evidence_row,
+            "delivery_object": delivery_object_row,
+        },
         "paths": {
             "data_dir": str(data_dir),
             "payload_path": payload_path,
             "runs_file": str(data_dir / "agent_runs.jsonl"),
             "evaluations_file": str(data_dir / "agent_evaluations.jsonl"),
             "deliveries_file": str(data_dir / "agent_deliveries.jsonl"),
+            "run_objects_file": str(data_dir / "agent_run_objects.jsonl"),
+            "evidence_objects_file": str(data_dir / "agent_evidence_objects.jsonl"),
+            "delivery_objects_file": str(data_dir / "agent_delivery_objects.jsonl"),
             "feedback_file": str(data_dir / "feedback.jsonl"),
         },
     }
@@ -204,6 +218,7 @@ def render_run_diagnostic_md(report: Dict[str, Any]) -> str:
     evaluation = report.get("evaluation", {})
     feedback = report.get("feedback", {})
     delivery = report.get("delivery", {})
+    objects = report.get("objects", {})
     lines = [
         f"# Agent Run Diagnostic | {report.get('run_id', '')}",
         "",
@@ -253,6 +268,12 @@ def render_run_diagnostic_md(report: Dict[str, Any]) -> str:
         "## Delivery",
         "",
         f"- summary: {delivery.get('summary', '')}",
+        "",
+        "## Objects",
+        "",
+        f"- run_object: {bool(objects.get('run_object', {}))}",
+        f"- evidence_object: {bool(objects.get('evidence_object', {}))}",
+        f"- delivery_object: {bool(objects.get('delivery_object', {}))}",
         "",
         "## Recommendations",
         "",

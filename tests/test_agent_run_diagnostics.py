@@ -96,6 +96,18 @@ class AgentRunDiagnosticsTest(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            (root / "agent_run_objects.jsonl").write_text(
+                json.dumps({"run_id": "r1", "service": "agent.run", "entrypoint": "core.kernel.evaluator"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evidence_objects.jsonl").write_text(
+                json.dumps({"run_id": "r1", "risk_level": "low", "service": "agent.run"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_delivery_objects.jsonl").write_text(
+                json.dumps({"run_id": "r1", "summary": "report handled via mcp-generalist"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
 
             report = build_run_diagnostic(data_dir=root, run_id="r1")
             self.assertEqual(report["selection"]["selected_strategy"], "mcp-generalist")
@@ -103,6 +115,8 @@ class AgentRunDiagnosticsTest(unittest.TestCase):
             self.assertEqual(report["execution"]["attempt_count"], 1)
             self.assertFalse(report["feedback"]["present"])
             self.assertEqual(report["request"]["text"], "生成周报框架")
+            self.assertEqual(report["objects"]["run_object"]["run_id"], "r1")
+            self.assertEqual(report["objects"]["evidence_object"]["risk_level"], "low")
 
             files = write_run_diagnostic_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())

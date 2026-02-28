@@ -153,6 +153,9 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
         {"path": str(log_dir / "agent_runs.jsonl")},
         {"path": str(log_dir / "agent_evaluations.jsonl")},
         {"path": str(log_dir / "agent_deliveries.jsonl")},
+        {"path": str(log_dir / "agent_run_objects.jsonl")},
+        {"path": str(log_dir / "agent_evidence_objects.jsonl")},
+        {"path": str(log_dir / "agent_delivery_objects.jsonl")},
     ]
     payload["delivery_bundle"] = delivery_bundle.to_dict()
     payload["delivery_object"] = delivery_bundle.to_dict()
@@ -183,5 +186,27 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
         entrypoint="core.kernel.evaluator",
     )
     payload["run_object"] = standardized["run_object"]
+    _append_jsonl(
+        log_dir / "agent_run_objects.jsonl",
+        {
+            **payload["run_object"],
+            "payload_path": str(out_file),
+        },
+    )
+    _append_jsonl(
+        log_dir / "agent_evidence_objects.jsonl",
+        {
+            **payload["evidence_object"],
+            "payload_path": str(out_file),
+        },
+    )
+    _append_jsonl(
+        log_dir / "agent_delivery_objects.jsonl",
+        {
+            "run_id": payload.get("run_id", ""),
+            "ts": payload.get("ts", ""),
+            **payload["delivery_object"],
+        },
+    )
     out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"items": delivery_bundle.artifacts}

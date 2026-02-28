@@ -123,6 +123,8 @@ def _repair_apply_cmd(
     profile_overrides_file: str,
     strategy_overrides_file: str,
     backup_dir: str,
+    snapshot_id: str,
+    plan_file: str,
     approve_code: str,
     force: bool,
 ) -> int:
@@ -136,6 +138,40 @@ def _repair_apply_cmd(
         profile_overrides_file=profile_overrides_file,
         strategy_overrides_file=strategy_overrides_file,
         backup_dir=backup_dir,
+        snapshot_id=snapshot_id,
+        plan_file=plan_file,
+        approve_code=approve_code,
+        force=force,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _repair_approve_cmd(
+    reg: AgentServiceRegistry,
+    days: int,
+    limit: int,
+    data_dir: str,
+    out_dir: str,
+    profile_overrides_file: str,
+    strategy_overrides_file: str,
+    backup_dir: str,
+    snapshot_id: str,
+    plan_file: str,
+    approve_code: str,
+    force: bool,
+) -> int:
+    out = reg.execute(
+        "agent.repairs.approve",
+        days=days,
+        limit=limit,
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        out_dir=out_dir,
+        profile_overrides_file=profile_overrides_file,
+        strategy_overrides_file=strategy_overrides_file,
+        backup_dir=backup_dir,
+        snapshot_id=snapshot_id,
+        plan_file=plan_file,
         approve_code=approve_code,
         force=force,
     )
@@ -284,7 +320,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "failure-review [days], repair-apply [days], repair-list [limit], repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "failure-review [days], repair-apply [days], repair-approve [days], repair-list [limit], repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -318,7 +354,37 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             _failure_review_cmd(reg, days=int(args[0]) if args else 14, limit=10, data_dir=data_dir, out_dir="")
             continue
         if cmd == "repair-apply":
-            _repair_apply_cmd(reg, days=int(args[0]) if args else 14, limit=10, apply=False, data_dir=data_dir, out_dir="", profile_overrides_file="", strategy_overrides_file="", backup_dir="", approve_code="", force=False)
+            _repair_apply_cmd(
+                reg,
+                days=int(args[0]) if args else 14,
+                limit=10,
+                apply=False,
+                data_dir=data_dir,
+                out_dir="",
+                profile_overrides_file="",
+                strategy_overrides_file="",
+                backup_dir="",
+                snapshot_id="",
+                plan_file="",
+                approve_code="",
+                force=False,
+            )
+            continue
+        if cmd == "repair-approve":
+            _repair_approve_cmd(
+                reg,
+                days=int(args[0]) if args else 14,
+                limit=10,
+                data_dir=data_dir,
+                out_dir="",
+                profile_overrides_file="",
+                strategy_overrides_file="",
+                backup_dir="",
+                snapshot_id="",
+                plan_file="",
+                approve_code="",
+                force=False,
+            )
             continue
         if cmd == "repair-list":
             _repair_list_cmd(reg, limit=int(args[0]) if args else 20, data_dir=data_dir, out_dir="", backup_dir="")
@@ -418,8 +484,22 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--profile-overrides-file", default="")
     rapply.add_argument("--strategy-overrides-file", default="")
     rapply.add_argument("--backup-dir", default="")
+    rapply.add_argument("--snapshot-id", default="")
+    rapply.add_argument("--plan-file", default="")
     rapply.add_argument("--approve-code", default="")
     rapply.add_argument("--force", action="store_true")
+
+    rapprove = sp.add_parser("repair-approve")
+    rapprove.add_argument("--days", type=int, default=14)
+    rapprove.add_argument("--limit", type=int, default=10)
+    rapprove.add_argument("--out-dir", default="")
+    rapprove.add_argument("--profile-overrides-file", default="")
+    rapprove.add_argument("--strategy-overrides-file", default="")
+    rapprove.add_argument("--backup-dir", default="")
+    rapprove.add_argument("--snapshot-id", default="")
+    rapprove.add_argument("--plan-file", default="")
+    rapprove.add_argument("--approve-code", default="")
+    rapprove.add_argument("--force", action="store_true")
 
     rlist = sp.add_parser("repair-list")
     rlist.add_argument("--limit", type=int, default=20)
@@ -497,6 +577,23 @@ def main() -> int:
             profile_overrides_file=str(args.profile_overrides_file),
             strategy_overrides_file=str(args.strategy_overrides_file),
             backup_dir=str(args.backup_dir),
+            snapshot_id=str(args.snapshot_id),
+            plan_file=str(args.plan_file),
+            approve_code=str(args.approve_code),
+            force=bool(args.force),
+        )
+    if args.cmd == "repair-approve":
+        return _repair_approve_cmd(
+            reg,
+            days=int(args.days),
+            limit=int(args.limit),
+            data_dir=data_dir,
+            out_dir=str(args.out_dir),
+            profile_overrides_file=str(args.profile_overrides_file),
+            strategy_overrides_file=str(args.strategy_overrides_file),
+            backup_dir=str(args.backup_dir),
+            snapshot_id=str(args.snapshot_id),
+            plan_file=str(args.plan_file),
             approve_code=str(args.approve_code),
             force=bool(args.force),
         )

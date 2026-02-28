@@ -18,6 +18,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.failures.review", names)
         self.assertIn("agent.policy.tune", names)
         self.assertIn("agent.repairs.apply", names)
+        self.assertIn("agent.repairs.approve", names)
         self.assertIn("agent.repairs.compare", names)
         self.assertIn("agent.repairs.list", names)
         self.assertIn("agent.repairs.rollback", names)
@@ -342,6 +343,18 @@ class AgentServiceRegistryTest(unittest.TestCase):
             )
             self.assertFalse(denied.get("ok", True))
             self.assertEqual(denied.get("error_code"), "approval_code_required")
+            approved = reg.execute(
+                "agent.repairs.approve",
+                data_dir=str(root),
+                days=14,
+                limit=10,
+                snapshot_id=str(preview.get("report", {}).get("targets", {}).get("snapshot_id", "")),
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+                approve_code=approval_code,
+            )
+            self.assertTrue(approved.get("ok", False))
+            self.assertEqual(approved.get("approval_result", {}).get("snapshot_id"), preview.get("report", {}).get("targets", {}).get("snapshot_id"))
             out = reg.execute(
                 "agent.repairs.apply",
                 data_dir=str(root),
@@ -373,6 +386,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(listed.get("ok", False))
             self.assertIn("delivery_bundle", listed)
             self.assertEqual(listed.get("report", {}).get("count"), 1)
+            self.assertTrue(listed.get("report", {}).get("rows", [])[0].get("approval_recorded", False))
 
             compared = reg.execute(
                 "agent.repairs.compare",

@@ -14,6 +14,10 @@ from core.kernel.memory_store import load_memory
 from core.kernel.policy_tuner import tune_policy
 
 
+PLAN_GLOB = "repair_plan_repair_snapshot_*.json"
+JOURNAL_FILE = "repair_approval_journal.jsonl"
+
+
 def _load_json(path: Path, default: Dict[str, Any]) -> Dict[str, Any]:
     if not path.exists():
         return dict(default)
@@ -40,6 +44,12 @@ def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
             if isinstance(item, dict):
                 rows.append(item)
     return rows
+
+
+def _append_jsonl(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def _merge_unique(*groups: List[str]) -> List[str]:
@@ -76,7 +86,6 @@ def _profile_payload(ts: str, existing: Dict[str, Any], policy_report: Dict[str,
         target = str(action.get("target", "")).strip()
         if not target:
             continue
-        # Failure-driven repairs are conservative: prefer strict until evidence improves.
         task_kind_profiles[target] = "strict"
 
     return {
@@ -131,12 +140,7 @@ def _diff_rows(before: Any, after: Any, prefix: str = "") -> List[Dict[str, Any]
 
 
 def _snapshot_id(ts: str) -> str:
-    compact = (
-        str(ts)
-        .replace("-", "")
-        .replace(":", "")
-        .replace(" ", "_")
-    )
+    compact = str(ts).replace("-", "").replace(":", "").replace(" ", "_")
     return f"repair_snapshot_{compact}"
 
 
@@ -153,6 +157,163 @@ def _approval_code(snapshot_id: str, preview_diff: Dict[str, Any], changes: Dict
     return hashlib.sha1(raw).hexdigest()[:10]
 
 
+def _journal_path(backup_dir: Path) -> Path:
+    return Path(backup_dir) / JOURNAL_FILE
+
+
+def _plan_json_path(backup_dir: Path, snapshot_id: str) -> Path:
+    return Path(backup_dir) / f"repair_plan_{snapshot_id}.json"
+
+
+def _plan_md_path(backup_dir: Path, snapshot_id: str) -> Path:
+    return Path(backup_dir) / f"repair_plan_{snapshot_id}.md"
+
+
+def _latest_plan_file(backup_dir: Path) -> Path:
+    candidates = sorted(Path(backup_dir).glob(PLAN_GLOB))
+    if not candidates:
+        raise FileNotFoundError(f"no repair plans found in {backup_dir}")
+    return candidates[-1]
+
+
+def _approval_rows(backup_dir: Path) -> List[Dict[str, Any]]:
+    return _load_jsonl(_journal_path(backup_dir))
+
+
+def _approval_receipt_map(backup_dir: Path) -> Dict[str, Dict[str, Any]]:
+    rows = _approval_rows(backup_dir)
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        if str(row.get("event", "")) != "approved":
+            continue
+        snapshot_id = str(row.get("snapshot_id", "")).strip()
+        if not snapshot_id:
+            continue
+        out[snapshot_id] = row
+    return out
+
+
+def _record_repair_event(
+    *,
+    backup_dir: Path,
+    snapshot_id: str,
+    event: str,
+    approval_code: str = "",
+    actor: str = "system",
+    force: bool = False,
+    extra: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = {
+        "event_id": hashlib.sha1(f"{event}:{snapshot_id}:{ts}:{actor}:{approval_code}:{int(force)}".encode("utf-8")).hexdigest()[:12],
+        "ts": ts,
+        "event": event,
+        "snapshot_id": str(snapshot_id).strip(),
+        "approval_code": str(approval_code).strip(),
+        "actor": str(actor).strip() or "system",
+        "force": bool(force),
+    }
+    if isinstance(extra, dict) and extra:
+        payload.update(extra)
+    _append_jsonl(_journal_path(backup_dir), payload)
+    return payload
+
+
+def load_repair_plan(*, backup_dir: Path, snapshot_id: str = "", plan_file: str = "") -> Dict[str, Any]:
+    if str(plan_file).strip():
+        path = Path(str(plan_file).strip())
+    elif str(snapshot_id).strip():
+        path = _plan_json_path(backup_dir, str(snapshot_id).strip())
+    else:
+        path = _latest_plan_file(backup_dir)
+    if not path.exists():
+        raise FileNotFoundError(f"repair plan not found: {path}")
+    plan = _load_json(path, {})
+    if not plan:
+        raise FileNotFoundError(f"repair plan is empty: {path}")
+    return plan
+
+
+def resolve_repair_approval(
+    *,
+    plan: Dict[str, Any],
+    backup_dir: Path,
+    approve_code: str = "",
+    force: bool = False,
+) -> Dict[str, Any]:
+    approval = plan.get("approval", {}) if isinstance(plan.get("approval", {}), dict) else {}
+    snapshot_id = str(plan.get("targets", {}).get("snapshot_id", "")).strip()
+    required = bool(approval.get("required", False))
+    required_code = str(approval.get("code", "")).strip()
+    provided_code = str(approve_code).strip()
+    if force or not required:
+        return {
+            "approved": True,
+            "source": "force" if force else "not_required",
+            "required": required,
+            "provided_code": provided_code,
+            "expected_code": required_code,
+            "receipt": {},
+        }
+    if provided_code and provided_code == required_code:
+        return {
+            "approved": True,
+            "source": "approve_code",
+            "required": required,
+            "provided_code": provided_code,
+            "expected_code": required_code,
+            "receipt": {},
+        }
+    if snapshot_id:
+        receipt = _approval_receipt_map(backup_dir).get(snapshot_id, {})
+        if receipt and str(receipt.get("approval_code", "")).strip() == required_code:
+            return {
+                "approved": True,
+                "source": "approval_journal",
+                "required": required,
+                "provided_code": provided_code,
+                "expected_code": required_code,
+                "receipt": receipt,
+            }
+    return {
+        "approved": False,
+        "source": "missing_or_invalid_code",
+        "required": required,
+        "provided_code": provided_code,
+        "expected_code": required_code,
+        "receipt": {},
+    }
+
+
+def approve_repair_plan(
+    *,
+    plan: Dict[str, Any],
+    backup_dir: Path,
+    approve_code: str = "",
+    force: bool = False,
+    actor: str = "operator",
+) -> Dict[str, Any]:
+    status = resolve_repair_approval(plan=plan, backup_dir=backup_dir, approve_code=approve_code, force=force)
+    if not bool(status.get("approved", False)):
+        raise ValueError("approval_code_required")
+    snapshot_id = str(plan.get("targets", {}).get("snapshot_id", "")).strip()
+    receipt = _record_repair_event(
+        backup_dir=backup_dir,
+        snapshot_id=snapshot_id,
+        event="approved",
+        approval_code=str(status.get("expected_code", "")),
+        actor=actor,
+        force=bool(force),
+        extra={
+            "plan_json_file": str(plan.get("targets", {}).get("plan_json_file", "")),
+            "plan_md_file": str(plan.get("targets", {}).get("plan_md_file", "")),
+            "required": bool(plan.get("approval", {}).get("required", False)),
+            "source": str(status.get("source", "")),
+        },
+    )
+    return {"snapshot_id": snapshot_id, "status": status, "receipt": receipt}
+
+
 def build_repair_apply_plan(
     *,
     data_dir: Path,
@@ -163,6 +324,7 @@ def build_repair_apply_plan(
     backup_dir: Path,
 ) -> Dict[str, Any]:
     ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    snapshot_id = _snapshot_id(ts)
     runs = _load_jsonl(data_dir / "agent_runs.jsonl")
     evals = _load_jsonl(data_dir / "agent_evaluations.jsonl")
     memory = load_memory(data_dir / "memory.json")
@@ -177,23 +339,21 @@ def build_repair_apply_plan(
     proposed_strategy = _strategy_payload(ts, current_strategy, policy_report, failure_report)
     profile_diff = _diff_rows(current_profile, proposed_profile)
     strategy_diff = _diff_rows(current_strategy, proposed_strategy)
-
+    changes = {
+        "profile_overrides_changed": _changed(current_profile, proposed_profile),
+        "strategy_overrides_changed": _changed(current_strategy, proposed_strategy),
+    }
+    preview_diff = {
+        "profile_overrides": profile_diff,
+        "strategy_overrides": strategy_diff,
+        "change_count": len(profile_diff) + len(strategy_diff),
+    }
     return {
         "approval": {
             "required": bool(profile_diff or strategy_diff),
-            "code": _approval_code(
-                _snapshot_id(ts),
-                {
-                    "profile_overrides": profile_diff,
-                    "strategy_overrides": strategy_diff,
-                    "change_count": len(profile_diff) + len(strategy_diff),
-                },
-                {
-                    "profile_overrides_changed": _changed(current_profile, proposed_profile),
-                    "strategy_overrides_changed": _changed(current_strategy, proposed_strategy),
-                },
-            ),
+            "code": _approval_code(snapshot_id, preview_diff, changes),
             "reason": "explicit approval required before overwrite" if (profile_diff or strategy_diff) else "no changes detected",
+            "journal_file": str(_journal_path(backup_dir)),
         },
         "ts": ts,
         "summary": {
@@ -213,20 +373,15 @@ def build_repair_apply_plan(
             "profile_overrides": proposed_profile,
             "strategy_overrides": proposed_strategy,
         },
-        "changes": {
-            "profile_overrides_changed": _changed(current_profile, proposed_profile),
-            "strategy_overrides_changed": _changed(current_strategy, proposed_strategy),
-        },
-        "preview_diff": {
-            "profile_overrides": profile_diff,
-            "strategy_overrides": strategy_diff,
-            "change_count": len(profile_diff) + len(strategy_diff),
-        },
+        "changes": changes,
+        "preview_diff": preview_diff,
         "targets": {
             "profile_overrides_file": str(profile_overrides_file),
             "strategy_overrides_file": str(strategy_overrides_file),
             "backup_dir": str(backup_dir),
-            "snapshot_id": _snapshot_id(ts),
+            "snapshot_id": snapshot_id,
+            "plan_json_file": str(_plan_json_path(backup_dir, snapshot_id)),
+            "plan_md_file": str(_plan_md_path(backup_dir, snapshot_id)),
         },
     }
 
@@ -251,6 +406,8 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
                 "ts": plan.get("ts", ""),
                 "profile_overrides_file": str(profile_path),
                 "strategy_overrides_file": str(strategy_path),
+                "plan_json_file": str(plan.get("targets", {}).get("plan_json_file", "")),
+                "plan_md_file": str(plan.get("targets", {}).get("plan_md_file", "")),
                 "profile_overrides_before": current_profile,
                 "strategy_overrides_before": current_strategy,
                 "profile_overrides_after": profile_payload,
@@ -272,37 +429,43 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
         "strategy_overrides_file": str(strategy_path),
         "snapshot_file": str(snapshot_file),
         "snapshot_id": snapshot_id,
+        "plan_json_file": str(plan.get("targets", {}).get("plan_json_file", "")),
+        "plan_md_file": str(plan.get("targets", {}).get("plan_md_file", "")),
     }
 
 
 def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any]:
     backup_dir = Path(backup_dir)
+    approvals = _approval_receipt_map(backup_dir)
     rows: List[Dict[str, Any]] = []
     for snapshot_file in sorted(backup_dir.glob("repair_snapshot_*.json"), reverse=True)[: max(1, int(limit))]:
         snapshot = _load_json(snapshot_file, {})
         preview_diff = snapshot.get("preview_diff", {}) if isinstance(snapshot.get("preview_diff", {}), dict) else {}
         profile_rows = preview_diff.get("profile_overrides", []) if isinstance(preview_diff.get("profile_overrides", []), list) else []
         strategy_rows = preview_diff.get("strategy_overrides", []) if isinstance(preview_diff.get("strategy_overrides", []), list) else []
+        snapshot_id = str(snapshot.get("snapshot_id", snapshot_file.stem))
+        approval_receipt = approvals.get(snapshot_id, {})
         rows.append(
             {
-                "snapshot_id": str(snapshot.get("snapshot_id", snapshot_file.stem)),
+                "snapshot_id": snapshot_id,
                 "ts": str(snapshot.get("ts", "")),
                 "snapshot_file": str(snapshot_file),
+                "plan_json_file": str(snapshot.get("plan_json_file", "")),
+                "plan_md_file": str(snapshot.get("plan_md_file", "")),
                 "profile_overrides_file": str(snapshot.get("profile_overrides_file", "")),
                 "strategy_overrides_file": str(snapshot.get("strategy_overrides_file", "")),
                 "change_count": int(preview_diff.get("change_count", len(profile_rows) + len(strategy_rows)) or 0),
                 "approval_code": str(snapshot.get("approval", {}).get("code", "")) if isinstance(snapshot.get("approval", {}), dict) else "",
+                "approval_recorded": bool(approval_receipt),
+                "approval_ts": str(approval_receipt.get("ts", "")) if approval_receipt else "",
                 "changed_components": [
                     component
-                    for component, changed in (
-                        ("profile", bool(profile_rows)),
-                        ("strategy", bool(strategy_rows)),
-                    )
+                    for component, changed in (("profile", bool(profile_rows)), ("strategy", bool(strategy_rows)))
                     if changed
                 ],
             }
         )
-    return {"backup_dir": str(backup_dir), "rows": rows, "count": len(rows)}
+    return {"backup_dir": str(backup_dir), "rows": rows, "count": len(rows), "journal_file": str(_journal_path(backup_dir))}
 
 
 def compare_repair_snapshots(
@@ -329,6 +492,7 @@ def compare_repair_snapshots(
             raise FileNotFoundError("need at least two snapshots to compare")
         base_file = ordered[current_index - 1]
 
+    approvals = _approval_receipt_map(backup_dir)
     selected = _load_json(selected_file, {})
     base = _load_json(base_file, {})
     selected_profile = selected.get("profile_overrides_after", {})
@@ -337,12 +501,16 @@ def compare_repair_snapshots(
     base_strategy = base.get("strategy_overrides_after", {})
     profile_diff = _diff_rows(base_profile, selected_profile)
     strategy_diff = _diff_rows(base_strategy, selected_strategy)
+    selected_snapshot_id = str(selected.get("snapshot_id", selected_file.stem))
+    base_selected_id = str(base.get("snapshot_id", base_file.stem))
     return {
         "backup_dir": str(backup_dir),
-        "selected_snapshot_id": str(selected.get("snapshot_id", selected_file.stem)),
-        "base_snapshot_id": str(base.get("snapshot_id", base_file.stem)),
+        "selected_snapshot_id": selected_snapshot_id,
+        "base_snapshot_id": base_selected_id,
         "selected_snapshot_file": str(selected_file),
         "base_snapshot_file": str(base_file),
+        "selected_approval": approvals.get(selected_snapshot_id, {}),
+        "base_approval": approvals.get(base_selected_id, {}),
         "summary": {
             "profile_change_count": len(profile_diff),
             "strategy_change_count": len(strategy_diff),
@@ -395,6 +563,7 @@ def rollback_repair_plan(
         "profile_overrides_file": str(profile_path),
         "strategy_overrides_file": str(strategy_path),
         "restored_components": restored_components,
+        "plan_json_file": str(snapshot.get("plan_json_file", "")),
     }
 
 
@@ -420,8 +589,11 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- strategy_overrides_file: {plan.get('targets', {}).get('strategy_overrides_file', '')}",
         f"- backup_dir: {plan.get('targets', {}).get('backup_dir', '')}",
         f"- snapshot_id: {plan.get('targets', {}).get('snapshot_id', '')}",
+        f"- plan_json_file: {plan.get('targets', {}).get('plan_json_file', '')}",
+        f"- plan_md_file: {plan.get('targets', {}).get('plan_md_file', '')}",
         f"- approval_required: {plan.get('approval', {}).get('required', False)}",
         f"- approval_code: {plan.get('approval', {}).get('code', '')}",
+        f"- journal_file: {plan.get('approval', {}).get('journal_file', '')}",
         "",
         "## Preview Diff",
         "",
@@ -430,24 +602,22 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         "## Repair Actions",
         "",
     ]
-    preview_rows = 0
+    repair_rows = 0
     for section in ("profile_overrides", "strategy_overrides"):
         rows = plan.get("preview_diff", {}).get(section, [])
-        if not isinstance(rows, list):
-            continue
         lines.append(f"### {section}")
         lines.append("")
-        if not rows:
+        if not isinstance(rows, list) or not rows:
             lines.append("- none")
             lines.append("")
             continue
         for row in rows[:20]:
             if not isinstance(row, dict):
                 continue
-            preview_rows += 1
-            lines.append(f"- [{row.get('change', '')}] {row.get('path', '')}: {json.dumps(row.get('before'), ensure_ascii=False)} -> {json.dumps(row.get('after'), ensure_ascii=False)}")
+            lines.append(
+                f"- [{row.get('change', '')}] {row.get('path', '')}: {json.dumps(row.get('before'), ensure_ascii=False)} -> {json.dumps(row.get('after'), ensure_ascii=False)}"
+            )
         lines.append("")
-    repair_rows = 0
     for action in plan.get("failure_review", {}).get("repair_actions", []):
         if not isinstance(action, dict):
             continue
@@ -459,12 +629,26 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
 
 
 def write_repair_plan_files(plan: Dict[str, Any], out_dir: Path) -> Dict[str, str]:
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / "agent_repair_apply_latest.json"
-    md_path = out_dir / "agent_repair_apply_latest.md"
-    json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    md_path.write_text(render_repair_plan_md(plan), encoding="utf-8")
-    return {"json": str(json_path), "md": str(md_path)}
+    latest_json = out_dir / "agent_repair_apply_latest.json"
+    latest_md = out_dir / "agent_repair_apply_latest.md"
+    snapshot_json = Path(str(plan.get("targets", {}).get("plan_json_file", "")))
+    snapshot_md = Path(str(plan.get("targets", {}).get("plan_md_file", "")))
+    snapshot_json.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_md.parent.mkdir(parents=True, exist_ok=True)
+    rendered_md = render_repair_plan_md(plan)
+    rendered_json = json.dumps(plan, ensure_ascii=False, indent=2) + "\n"
+    latest_json.write_text(rendered_json, encoding="utf-8")
+    latest_md.write_text(rendered_md, encoding="utf-8")
+    snapshot_json.write_text(rendered_json, encoding="utf-8")
+    snapshot_md.write_text(rendered_md, encoding="utf-8")
+    return {
+        "json": str(latest_json),
+        "md": str(latest_md),
+        "snapshot_json": str(snapshot_json),
+        "snapshot_md": str(snapshot_md),
+    }
 
 
 def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str, str]:
@@ -475,6 +659,7 @@ def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str
         f"# Agent Repair Snapshots | count={report.get('count', 0)}",
         "",
         f"- backup_dir: {report.get('backup_dir', '')}",
+        f"- journal_file: {report.get('journal_file', '')}",
         "",
     ]
     rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
@@ -484,7 +669,7 @@ def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str
         if not isinstance(row, dict):
             continue
         lines.append(
-            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | approval={row.get('approval_code', '')}"
+            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | approved={row.get('approval_recorded', False)} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | approval={row.get('approval_code', '')}"
         )
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -503,6 +688,8 @@ def write_snapshot_compare_files(report: Dict[str, Any], out_dir: Path) -> Dict[
         f"- change_count: {summary.get('change_count', 0)}",
         f"- profile_change_count: {summary.get('profile_change_count', 0)}",
         f"- strategy_change_count: {summary.get('strategy_change_count', 0)}",
+        f"- selected_approved: {bool(report.get('selected_approval', {}))}",
+        f"- base_approved: {bool(report.get('base_approval', {}))}",
         "",
     ]
     for section in ("profile_overrides", "strategy_overrides"):

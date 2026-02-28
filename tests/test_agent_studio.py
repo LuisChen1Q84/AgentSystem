@@ -34,6 +34,11 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a43.cmd, "repair-apply")
         self.assertEqual(a43.backup_dir, "")
         self.assertEqual(a43.approve_code, "")
+        self.assertEqual(a43.snapshot_id, "")
+
+        a431 = parser.parse_args(["repair-approve"])
+        self.assertEqual(a431.cmd, "repair-approve")
+        self.assertEqual(a431.plan_file, "")
 
         a44 = parser.parse_args(["repair-list"])
         self.assertEqual(a44.cmd, "repair-list")
@@ -143,6 +148,53 @@ class AgentStudioTest(unittest.TestCase):
             self.assertEqual(code, 1)
             payload = json.loads(buf.getvalue())
             self.assertFalse(payload.get("ok", True))
+
+    def test_repair_approve_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            backup_dir = root / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            plan = {
+                "ts": "2026-02-28 10:00:00",
+                "summary": {"days": 14, "limit": 10, "failure_count": 1, "repair_actions": 1, "strict_block_candidates": 1},
+                "changes": {"profile_overrides_changed": True, "strategy_overrides_changed": False},
+                "preview_diff": {"profile_overrides": [{"path": "default_profile", "change": "updated", "before": "strict", "after": "adaptive"}], "strategy_overrides": [], "change_count": 1},
+                "failure_review": {"repair_actions": []},
+                "approval": {
+                    "required": True,
+                    "code": "abc1234567",
+                    "reason": "explicit approval required before overwrite",
+                    "journal_file": str(backup_dir / "repair_approval_journal.jsonl"),
+                },
+                "targets": {
+                    "snapshot_id": "repair_snapshot_20260228_100000",
+                    "backup_dir": str(backup_dir),
+                    "plan_json_file": str(backup_dir / "repair_plan_repair_snapshot_20260228_100000.json"),
+                    "plan_md_file": str(backup_dir / "repair_plan_repair_snapshot_20260228_100000.md"),
+                },
+            }
+            Path(plan["targets"]["plan_json_file"]).write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._repair_approve_cmd(
+                    reg,
+                    days=14,
+                    limit=10,
+                    data_dir=str(root),
+                    out_dir=str(root / "out"),
+                    profile_overrides_file="",
+                    strategy_overrides_file="",
+                    backup_dir=str(backup_dir),
+                    snapshot_id="repair_snapshot_20260228_100000",
+                    plan_file="",
+                    approve_code="abc1234567",
+                    force=False,
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertEqual(payload.get("approval_result", {}).get("snapshot_id"), "repair_snapshot_20260228_100000")
 
     def test_feedback_add_and_stats_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -390,6 +442,8 @@ class AgentStudioTest(unittest.TestCase):
                     profile_overrides_file=str(root / "profile_overrides.json"),
                     strategy_overrides_file=str(root / "strategy_overrides.json"),
                     backup_dir="",
+                    snapshot_id="",
+                    plan_file="",
                     approve_code="",
                     force=False,
                 )
@@ -397,6 +451,8 @@ class AgentStudioTest(unittest.TestCase):
             preview_payload = json.loads(preview_buf.getvalue())
             approval_code = str(preview_payload.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)
+            snapshot_id = str(preview_payload.get("report", {}).get("targets", {}).get("snapshot_id", ""))
+            self.assertTrue(snapshot_id)
             buf = io.StringIO()
             with redirect_stdout(buf):
                 code = agent_studio._repair_apply_cmd(
@@ -409,6 +465,8 @@ class AgentStudioTest(unittest.TestCase):
                     profile_overrides_file=str(root / "profile_overrides.json"),
                     strategy_overrides_file=str(root / "strategy_overrides.json"),
                     backup_dir="",
+                    snapshot_id=snapshot_id,
+                    plan_file="",
                     approve_code=approval_code,
                     force=False,
                 )
@@ -467,6 +525,8 @@ class AgentStudioTest(unittest.TestCase):
                     profile_overrides_file=str(root / "profile_overrides.json"),
                     strategy_overrides_file=str(root / "strategy_overrides.json"),
                     backup_dir="",
+                    snapshot_id="",
+                    plan_file="",
                     approve_code="",
                     force=False,
                 )
@@ -599,6 +659,8 @@ class AgentStudioTest(unittest.TestCase):
                     profile_overrides_file=str(root / "profile_overrides.json"),
                     strategy_overrides_file=str(root / "strategy_overrides.json"),
                     backup_dir=str(root / "backups"),
+                    snapshot_id="",
+                    plan_file="",
                     approve_code="",
                     force=False,
                 )
@@ -606,6 +668,8 @@ class AgentStudioTest(unittest.TestCase):
             apply_payload = json.loads(apply_buf.getvalue())
             approval_code = str(apply_payload.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)
+            snapshot_id = str(apply_payload.get("report", {}).get("targets", {}).get("snapshot_id", ""))
+            self.assertTrue(snapshot_id)
             apply_buf = io.StringIO()
             with redirect_stdout(apply_buf):
                 code_apply = agent_studio._repair_apply_cmd(
@@ -618,6 +682,8 @@ class AgentStudioTest(unittest.TestCase):
                     profile_overrides_file=str(root / "profile_overrides.json"),
                     strategy_overrides_file=str(root / "strategy_overrides.json"),
                     backup_dir=str(root / "backups"),
+                    snapshot_id=snapshot_id,
+                    plan_file="",
                     approve_code=approval_code,
                     force=False,
                 )
