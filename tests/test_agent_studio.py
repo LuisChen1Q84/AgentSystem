@@ -30,19 +30,23 @@ class AgentStudioTest(unittest.TestCase):
         a42 = parser.parse_args(["failure-review"])
         self.assertEqual(a42.cmd, "failure-review")
 
-        a43 = parser.parse_args(["repair-apply"])
+        a43 = parser.parse_args(["repair-apply", "--scopes", "strategy,task_kind", "--strategies", "mckinsey-ppt", "--task-kinds", "presentation"])
         self.assertEqual(a43.cmd, "repair-apply")
         self.assertEqual(a43.backup_dir, "")
         self.assertEqual(a43.approve_code, "")
         self.assertEqual(a43.snapshot_id, "")
         self.assertEqual(a43.min_priority_score, 0)
         self.assertEqual(a43.max_actions, 0)
+        self.assertEqual(a43.scopes, "strategy,task_kind")
+        self.assertEqual(a43.strategies, "mckinsey-ppt")
+        self.assertEqual(a43.task_kinds, "presentation")
 
         a431 = parser.parse_args(["repair-approve", "--min-priority-score", "50", "--max-actions", "2"])
         self.assertEqual(a431.cmd, "repair-approve")
         self.assertEqual(a431.plan_file, "")
         self.assertEqual(a431.min_priority_score, 50)
         self.assertEqual(a431.max_actions, 2)
+        self.assertEqual(a431.scopes, "")
 
         a44 = parser.parse_args(["repair-list"])
         self.assertEqual(a44.cmd, "repair-list")
@@ -212,6 +216,9 @@ class AgentStudioTest(unittest.TestCase):
                     plan_file="",
                     min_priority_score=0,
                     max_actions=0,
+                    scopes="",
+                    strategies="",
+                    task_kinds="",
                     approve_code="abc1234567",
                     force=False,
                 )
@@ -470,11 +477,15 @@ class AgentStudioTest(unittest.TestCase):
                     plan_file="",
                     min_priority_score=0,
                     max_actions=0,
+                    scopes="strategy",
+                    strategies="mckinsey-ppt",
+                    task_kinds="",
                     approve_code="",
                     force=False,
                 )
             self.assertEqual(preview_code, 0)
             preview_payload = json.loads(preview_buf.getvalue())
+            self.assertEqual(preview_payload.get("report", {}).get("selection", {}).get("selector", {}).get("scopes"), ["strategy"])
             approval_code = str(preview_payload.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)
             snapshot_id = str(preview_payload.get("report", {}).get("targets", {}).get("snapshot_id", ""))
@@ -495,6 +506,9 @@ class AgentStudioTest(unittest.TestCase):
                     plan_file="",
                     min_priority_score=0,
                     max_actions=0,
+                    scopes="strategy",
+                    strategies="mckinsey-ppt",
+                    task_kinds="",
                     approve_code=approval_code,
                     force=False,
                 )
@@ -557,6 +571,9 @@ class AgentStudioTest(unittest.TestCase):
                     plan_file="",
                     min_priority_score=0,
                     max_actions=0,
+                    scopes="",
+                    strategies="",
+                    task_kinds="",
                     approve_code="",
                     force=False,
                 )
@@ -693,6 +710,9 @@ class AgentStudioTest(unittest.TestCase):
                     plan_file="",
                     min_priority_score=0,
                     max_actions=0,
+                    scopes="",
+                    strategies="",
+                    task_kinds="",
                     approve_code="",
                     force=False,
                 )
@@ -718,6 +738,9 @@ class AgentStudioTest(unittest.TestCase):
                     plan_file="",
                     min_priority_score=0,
                     max_actions=0,
+                    scopes="",
+                    strategies="",
+                    task_kinds="",
                     approve_code=approval_code,
                     force=False,
                 )

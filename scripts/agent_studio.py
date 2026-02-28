@@ -127,6 +127,9 @@ def _repair_apply_cmd(
     plan_file: str,
     min_priority_score: int,
     max_actions: int,
+    scopes: str,
+    strategies: str,
+    task_kinds: str,
     approve_code: str,
     force: bool,
 ) -> int:
@@ -144,6 +147,9 @@ def _repair_apply_cmd(
         plan_file=plan_file,
         min_priority_score=min_priority_score,
         max_actions=max_actions,
+        scopes=scopes,
+        strategies=strategies,
+        task_kinds=task_kinds,
         approve_code=approve_code,
         force=force,
     )
@@ -164,6 +170,9 @@ def _repair_approve_cmd(
     plan_file: str,
     min_priority_score: int,
     max_actions: int,
+    scopes: str,
+    strategies: str,
+    task_kinds: str,
     approve_code: str,
     force: bool,
 ) -> int:
@@ -180,6 +189,9 @@ def _repair_approve_cmd(
         plan_file=plan_file,
         min_priority_score=min_priority_score,
         max_actions=max_actions,
+        scopes=scopes,
+        strategies=strategies,
+        task_kinds=task_kinds,
         approve_code=approve_code,
         force=force,
     )
@@ -379,6 +391,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 plan_file="",
                 min_priority_score=min_priority_score,
                 max_actions=max_actions,
+                scopes="",
+                strategies="",
+                task_kinds="",
                 approve_code="",
                 force=False,
             )
@@ -400,6 +415,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 plan_file="",
                 min_priority_score=min_priority_score,
                 max_actions=max_actions,
+                scopes="",
+                strategies="",
+                task_kinds="",
                 approve_code="",
                 force=False,
             )
@@ -506,6 +524,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--plan-file", default="")
     rapply.add_argument("--min-priority-score", type=int, default=0)
     rapply.add_argument("--max-actions", type=int, default=0)
+    rapply.add_argument("--scopes", default="")
+    rapply.add_argument("--strategies", default="")
+    rapply.add_argument("--task-kinds", default="")
     rapply.add_argument("--approve-code", default="")
     rapply.add_argument("--force", action="store_true")
 
@@ -520,6 +541,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapprove.add_argument("--plan-file", default="")
     rapprove.add_argument("--min-priority-score", type=int, default=0)
     rapprove.add_argument("--max-actions", type=int, default=0)
+    rapprove.add_argument("--scopes", default="")
+    rapprove.add_argument("--strategies", default="")
+    rapprove.add_argument("--task-kinds", default="")
     rapprove.add_argument("--approve-code", default="")
     rapprove.add_argument("--force", action="store_true")
 
@@ -603,6 +627,9 @@ def main() -> int:
             plan_file=str(args.plan_file),
             min_priority_score=int(args.min_priority_score),
             max_actions=int(args.max_actions),
+            scopes=str(args.scopes),
+            strategies=str(args.strategies),
+            task_kinds=str(args.task_kinds),
             approve_code=str(args.approve_code),
             force=bool(args.force),
         )
@@ -620,6 +647,9 @@ def main() -> int:
             plan_file=str(args.plan_file),
             min_priority_score=int(args.min_priority_score),
             max_actions=int(args.max_actions),
+            scopes=str(args.scopes),
+            strategies=str(args.strategies),
+            task_kinds=str(args.task_kinds),
             approve_code=str(args.approve_code),
             force=bool(args.force),
         )

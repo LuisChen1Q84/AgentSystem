@@ -1135,6 +1135,9 @@ run_agent_repair_apply() {
   local plan_file=""
   local min_priority_score=""
   local max_actions=""
+  local scopes=""
+  local strategies=""
+  local task_kinds=""
   local approve_code=""
   local apply_flag=0
   local force_flag=0
@@ -1184,6 +1187,18 @@ run_agent_repair_apply() {
         ;;
       --max-actions)
         max_actions="${2:-}"
+        shift 2 || true
+        ;;
+      --scopes)
+        scopes="${2:-}"
+        shift 2 || true
+        ;;
+      --strategies)
+        strategies="${2:-}"
+        shift 2 || true
+        ;;
+      --task-kinds)
+        task_kinds="${2:-}"
         shift 2 || true
         ;;
       --approve-code)
@@ -1242,6 +1257,15 @@ run_agent_repair_apply() {
   if [ -n "${max_actions}" ]; then
     cmd+=(--max-actions "${max_actions}")
   fi
+  if [ -n "${scopes}" ]; then
+    cmd+=(--scopes "${scopes}")
+  fi
+  if [ -n "${strategies}" ]; then
+    cmd+=(--strategies "${strategies}")
+  fi
+  if [ -n "${task_kinds}" ]; then
+    cmd+=(--task-kinds "${task_kinds}")
+  fi
   if [ -n "${approve_code}" ]; then
     cmd+=(--approve-code "${approve_code}")
   fi
@@ -1268,6 +1292,9 @@ run_agent_repair_approve() {
   local plan_file=""
   local min_priority_score=""
   local max_actions=""
+  local scopes=""
+  local strategies=""
+  local task_kinds=""
   local approve_code=""
   local force_flag=0
   local extra=()
@@ -1318,6 +1345,18 @@ run_agent_repair_approve() {
         max_actions="${2:-}"
         shift 2 || true
         ;;
+      --scopes)
+        scopes="${2:-}"
+        shift 2 || true
+        ;;
+      --strategies)
+        strategies="${2:-}"
+        shift 2 || true
+        ;;
+      --task-kinds)
+        task_kinds="${2:-}"
+        shift 2 || true
+        ;;
       --approve-code)
         approve_code="${2:-}"
         shift 2 || true
@@ -1366,6 +1405,15 @@ run_agent_repair_approve() {
   fi
   if [ -n "${max_actions}" ]; then
     cmd+=(--max-actions "${max_actions}")
+  fi
+  if [ -n "${scopes}" ]; then
+    cmd+=(--scopes "${scopes}")
+  fi
+  if [ -n "${strategies}" ]; then
+    cmd+=(--strategies "${strategies}")
+  fi
+  if [ -n "${task_kinds}" ]; then
+    cmd+=(--task-kinds "${task_kinds}")
   fi
   if [ -n "${approve_code}" ]; then
     cmd+=(--approve-code "${approve_code}")
@@ -1852,8 +1900,8 @@ Usage:
   scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
   scripts/agentsys.sh agent-failure-review [--days N --limit N --data-dir <path> --out-dir <path>]
-  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --approve-code <code> --force --data-dir <path> --backup-dir <path>]
-  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-list [--limit N --data-dir <path> --backup-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-compare [--snapshot-id <id> --base-snapshot-id <id> --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --only both|profile|strategy --data-dir <path> --backup-dir <path>]

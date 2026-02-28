@@ -65,6 +65,31 @@ def _merge_unique(*groups: List[str]) -> List[str]:
     return out
 
 
+def _normalize_selector_values(values: List[str] | None) -> List[str]:
+    normalized: List[str] = []
+    seen = set()
+    for item in values or []:
+        clean = str(item).strip()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        normalized.append(clean)
+    return normalized
+
+
+def _repair_selector(
+    *,
+    scopes: List[str] | None = None,
+    strategies: List[str] | None = None,
+    task_kinds: List[str] | None = None,
+) -> Dict[str, List[str]]:
+    return {
+        "scopes": _normalize_selector_values(scopes),
+        "strategies": _normalize_selector_values(strategies),
+        "task_kinds": _normalize_selector_values(task_kinds),
+    }
+
+
 def _profile_payload(
     ts: str,
     existing: Dict[str, Any],
@@ -262,11 +287,47 @@ def _changed_components(preview_diff: Dict[str, Any]) -> List[str]:
     return [component for component, changed in (("profile", bool(profile_rows)), ("strategy", bool(strategy_rows))) if changed]
 
 
-def _filter_repair_actions(failure_report: Dict[str, Any], min_priority_score: int, max_actions: int) -> Dict[str, Any]:
+def _repair_action_selected(action: Dict[str, Any], selector: Dict[str, List[str]]) -> bool:
+    scope = str(action.get("scope", "")).strip()
+    target = str(action.get("target", "")).strip()
+    allowed_scopes = set(selector.get("scopes", []))
+    allowed_strategies = set(selector.get("strategies", []))
+    allowed_task_kinds = set(selector.get("task_kinds", []))
+    has_scope_filter = bool(allowed_scopes)
+    has_strategy_filter = bool(allowed_strategies)
+    has_task_kind_filter = bool(allowed_task_kinds)
+
+    if has_scope_filter and scope not in allowed_scopes:
+        return False
+    if scope == "strategy" and has_strategy_filter:
+        return target in allowed_strategies
+    if scope == "task_kind" and has_task_kind_filter:
+        return target in allowed_task_kinds
+    if not has_scope_filter and (has_strategy_filter or has_task_kind_filter):
+        if scope == "strategy":
+            return target in allowed_strategies if has_strategy_filter else False
+        if scope == "task_kind":
+            return target in allowed_task_kinds if has_task_kind_filter else False
+        return False
+    return True
+
+
+def _filter_repair_actions(
+    failure_report: Dict[str, Any],
+    min_priority_score: int,
+    max_actions: int,
+    *,
+    selector: Dict[str, List[str]] | None = None,
+) -> Dict[str, Any]:
     actions = [item for item in failure_report.get("repair_actions", []) if isinstance(item, dict)]
     threshold = max(0, int(min_priority_score))
     limited = max(0, int(max_actions))
-    filtered = [item for item in actions if int(item.get("priority_score", 0) or 0) >= threshold]
+    active_selector = selector if isinstance(selector, dict) else _repair_selector()
+    filtered = [
+        item
+        for item in actions
+        if int(item.get("priority_score", 0) or 0) >= threshold and _repair_action_selected(item, active_selector)
+    ]
     if limited > 0:
         filtered = filtered[:limited]
     selected_ids = {(str(item.get("scope", "")), str(item.get("target", "")), str(item.get("action", ""))) for item in filtered}
@@ -280,6 +341,7 @@ def _filter_repair_actions(failure_report: Dict[str, Any], min_priority_score: i
     out["selection"] = {
         "min_priority_score": threshold,
         "max_actions": limited,
+        "selector": active_selector,
         "selected_action_count": len(filtered),
         "skipped_action_count": len(skipped),
     }
@@ -418,6 +480,9 @@ def build_repair_apply_plan(
     backup_dir: Path,
     min_priority_score: int = 0,
     max_actions: int = 0,
+    scopes: List[str] | None = None,
+    strategies: List[str] | None = None,
+    task_kinds: List[str] | None = None,
 ) -> Dict[str, Any]:
     ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     snapshot_id = _snapshot_id(ts)
@@ -426,8 +491,18 @@ def build_repair_apply_plan(
     memory = load_memory(data_dir / "memory.json")
 
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
-    selective_mode = int(min_priority_score or 0) > 0 or int(max_actions or 0) > 0
-    filtered_failure_report = _filter_repair_actions(failure_report, int(min_priority_score or 0), int(max_actions or 0)) if selective_mode else dict(failure_report)
+    selector = _repair_selector(scopes=scopes, strategies=strategies, task_kinds=task_kinds)
+    selective_mode = int(min_priority_score or 0) > 0 or int(max_actions or 0) > 0 or any(selector.values())
+    filtered_failure_report = (
+        _filter_repair_actions(
+            failure_report,
+            int(min_priority_score or 0),
+            int(max_actions or 0),
+            selector=selector,
+        )
+        if selective_mode
+        else dict(failure_report)
+    )
     selected_scopes = {
         str(item.get("scope", "")).strip()
         for item in filtered_failure_report.get("repair_actions", [])
@@ -487,6 +562,7 @@ def build_repair_apply_plan(
             "selective_mode": bool(selective_mode),
             "min_priority_score": max(0, int(min_priority_score)),
             "max_actions": max(0, int(max_actions)),
+            "selector": selector,
             "selected_scopes": sorted(selected_scopes),
             "selected_action_count": len(filtered_failure_report.get("repair_actions", [])),
             "skipped_action_count": len(filtered_failure_report.get("skipped_repair_actions", [])),
@@ -541,6 +617,7 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
                 "changes": plan.get("changes", {}),
                 "preview_diff": plan.get("preview_diff", {}),
                 "approval": plan.get("approval", {}),
+                "selection": plan.get("selection", {}),
             },
             ensure_ascii=False,
             indent=2,
@@ -642,8 +719,17 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
                 "latest_event": latest_event_name,
                 "latest_event_ts": str(latest_event.get("ts", "")) if latest_event else "",
                 "changed_components": _changed_components(preview_diff),
+                "selection": (
+                    dict(plan.get("selection", {}))
+                    if isinstance(plan.get("selection", {}), dict)
+                    else (dict(snapshot.get("selection", {})) if isinstance(snapshot.get("selection", {}), dict) else {})
+                ),
             }
         )
+    for idx, row in enumerate(rows):
+        base_snapshot_id = str(rows[idx + 1].get("snapshot_id", "")) if idx + 1 < len(rows) else ""
+        row["compare_base_snapshot_id"] = base_snapshot_id
+        row["compare_available"] = bool(base_snapshot_id)
     lifecycle_counts = {
         "planned": sum(1 for row in rows if str(row.get("lifecycle", "")) == "planned"),
         "approved": sum(1 for row in rows if str(row.get("lifecycle", "")) == "approved"),
@@ -775,6 +861,8 @@ def rollback_repair_plan(
 
 def render_repair_plan_md(plan: Dict[str, Any]) -> str:
     s = plan.get("summary", {})
+    selection = plan.get("selection", {}) if isinstance(plan.get("selection", {}), dict) else {}
+    selector = selection.get("selector", {}) if isinstance(selection.get("selector", {}), dict) else {}
     lines = [
         f"# Agent Repair Apply Plan | {plan.get('ts', '')}",
         "",
@@ -782,7 +870,13 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         "",
         f"- failure_count: {s.get('failure_count', 0)}",
         f"- repair_actions: {s.get('repair_actions', 0)}",
+        f"- repair_actions_total: {s.get('repair_actions_total', 0)}",
         f"- strict_block_candidates: {s.get('strict_block_candidates', 0)}",
+        f"- min_priority_score: {selection.get('min_priority_score', 0)}",
+        f"- max_actions: {selection.get('max_actions', 0)}",
+        f"- selector_scopes: {','.join(selector.get('scopes', []))}",
+        f"- selector_strategies: {','.join(selector.get('strategies', []))}",
+        f"- selector_task_kinds: {','.join(selector.get('task_kinds', []))}",
         "",
         "## Changes",
         "",
@@ -878,8 +972,10 @@ def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str
     for row in rows:
         if not isinstance(row, dict):
             continue
+        selection = row.get("selection", {}) if isinstance(row.get("selection", {}), dict) else {}
+        selector = selection.get("selector", {}) if isinstance(selection.get("selector", {}), dict) else {}
         lines.append(
-            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | lifecycle={row.get('lifecycle', '')} | approved={row.get('approval_recorded', False)} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | approval={row.get('approval_code', '')}"
+            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | lifecycle={row.get('lifecycle', '')} | approved={row.get('approval_recorded', False)} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | compare_base={row.get('compare_base_snapshot_id', '')} | selector_scopes={','.join(selector.get('scopes', []))} | approval={row.get('approval_code', '')}"
         )
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

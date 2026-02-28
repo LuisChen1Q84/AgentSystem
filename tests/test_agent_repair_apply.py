@@ -147,6 +147,39 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(selective_plan["selection"]["selected_action_count"], 1)
             self.assertEqual(len(selective_plan["failure_review"]["repair_actions"]), 1)
 
+            task_kind_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                scopes=["task_kind"],
+                task_kinds=["presentation"],
+            )
+            self.assertEqual(task_kind_plan["selection"]["selector"]["scopes"], ["task_kind"])
+            self.assertEqual(task_kind_plan["selection"]["selector"]["task_kinds"], ["presentation"])
+            self.assertEqual(task_kind_plan["selection"]["selected_scopes"], ["task_kind"])
+            self.assertTrue(task_kind_plan["changes"]["profile_overrides_changed"])
+            self.assertFalse(task_kind_plan["changes"]["strategy_overrides_changed"])
+            self.assertTrue(all(item.get("scope") == "task_kind" for item in task_kind_plan["failure_review"]["repair_actions"]))
+
+            strategy_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                scopes=["strategy"],
+                strategies=["mckinsey-ppt"],
+            )
+            self.assertEqual(strategy_plan["selection"]["selector"]["strategies"], ["mckinsey-ppt"])
+            self.assertEqual(strategy_plan["selection"]["selected_scopes"], ["strategy"])
+            self.assertFalse(strategy_plan["changes"]["profile_overrides_changed"])
+            self.assertTrue(strategy_plan["changes"]["strategy_overrides_changed"])
+            self.assertTrue(all(item.get("scope") == "strategy" for item in strategy_plan["failure_review"]["repair_actions"]))
+
             no_op_plan = build_repair_apply_plan(
                 data_dir=root,
                 days=14,

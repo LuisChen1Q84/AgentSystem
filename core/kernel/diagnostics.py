@@ -148,12 +148,37 @@ def _repair_governance_summary(data_dir: Path, limit: int = 20) -> Dict[str, Any
     report = list_repair_snapshots(backup_dir=backup_dir, limit=max(1, int(limit)))
     rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
     activity = report.get("activity", {}) if isinstance(report.get("activity", {}), dict) else {}
+    stream: List[Dict[str, Any]] = []
+    for row in rows[:5]:
+        if not isinstance(row, dict):
+            continue
+        compare_base_snapshot_id = str(row.get("compare_base_snapshot_id", "")).strip()
+        snapshot_id = str(row.get("snapshot_id", "")).strip()
+        stream.append(
+            {
+                "snapshot_id": snapshot_id,
+                "ts": str(row.get("ts", "")),
+                "lifecycle": str(row.get("lifecycle", "")),
+                "change_count": int(row.get("change_count", 0) or 0),
+                "changed_components": list(row.get("changed_components", [])) if isinstance(row.get("changed_components", []), list) else [],
+                "selection": dict(row.get("selection", {})) if isinstance(row.get("selection", {}), dict) else {},
+                "compare_base_snapshot_id": compare_base_snapshot_id,
+                "compare_command": (
+                    f"python3 scripts/agent_studio.py --data-dir {data_dir} repair-compare --snapshot-id {snapshot_id} --base-snapshot-id {compare_base_snapshot_id}"
+                    if snapshot_id and compare_base_snapshot_id
+                    else ""
+                ),
+                "plan_json_file": str(row.get("plan_json_file", "")),
+                "snapshot_file": str(row.get("snapshot_file", "")),
+            }
+        )
     return {
         "backup_dir": str(backup_dir),
         "count": int(report.get("count", 0) or 0),
         "lifecycle": dict(report.get("summary", {})) if isinstance(report.get("summary", {}), dict) else {},
         "activity": activity,
         "recent_rows": rows[:5],
+        "stream": stream,
         "journal_file": str(report.get("journal_file", "")),
     }
 
@@ -284,6 +309,7 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
     object_coverage = report.get("object_coverage", {})
     repair_governance = report.get("repair_governance", {}) if isinstance(report.get("repair_governance", {}), dict) else {}
     repair_activity = repair_governance.get("activity", {}) if isinstance(repair_governance.get("activity", {}), dict) else {}
+    governance_stream = repair_governance.get("stream", []) if isinstance(repair_governance.get("stream", []), list) else []
     lines = [
         f"# Agent Dashboard | {report.get('as_of','')}",
         "",
@@ -319,6 +345,16 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
     recent_events = repair_activity.get("recent_events", []) if isinstance(repair_activity.get("recent_events", []), list) else []
     if recent_events:
         lines += [f"- {row.get('ts','')} | {row.get('event','')} | snapshot={row.get('snapshot_id','')} | actor={row.get('actor','')}" for row in recent_events]
+    else:
+        lines.append("- none")
+    lines += ["", "### Governance Stream", ""]
+    if governance_stream:
+        for row in governance_stream:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"- {row.get('ts','')} | {row.get('snapshot_id','')} | lifecycle={row.get('lifecycle','')} | changes={row.get('change_count',0)} | compare_base={row.get('compare_base_snapshot_id','')} | compare={row.get('compare_command','')}"
+            )
     else:
         lines.append("- none")
     lines += ["", "## Recommendations", ""]
@@ -379,6 +415,16 @@ def render_dashboard_html(report: Dict[str, Any]) -> str:
         for row in repair_activity.get("recent_events", [])
         if isinstance(row, dict)
     ) or "<li>none</li>"
+    repair_stream = report.get("repair_governance", {}).get("stream", []) if isinstance(report.get("repair_governance", {}), dict) else []
+    repair_stream_html = "".join(
+        (
+            f"<li>{row.get('ts','')} | {row.get('snapshot_id','')} | {row.get('lifecycle','')} | changes={row.get('change_count',0)}"
+            f"{' | compare=' + row.get('compare_base_snapshot_id','') if row.get('compare_base_snapshot_id','') else ''}"
+            f"{' | command=' + row.get('compare_command','') if row.get('compare_command','') else ''}</li>"
+        )
+        for row in repair_stream
+        if isinstance(row, dict)
+    ) or "<li>none</li>"
     fail_html = "".join(
         f"<li>{x.get('ts','')} | {x.get('task_kind','')} | {x.get('selected_strategy','')}</li>"
         for x in report.get("recent_failures", [])
@@ -397,7 +443,7 @@ body {{ margin:0; font-family:"IBM Plex Sans","Noto Sans SC",sans-serif; backgro
 .panel {{ background:var(--card); border-radius:16px; padding:16px; margin-top:14px; box-shadow:0 8px 24px rgba(16,33,22,.08); }}
 </style></head><body><div class="wrap"><h1>Agent Dashboard</h1><p>{report.get('as_of','')}</p><div class="grid">{card_html}</div>
 <div class="panel"><h2>Recommendations</h2><ul>{rec_html}</ul></div>
-<div class="panel"><h2>Repair Governance</h2><ul>{repair_html}</ul><h3>Recent Activity</h3><ul>{repair_activity_html}</ul><h3>Recent Governance Events</h3><ul>{repair_recent_html}</ul></div>
+<div class="panel"><h2>Repair Governance</h2><ul>{repair_html}</ul><h3>Recent Activity</h3><ul>{repair_activity_html}</ul><h3>Recent Governance Events</h3><ul>{repair_recent_html}</ul><h3>Governance Stream</h3><ul>{repair_stream_html}</ul></div>
 <div class="panel"><h2>Recent Failures</h2><ul>{fail_html}</ul></div>
 </div></body></html>'''
 

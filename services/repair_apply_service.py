@@ -30,6 +30,15 @@ from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import error_response, ok_response
 
 
+def _csv_values(raw: str | list[str] | None) -> list[str]:
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    text = str(raw or "").strip()
+    if not text:
+        return []
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
 class RepairApplyService:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
@@ -49,6 +58,9 @@ class RepairApplyService:
         plan_file: str = "",
         min_priority_score: int = 0,
         max_actions: int = 0,
+        scopes: str | list[str] = "",
+        strategies: str | list[str] = "",
+        task_kinds: str | list[str] = "",
         approve_code: str = "",
         force: bool = False,
     ):
@@ -74,6 +86,9 @@ class RepairApplyService:
                 backup_dir=actual_backup_dir,
                 min_priority_score=max(0, int(min_priority_score)),
                 max_actions=max(0, int(max_actions)),
+                scopes=_csv_values(scopes),
+                strategies=_csv_values(strategies),
+                task_kinds=_csv_values(task_kinds),
             )
         files = write_repair_plan_files(plan, target_dir)
         approval_state = resolve_repair_approval(
@@ -123,6 +138,9 @@ class RepairApplyService:
                     "plan_file": str(plan_file),
                     "min_priority_score": max(0, int(min_priority_score)),
                     "max_actions": max(0, int(max_actions)),
+                    "scopes": _csv_values(scopes),
+                    "strategies": _csv_values(strategies),
+                    "task_kinds": _csv_values(task_kinds),
                 },
             )
         approval_receipt = approval_state.get("receipt", {}) if isinstance(approval_state.get("receipt", {}), dict) else {}
@@ -172,6 +190,9 @@ class RepairApplyService:
                 "plan_file": str(plan_file),
                 "min_priority_score": max(0, int(min_priority_score)),
                 "max_actions": max(0, int(max_actions)),
+                "scopes": _csv_values(scopes),
+                "strategies": _csv_values(strategies),
+                "task_kinds": _csv_values(task_kinds),
             },
         )
 
@@ -194,6 +215,9 @@ class RepairApproveService:
         plan_file: str = "",
         min_priority_score: int = 0,
         max_actions: int = 0,
+        scopes: str | list[str] = "",
+        strategies: str | list[str] = "",
+        task_kinds: str | list[str] = "",
         approve_code: str = "",
         force: bool = False,
     ):
@@ -215,6 +239,9 @@ class RepairApproveService:
                 backup_dir=actual_backup_dir,
                 min_priority_score=max(0, int(min_priority_score)),
                 max_actions=max(0, int(max_actions)),
+                scopes=_csv_values(scopes),
+                strategies=_csv_values(strategies),
+                task_kinds=_csv_values(task_kinds),
             )
             plan_source = "generated"
         files = write_repair_plan_files(plan, target_dir)
@@ -264,6 +291,9 @@ class RepairApproveService:
                     "force": bool(force),
                     "min_priority_score": max(0, int(min_priority_score)),
                     "max_actions": max(0, int(max_actions)),
+                    "scopes": _csv_values(scopes),
+                    "strategies": _csv_values(strategies),
+                    "task_kinds": _csv_values(task_kinds),
                 },
             )
         payload = annotate_payload(
@@ -300,6 +330,9 @@ class RepairApproveService:
                 "force": bool(force),
                 "min_priority_score": max(0, int(min_priority_score)),
                 "max_actions": max(0, int(max_actions)),
+                "scopes": _csv_values(scopes),
+                "strategies": _csv_values(strategies),
+                "task_kinds": _csv_values(task_kinds),
             },
         )
 

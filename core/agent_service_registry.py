@@ -167,6 +167,9 @@ class AgentServiceRegistry:
             plan_file=str(kwargs.get("plan_file", "")),
             min_priority_score=max(0, int(kwargs.get("min_priority_score", 0))),
             max_actions=max(0, int(kwargs.get("max_actions", 0))),
+            scopes=kwargs.get("scopes", ""),
+            strategies=kwargs.get("strategies", ""),
+            task_kinds=kwargs.get("task_kinds", ""),
             approve_code=str(kwargs.get("approve_code", "")),
             force=bool(kwargs.get("force", False)),
         ).to_dict()
@@ -184,6 +187,9 @@ class AgentServiceRegistry:
             plan_file=str(kwargs.get("plan_file", "")),
             min_priority_score=max(0, int(kwargs.get("min_priority_score", 0))),
             max_actions=max(0, int(kwargs.get("max_actions", 0))),
+            scopes=kwargs.get("scopes", ""),
+            strategies=kwargs.get("strategies", ""),
+            task_kinds=kwargs.get("task_kinds", ""),
             approve_code=str(kwargs.get("approve_code", "")),
             force=bool(kwargs.get("force", False)),
         ).to_dict()
