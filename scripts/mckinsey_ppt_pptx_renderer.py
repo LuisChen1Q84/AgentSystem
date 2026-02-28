@@ -92,6 +92,34 @@ def _textbox_shape(
     )
 
 
+def _block_shape(
+    shape_id: int,
+    name: str,
+    x: int,
+    y: int,
+    cx: int,
+    cy: int,
+    *,
+    fill: str,
+    line: str | None = None,
+    prst: str = "rect",
+) -> str:
+    return _textbox_shape(
+        shape_id,
+        name,
+        x,
+        y,
+        cx,
+        cy,
+        [""],
+        font_size=1000,
+        color=fill,
+        fill=fill,
+        line=line,
+        prst=prst,
+    )
+
+
 def _background_shapes(paper: str, accent_soft: str) -> List[str]:
     return [
         _textbox_shape(2, "Background", 0, 0, SLIDE_CX, SLIDE_CY, [""], font_size=1000, color=paper, fill=paper, line=None),
@@ -114,8 +142,19 @@ def _evidence_list(title: str, items: List[str], shape_id: int, x: int, y: int, 
     return _textbox_shape(shape_id, title, x, y, cx, cy, [title] + [f"• {item}" for item in items[:4]], font_size=1320, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True)
 
 
+def _score_width(score: Any, max_width: int) -> int:
+    try:
+        value = float(score)
+    except Exception:
+        value = 50.0
+    pct = max(0.08, min(1.0, value / 100.0))
+    return int(max_width * pct)
+
+
 def _cover_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     evidence = _lines(slide.get("evidence_needed", []))
+    payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
+    hero_bars = payload.get("hero_bars", []) if isinstance(payload.get("hero_bars", []), list) else []
     metrics = _lines(request.get("key_metrics", []))
     shapes = _background_shapes(colors["paper"], colors["accent_soft"])
     shapes.extend(
@@ -125,10 +164,16 @@ def _cover_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dic
             _textbox_shape(6, "Objective", 700000, 2550000, 9000000, 700000, [str(request.get("objective", "")), str(slide.get("so_what", ""))], font_size=1600, color=colors["muted"]),
             _textbox_shape(7, "Decision Ask", 700000, 3580000, 4300000, 980000, ["Decision Ask", str(request.get("decision_ask", ""))], font_size=1550, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"),
             _textbox_shape(8, "Theme", 5200000, 3580000, 5300000, 980000, ["Deck signal", f"Theme: {request.get('theme', '')}", " | ".join(metrics[:3])], font_size=1450, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"),
-            _textbox_shape(9, "Evidence", 700000, 4900000, 9800000, 1050000, ["Critical Proof"] + [f"• {item}" for item in evidence[:3]], font_size=1350, color=colors["ink"], bold_first=True),
+            _textbox_shape(9, "Evidence", 700000, 5450000, 9800000, 620000, ["Critical Proof"] + [f"• {item}" for item in evidence[:2]], font_size=1250, color=colors["ink"], bold_first=True),
             _footer_shape(int(slide.get("index", 1)), colors),
         ]
     )
+    for idx, item in enumerate(hero_bars[:3], start=0):
+        x = 700000 + idx * 3370000
+        bar_w = _score_width(item.get("score", 50), 2500000)
+        shapes.append(_textbox_shape(20 + idx, f"HeroCard{idx+1}", x, 4680000, 2900000, 650000, [str(item.get("label", "")), str(item.get("value", ""))], font_size=1280, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"))
+        shapes.append(_block_shape(30 + idx, f"HeroBarBg{idx+1}", x + 140000, 5180000, 2500000, 120000, fill=colors["line"], line=None, prst="roundRect"))
+        shapes.append(_block_shape(33 + idx, f"HeroBar{idx+1}", x + 140000, 5180000, bar_w, 120000, fill=colors["accent"], line=None, prst="roundRect"))
     return _slide_xml_from_shapes(shapes)
 
 
@@ -169,16 +214,18 @@ def _summary_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: D
 def _benchmark_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     rows = payload.get("rows", []) if isinstance(payload.get("rows", []), list) else []
+    gap_bars = payload.get("gap_bars", []) if isinstance(payload.get("gap_bars", []), list) else []
     shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
     if rows:
         shapes.append(_textbox_shape(6, "TableHead", 700000, 2050000, 10350000, 420000, ["Capability | Current | Target | Gap"], font_size=1260, color=colors["accent"], fill=colors["accent_soft"], line=None, bold_first=True))
         for idx, row in enumerate(rows[:3], start=0):
+            y = 2550000 + idx * 820000
             shapes.append(
                 _textbox_shape(
                     7 + idx,
                     f"Row{idx + 1}",
                     700000,
-                    2550000 + idx * 820000,
+                    y,
                     10350000,
                     620000,
                     [
@@ -194,6 +241,10 @@ def _benchmark_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors:
                     bold_first=True,
                 )
             )
+            bar = gap_bars[idx] if idx < len(gap_bars) else {}
+            bar_w = _score_width(bar.get("score", 40), 2200000)
+            shapes.append(_block_shape(15 + idx, f"GapBarBg{idx+1}", 9150000, y + 375000, 2200000, 90000, fill=colors["line"], line=None, prst="roundRect"))
+            shapes.append(_block_shape(18 + idx, f"GapBar{idx+1}", 9150000, y + 375000, bar_w, 90000, fill=colors["accent"], line=None, prst="roundRect"))
     else:
         evidence = _lines(slide.get("evidence_needed", []))
         shapes.extend(
@@ -215,6 +266,7 @@ def _benchmark_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors:
 def _options_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     rows = payload.get("options", []) if isinstance(payload.get("options", []), list) else []
+    score_bars = payload.get("score_bars", []) if isinstance(payload.get("score_bars", []), list) else []
     option_lines = [
         [
             str(item.get("name", f"Option {idx + 1}")),
@@ -236,6 +288,12 @@ def _options_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: D
         fill = colors["panel"] if idx != 1 else colors["accent_soft"]
         line = colors["line"] if idx != 1 else colors["accent"]
         shapes.append(_textbox_shape(6 + idx, f"Option{idx+1}", x, 2200000, 2900000, 2200000, lines, font_size=1380, color=colors["ink"], fill=fill, line=line, bold_first=True, prst="roundRect"))
+        score = score_bars[idx] if idx < len(score_bars) else {}
+        for offset, (name, color) in enumerate([("value_score", colors["accent"]), ("effort_score", colors["warn"]), ("risk_score", colors["muted"])]):
+            y = 4100000 + offset * 155000
+            bar_w = _score_width(score.get(name, 50), 2200000)
+            shapes.append(_block_shape(20 + idx * 3 + offset, f"ScoreBg{idx+1}{offset}", x + 220000, y, 2200000, 85000, fill=colors["line"], line=None, prst="roundRect"))
+            shapes.append(_block_shape(29 + idx * 3 + offset, f"ScoreBar{idx+1}{offset}", x + 220000, y, bar_w, 85000, fill=color, line=None, prst="roundRect"))
     shapes.append(_textbox_shape(10, "Selection", 700000, 4750000, 10100000, 760000, ["Selection stance", str(slide.get("decision_link", ""))], font_size=1280, color=colors["accent"], fill=None, bold_first=True))
     shapes.append(_footer_shape(int(slide.get("index", 6)), colors))
     return _slide_xml_from_shapes(shapes)
@@ -244,6 +302,7 @@ def _options_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: D
 def _portfolio_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     quadrant_rows = payload.get("quadrants", []) if isinstance(payload.get("quadrants", []), list) else []
+    matrix_points = payload.get("matrix_points", []) if isinstance(payload.get("matrix_points", []), list) else []
     quadrant_titles = [
         (
             str(item.get("name", f"Quadrant {idx + 1}")),
@@ -265,6 +324,13 @@ def _portfolio_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors:
         fill = colors["panel"] if idx != 7 else colors["accent_soft"]
         line = colors["line"] if idx != 7 else colors["accent"]
         shapes.append(_textbox_shape(idx, title, x, y, 4750000, 1500000, [title, body], font_size=1360, color=colors["ink"], fill=fill, line=line, bold_first=True, prst="roundRect"))
+    shapes.append(_block_shape(20, "AxisV", 6085000, 2060000, 85000, 3640000, fill=colors["line"], line=None))
+    shapes.append(_block_shape(21, "AxisH", 720000, 3905000, 10300000, 85000, fill=colors["line"], line=None))
+    for idx, point in enumerate(matrix_points[:4], start=0):
+        x = 1000000 + int((max(0, min(100, int(point.get("x", 50)))) / 100.0) * 9400000)
+        y = 5150000 - int((max(0, min(100, int(point.get("y", 50)))) / 100.0) * 2500000)
+        shapes.append(_block_shape(22 + idx, f"Point{idx+1}", x, y, 220000, 220000, fill=colors["accent"] if idx < 2 else colors["warn"], line=None, prst="ellipse"))
+        shapes.append(_textbox_shape(30 + idx, f"PointLabel{idx+1}", x + 180000, y - 30000, 1250000, 220000, [str(point.get("name", ""))], font_size=900, color=colors["ink"], fill=None, line=None))
     shapes.append(_footer_shape(int(slide.get("index", 7)), colors))
     return _slide_xml_from_shapes(shapes)
 
@@ -272,6 +338,7 @@ def _portfolio_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors:
 def _roadmap_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     wave_rows = payload.get("waves", []) if isinstance(payload.get("waves", []), list) else []
+    timeline_marks = payload.get("timeline_marks", []) if isinstance(payload.get("timeline_marks", []), list) else []
     phases = [
         (
             str(item.get("wave", f"Wave {idx + 1}")),
@@ -292,6 +359,10 @@ def _roadmap_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: D
         x = 900000 + idx * 3300000
         shapes.append(_textbox_shape(7 + idx, title, x, 2050000, 2500000, 1600000, [title, body], font_size=1380, color=colors["ink"], fill=colors["panel"], line=colors["line"], bold_first=True, prst="roundRect"))
         shapes.append(_textbox_shape(10 + idx, f"Milestone{idx+1}", x + 980000, 3800000, 540000, 540000, [str(idx + 1)], font_size=1400, color=colors["panel"], fill=colors["accent"], line=None, bold_first=True, prst="ellipse", align="c"))
+        mark = timeline_marks[idx] if idx < len(timeline_marks) else {}
+        bar_w = _score_width(mark.get("score", 40), 2200000)
+        shapes.append(_block_shape(13 + idx, f"ProgressBg{idx+1}", x + 150000, 4300000, 2200000, 90000, fill=colors["line"], line=None, prst="roundRect"))
+        shapes.append(_block_shape(16 + idx, f"ProgressBar{idx+1}", x + 150000, 4300000, bar_w, 90000, fill=colors["accent"], line=None, prst="roundRect"))
     shapes.append(_textbox_shape(20, "Roadmap Decision", 900000, 4950000, 9600000, 760000, ["Execution mandate", str(slide.get("decision_link", ""))], font_size=1280, color=colors["accent"], fill=None, bold_first=True))
     shapes.append(_footer_shape(int(slide.get("index", 8)), colors))
     return _slide_xml_from_shapes(shapes)
@@ -300,6 +371,7 @@ def _roadmap_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: D
 def _snapshot_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     callouts = payload.get("callouts", []) if isinstance(payload.get("callouts", []), list) else []
+    bars = payload.get("bars", []) if isinstance(payload.get("bars", []), list) else []
     shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
     for idx, item in enumerate(callouts[:3], start=0):
         x = 700000 + idx * 3300000
@@ -324,8 +396,14 @@ def _snapshot_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 prst="roundRect",
             )
         )
+        bar = bars[idx] if idx < len(bars) else {}
+        bar_h = int(1200000 * max(0.12, min(1.0, float(bar.get("score", 50)) / 100.0)))
+        base_x = x + 1160000
+        base_y = 3950000
+        shapes.append(_block_shape(20 + idx, f"BarBg{idx+1}", base_x, base_y, 220000, 1200000, fill=colors["line"], line=None, prst="roundRect"))
+        shapes.append(_block_shape(23 + idx, f"Bar{idx+1}", base_x, base_y + (1200000 - bar_h), 220000, bar_h, fill=colors["accent"], line=None, prst="roundRect"))
     pressure = _lines(payload.get("pressure_points", []))
-    shapes.append(_evidence_list("Pressure points", pressure, 12, 700000, 4200000, 10100000, 1200000, colors))
+    shapes.append(_evidence_list("Pressure points", pressure, 12, 700000, 5400000, 10100000, 620000, colors))
     shapes.append(_footer_shape(int(slide.get("index", 3)), colors))
     return _slide_xml_from_shapes(shapes)
 
@@ -361,8 +439,12 @@ def _issue_tree_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors
 def _risk_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     risks = payload.get("risks", []) if isinstance(payload.get("risks", []), list) else []
+    severity_dots = payload.get("severity_dots", []) if isinstance(payload.get("severity_dots", []), list) else []
     shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
     for idx, item in enumerate(risks[:3], start=0):
+        severity = severity_dots[idx] if idx < len(severity_dots) else {}
+        score = int(severity.get("score", 60) or 60)
+        dot_fill = colors["accent"] if score < 45 else colors["warn"] if score < 70 else "C2410C"
         shapes.append(
             _textbox_shape(
                 6 + idx,
@@ -383,6 +465,7 @@ def _risk_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict
                 bold_first=True,
             )
         )
+        shapes.append(_block_shape(20 + idx, f"Severity{idx+1}", 10150000, 2480000 + idx * 980000, 180000, 180000, fill=dot_fill, line=None, prst="ellipse"))
     shapes.append(_footer_shape(int(slide.get("index", 9)), colors))
     return _slide_xml_from_shapes(shapes)
 
@@ -390,6 +473,7 @@ def _risk_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict
 def _decision_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     items = payload.get("items", []) if isinstance(payload.get("items", []), list) else []
+    approval_bars = payload.get("approval_bars", []) if isinstance(payload.get("approval_bars", []), list) else []
     shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
     for idx, item in enumerate(items[:3], start=0):
         x = 700000 + idx * 3370000
@@ -414,6 +498,10 @@ def _decision_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 prst="roundRect",
             )
         )
+        approval = approval_bars[idx] if idx < len(approval_bars) else {}
+        bar_w = _score_width(approval.get("score", 60), 2200000)
+        shapes.append(_block_shape(20 + idx, f"ApprovalBg{idx+1}", x + 220000, 4120000, 2200000, 90000, fill=colors["line"], line=None, prst="roundRect"))
+        shapes.append(_block_shape(24 + idx, f"Approval{idx+1}", x + 220000, 4120000, bar_w, 90000, fill=colors["accent"], line=None, prst="roundRect"))
     shapes.append(_textbox_shape(20, "Decision Bar", 700000, 4700000, 10100000, 760000, ["Approve now", str(slide.get("decision_link", ""))], font_size=1320, color=colors["accent"], fill=None, bold_first=True))
     shapes.append(_footer_shape(int(slide.get("index", 10)), colors))
     return _slide_xml_from_shapes(shapes)

@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -55,6 +56,30 @@ def _as_dict_list(value: Any) -> List[Dict[str, str]]:
         elif isinstance(item, str) and item.strip():
             rows.append({"label": item.strip()})
     return rows
+
+
+def _first_non_empty(values: List[str], fallback: str) -> str:
+    for value in values:
+        if str(value).strip():
+            return str(value).strip()
+    return fallback
+
+
+def _numeric_token(value: Any) -> float | None:
+    text = str(value or "").strip().replace(",", "")
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return None
+    number = float(match.group(0))
+    if "%" in text or "pp" in text.lower():
+        return max(min(abs(number), 100.0), 0.0)
+    return abs(number)
+
+
+def _clamp_pct(value: float | None, *, default: float = 50.0, upper: float = 100.0) -> int:
+    if value is None:
+        return int(default)
+    return int(max(8.0, min(upper, value)))
 
 
 def _read_reference_points(path: Path) -> List[str]:
@@ -112,6 +137,14 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
     )
     default_metrics = "增长率, 毛利率, 回收期" if lang == "zh" else "growth, margin, payback"
     default_must_include = "核心结论, 关键证据, 路线图, 风险" if lang == "zh" else "core message, proof, roadmap, risk"
+    metric_values = _as_dict_list(values.get("metric_values"))
+    key_metrics = _as_list(values.get("key_metrics"))
+    if not key_metrics and metric_values:
+        key_metrics = [
+            str(item.get("label", item.get("metric", ""))).strip()
+            for item in metric_values
+            if str(item.get("label", item.get("metric", ""))).strip()
+        ][:3]
     return {
         "topic": topic,
         "audience": str(values.get("audience", default_audience)).strip(),
@@ -125,9 +158,9 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "industry": str(values.get("industry", "通用业务" if lang == "zh" else "general business")).strip(),
         "deliverable": str(values.get("deliverable", default_deliverable)).strip(),
         "decision_ask": str(values.get("decision_ask", default_decision_ask)).strip(),
-        "key_metrics": _as_list(values.get("key_metrics") or default_metrics),
+        "key_metrics": key_metrics or _as_list(default_metrics),
         "must_include": _as_list(values.get("must_include") or default_must_include),
-        "metric_values": _as_dict_list(values.get("metric_values")),
+        "metric_values": metric_values,
         "benchmarks": _as_dict_list(values.get("benchmarks")),
         "options": _as_dict_list(values.get("options")),
         "initiatives": _as_dict_list(values.get("initiatives")),
@@ -145,13 +178,19 @@ def _metric_value_rows(req: Dict[str, Any], lang: str) -> List[Dict[str, str]]:
                 "label": str(item.get("label", item.get("metric", ""))).strip() or f"Metric {idx + 1}",
                 "value": str(item.get("value", item.get("target", item.get("status", "")))).strip() or ("待补数据" if lang == "zh" else "TBD"),
                 "context": str(item.get("context", item.get("note", ""))).strip() or ("关键指标" if lang == "zh" else "Key metric"),
+                "value_num": _clamp_pct(_numeric_token(item.get("value", item.get("target", item.get("status", "")))), default=55.0, upper=120.0),
             }
             for idx, item in enumerate(rows[:4])
         ]
     defaults = ["收入增长", "毛利率", "回收期"] if lang == "zh" else ["Growth", "Margin", "Payback"]
     contexts = ["当前趋势", "结构改善", "投资纪律"] if lang == "zh" else ["Current trend", "Structural improvement", "Investment discipline"]
     return [
-        {"label": label, "value": "待补数据" if lang == "zh" else "TBD", "context": contexts[idx % len(contexts)]}
+        {
+            "label": label,
+            "value": "待补数据" if lang == "zh" else "TBD",
+            "context": contexts[idx % len(contexts)],
+            "value_num": 50,
+        }
         for idx, label in enumerate((req.get("key_metrics") or defaults)[:3])
     ]
 
@@ -165,6 +204,7 @@ def _benchmark_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List
                 "current": str(item.get("current", item.get("baseline", "TBD"))).strip(),
                 "target": str(item.get("target", item.get("winner", "TBD"))).strip(),
                 "gap": str(item.get("gap", item.get("delta", "TBD"))).strip(),
+                "gap_score": _clamp_pct(_numeric_token(item.get("gap", item.get("delta", ""))), default=45.0),
             }
             for idx, item in enumerate(rows[:3])
         ]
@@ -175,6 +215,7 @@ def _benchmark_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List
             "current": "当前偏弱" if lang == "zh" else "Current gap",
             "target": "优胜者水平" if lang == "zh" else "Winner level",
             "gap": "优先补齐" if lang == "zh" else "Priority gap",
+            "gap_score": 52,
         }
         for item in defaults[:3]
     ]
@@ -189,6 +230,9 @@ def _option_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Di
                 "value": str(item.get("value", item.get("benefit", "TBD"))).strip(),
                 "effort": str(item.get("effort", item.get("cost", "TBD"))).strip(),
                 "risk": str(item.get("risk", "TBD")).strip(),
+                "value_score": _clamp_pct(_numeric_token(item.get("value", item.get("benefit", ""))), default=72.0),
+                "effort_score": _clamp_pct(_numeric_token(item.get("effort", item.get("cost", ""))), default=50.0),
+                "risk_score": _clamp_pct(_numeric_token(item.get("risk", "")), default=38.0),
             }
             for idx, item in enumerate(rows[:3])
         ]
@@ -199,6 +243,9 @@ def _option_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Di
             "value": evidence[idx] if idx < len(evidence) else ("高回报" if lang == "zh" else "High return"),
             "effort": "中等投入" if lang == "zh" else "Medium effort",
             "risk": "可控风险" if lang == "zh" else "Controlled risk",
+            "value_score": 72 - idx * 10,
+            "effort_score": 48 + idx * 12,
+            "risk_score": 34 + idx * 14,
         }
         for idx in range(3)
     ]
@@ -213,6 +260,8 @@ def _initiative_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> Lis
                 "impact": str(item.get("impact", "TBD")).strip(),
                 "feasibility": str(item.get("feasibility", item.get("effort", "TBD"))).strip(),
                 "quadrant": str(item.get("quadrant", "Scale Bets")).strip(),
+                "impact_score": _clamp_pct(_numeric_token(item.get("impact", "")), default=68.0),
+                "feasibility_score": _clamp_pct(_numeric_token(item.get("feasibility", item.get("effort", ""))), default=58.0),
             }
             for idx, item in enumerate(rows[:4])
         ]
@@ -225,6 +274,8 @@ def _initiative_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> Lis
             "impact": "高" if lang == "zh" else "High",
             "feasibility": "中" if lang == "zh" else "Medium",
             "quadrant": quadrants[idx],
+            "impact_score": 78 - idx * 12,
+            "feasibility_score": 74 if idx in {0, 3} else 52,
         }
         for idx in range(4)
     ]
@@ -239,6 +290,7 @@ def _roadmap_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[D
                 "timing": str(item.get("timing", item.get("when", "TBD"))).strip(),
                 "focus": str(item.get("focus", item.get("outcome", "TBD"))).strip(),
                 "owner": str(item.get("owner", "Owner TBD")).strip(),
+                "progress_score": 24 + idx * 28,
             }
             for idx, item in enumerate(rows[:3])
         ]
@@ -249,6 +301,7 @@ def _roadmap_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[D
             "timing": timings[idx],
             "focus": evidence[idx] if idx < len(evidence) else ("关键里程碑" if lang == "zh" else "Key milestone"),
             "owner": "业务 owner" if lang == "zh" else "Business owner",
+            "progress_score": 24 + idx * 28,
         }
         for idx in range(3)
     ]
@@ -263,6 +316,7 @@ def _risk_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict
                 "indicator": str(item.get("indicator", item.get("signal", "TBD"))).strip(),
                 "mitigation": str(item.get("mitigation", "TBD")).strip(),
                 "owner": str(item.get("owner", "Owner TBD")).strip(),
+                "severity_score": _clamp_pct(_numeric_token(item.get("indicator", item.get("signal", ""))), default=62.0),
             }
             for idx, item in enumerate(rows[:3])
         ]
@@ -272,6 +326,7 @@ def _risk_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict
             "indicator": "周度领先指标" if lang == "zh" else "Weekly leading indicator",
             "mitigation": "双周治理校准" if lang == "zh" else "Bi-weekly governance reset",
             "owner": "PMO / BU" if lang == "zh" else "PMO / BU",
+            "severity_score": 62 - idx * 10,
         }
         for idx in range(3)
     ]
@@ -285,6 +340,7 @@ def _decision_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[
                 "ask": str(item.get("ask", item.get("name", f"Decision {idx + 1}"))).strip(),
                 "impact": str(item.get("impact", "TBD")).strip(),
                 "timing": str(item.get("timing", item.get("when", "Immediate"))).strip(),
+                "impact_score": _clamp_pct(_numeric_token(item.get("impact", "")), default=70.0),
             }
             for idx, item in enumerate(rows[:3])
         ]
@@ -293,6 +349,7 @@ def _decision_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[
             "ask": evidence[idx] if idx < len(evidence) else ("批准优先级" if lang == "zh" else "Approve priority"),
             "impact": "释放资源" if lang == "zh" else "Unlock resources",
             "timing": "本周" if lang == "zh" else "This week",
+            "impact_score": 68 - idx * 8,
         }
         for idx in range(3)
     ]
@@ -302,9 +359,14 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
     layout = str(slide.get("layout", ""))
     evidence = list(slide.get("evidence_needed", []))
     if layout == "cover_signal":
+        metrics = _metric_value_rows(req, lang)[:3]
         return {
             "kind": "cover_signal",
-            "hero_metrics": _metric_value_rows(req, lang)[:3],
+            "hero_metrics": metrics,
+            "hero_bars": [
+                {"label": item["label"], "score": item["value_num"], "value": item["value"]}
+                for item in metrics
+            ],
             "decision_bar": str(req.get("decision_ask", "")),
             "review_prompt": "先看结论是否够硬，再看指标是否支撑" if lang == "zh" else "Validate verdict first, then confirm metrics support it",
         }
@@ -334,11 +396,16 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
             ],
         }
     if layout == "situation_snapshot":
+        callouts = _metric_value_rows(req, lang)[:3]
         return {
             "kind": "situation_snapshot",
             "callouts": [
                 {"label": row["label"], "value": row["value"], "context": row["context"]}
-                for row in _metric_value_rows(req, lang)[:3]
+                for row in callouts
+            ],
+            "bars": [
+                {"label": row["label"], "score": row["value_num"], "value": row["value"]}
+                for row in callouts
             ],
             "pressure_points": evidence[:3],
         }
@@ -352,9 +419,30 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
             ],
         }
     if layout == "benchmark_matrix":
-        return {"kind": "benchmark_matrix", "rows": _benchmark_rows(req, evidence, lang)}
+        rows = _benchmark_rows(req, evidence, lang)
+        return {
+            "kind": "benchmark_matrix",
+            "rows": rows,
+            "gap_bars": [
+                {"label": row["capability"], "score": row["gap_score"], "gap": row["gap"]}
+                for row in rows
+            ],
+        }
     if layout == "strategic_options":
-        return {"kind": "strategic_options", "options": _option_rows(req, evidence, lang)}
+        rows = _option_rows(req, evidence, lang)
+        return {
+            "kind": "strategic_options",
+            "options": rows,
+            "score_bars": [
+                {
+                    "name": row["name"],
+                    "value_score": row["value_score"],
+                    "effort_score": row["effort_score"],
+                    "risk_score": row["risk_score"],
+                }
+                for row in rows
+            ],
+        }
     if layout == "initiative_portfolio":
         initiatives = _initiative_rows(req, evidence, lang)
         quadrants = ["Quick Wins", "Scale Bets", "Capability Build", "Deprioritize"]
@@ -367,13 +455,46 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
                 }
                 for quadrant in quadrants
             ],
+            "matrix_points": [
+                {
+                    "name": item["name"],
+                    "x": item["feasibility_score"],
+                    "y": item["impact_score"],
+                    "quadrant": item["quadrant"],
+                }
+                for item in initiatives
+            ],
         }
     if layout == "roadmap_track":
-        return {"kind": "roadmap_track", "waves": _roadmap_rows(req, evidence, lang)}
+        waves = _roadmap_rows(req, evidence, lang)
+        return {
+            "kind": "roadmap_track",
+            "waves": waves,
+            "timeline_marks": [
+                {"wave": row["wave"], "score": row["progress_score"], "timing": row["timing"]}
+                for row in waves
+            ],
+        }
     if layout == "risk_control":
-        return {"kind": "risk_control", "risks": _risk_rows(req, evidence, lang)}
+        risks = _risk_rows(req, evidence, lang)
+        return {
+            "kind": "risk_control",
+            "risks": risks,
+            "severity_dots": [
+                {"risk": row["risk"], "score": row["severity_score"], "owner": row["owner"]}
+                for row in risks
+            ],
+        }
     if layout == "decision_ask":
-        return {"kind": "decision_ask", "items": _decision_rows(req, evidence, lang)}
+        items = _decision_rows(req, evidence, lang)
+        return {
+            "kind": "decision_ask",
+            "items": items,
+            "approval_bars": [
+                {"ask": row["ask"], "score": row["impact_score"], "timing": row["timing"]}
+                for row in items
+            ],
+        }
     if layout == "appendix_evidence":
         return {
             "kind": "appendix_evidence",

@@ -123,6 +123,41 @@
   - 不再只用标题 + evidence list 做文本拼接
   - 关键页型导出和 HTML 审稿开始共享同一套结构化内容
 
+## 第六轮优化（业务数据直连视觉 + 几何图形导出）
+- 结构化业务数据现在不再只作为文案参考，而是直接进入可渲染载荷：
+  - `value_num`
+  - `gap_score`
+  - `value_score / effort_score / risk_score`
+  - `impact_score / feasibility_score`
+  - `progress_score`
+  - `severity_score`
+- `visual_payload` 进一步新增：
+  - `hero_bars`
+  - `bars`
+  - `gap_bars`
+  - `score_bars`
+  - `matrix_points`
+  - `timeline_marks`
+  - `severity_dots`
+  - `approval_bars`
+- HTML 审稿页新增分数条和坐标视图：
+  - benchmark gap bars
+  - option score bars
+  - initiative matrix point tags
+  - roadmap progress bars
+  - risk severity bars
+  - decision impact bars
+- Native PPTX 新增几何渲染，不再只用文本框模拟图表：
+  - cover 指标进度条
+  - current state 柱形强弱条
+  - benchmark gap 条
+  - option value/effort/risk 三条评分条
+  - portfolio 坐标轴 + 气泡点
+  - roadmap progress 条
+  - risk severity 指示点
+  - decision approval 条
+- 这一步的目标是把 PPT 子系统从“结构化内容导出器”进一步推向“具备真实视觉几何表达的交付引擎”。
+
 ## 后续建议
 - 若要继续提升成品质量，下一步应该做 PPTX 原生导出模板，而不是再扩提示词。
 - 若要适配多个审美方向，应在 `assets/mckinsey_ppt/` 下继续扩主题与布局，而不是在 engine 里写分支。

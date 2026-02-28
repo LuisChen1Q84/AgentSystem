@@ -28,6 +28,22 @@ def _metric(label: str, value: Any) -> str:
     )
 
 
+def _inline_bar(score: Any, label: str) -> str:
+    try:
+        pct = max(8, min(100, int(float(score))))
+    except Exception:
+        pct = 50
+    return (
+        '<div class="mini-bar-row">'
+        f'<span>{_esc(label)}</span>'
+        '<div class="mini-bar-track">'
+        f'<div class="mini-bar-fill" style="width:{pct}%"></div>'
+        '</div>'
+        f'<strong>{pct}</strong>'
+        '</div>'
+    )
+
+
 def _render_storyline(storyline: List[Dict[str, Any]]) -> str:
     items = []
     for item in storyline:
@@ -235,6 +251,9 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 '</div>'
                 for item in rows
             )
+            + '</div>'
+            '<div class="bar-cluster">'
+            + ''.join(_inline_bar(item.get("gap_score", 50), item.get("capability", "")) for item in rows)
             + '</div></section>'
         )
     if kind == "strategic_options":
@@ -249,6 +268,9 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 f'<h4>{_esc(item.get("value", ""))}</h4>'
                 f'<p>Effort: {_esc(item.get("effort", ""))}</p>'
                 f'<small>Risk: {_esc(item.get("risk", ""))}</small>'
+                f'{_inline_bar(item.get("value_score", 50), "Value")}'
+                f'{_inline_bar(item.get("effort_score", 50), "Effort")}'
+                f'{_inline_bar(item.get("risk_score", 50), "Risk")}'
                 '</div>'
                 for item in options
             )
@@ -256,6 +278,7 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
         )
     if kind == "initiative_portfolio":
         quadrants = payload.get("quadrants", []) if isinstance(payload.get("quadrants", []), list) else []
+        points = payload.get("matrix_points", []) if isinstance(payload.get("matrix_points", []), list) else []
         return (
             '<section class="visual-stage">'
             '<div class="visual-head">Priority Matrix</div>'
@@ -266,6 +289,15 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 '<ul>' + ''.join(f'<li>{_esc(entry)}</li>' for entry in item.get("items", [])) + '</ul>'
                 '</div>'
                 for item in quadrants
+            )
+            + '</div>'
+            '<div class="bar-cluster">'
+            + ''.join(
+                '<div class="point-tag">'
+                f'<strong>{_esc(item.get("name", ""))}</strong>'
+                f'<span>X{_esc(item.get("x", ""))} / Y{_esc(item.get("y", ""))}</span>'
+                '</div>'
+                for item in points
             )
             + '</div></section>'
         )
@@ -281,6 +313,7 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 f'<h4>{_esc(item.get("focus", ""))}</h4>'
                 f'<p>{_esc(item.get("timing", ""))}</p>'
                 f'<small>{_esc(item.get("owner", ""))}</small>'
+                f'{_inline_bar(item.get("progress_score", 50), "Progress")}'
                 '</div>'
                 for item in waves
             )
@@ -302,6 +335,9 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 '</div>'
                 for item in risks
             )
+            + '</div>'
+            '<div class="bar-cluster">'
+            + ''.join(_inline_bar(item.get("severity_score", 50), item.get("risk", "")) for item in risks)
             + '</div></section>'
         )
     if kind == "decision_ask":
@@ -315,6 +351,7 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 f'<h4>{_esc(item.get("ask", ""))}</h4>'
                 f'<p>{_esc(item.get("impact", ""))}</p>'
                 f'<small>{_esc(item.get("timing", ""))}</small>'
+                f'{_inline_bar(item.get("impact_score", 50), "Impact")}'
                 '</div>'
                 for item in items
             )
@@ -578,6 +615,15 @@ def render_deck_html(payload: Dict[str, Any], out_path: Path) -> Path:
     .table-row {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.88); border: 1px solid rgba(15,23,42,0.06); }}
     .table-row.table-head {{ background: var(--accent-soft); color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }}
     .table-row span {{ font-size: 13px; line-height: 1.5; }}
+    .bar-cluster {{ display: grid; gap: 10px; margin-top: 12px; }}
+    .mini-bar-row {{ display: grid; grid-template-columns: 120px 1fr 40px; gap: 10px; align-items: center; }}
+    .mini-bar-row span {{ font-size: 12px; color: var(--muted); }}
+    .mini-bar-row strong {{ font-size: 12px; text-align: right; }}
+    .mini-bar-track {{ height: 8px; border-radius: 999px; background: rgba(15,23,42,0.08); overflow: hidden; }}
+    .mini-bar-fill {{ height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 45%, white)); }}
+    .point-tag {{ display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.82); border: 1px solid rgba(15,23,42,0.06); }}
+    .point-tag strong {{ font-size: 13px; }}
+    .point-tag span {{ font-size: 12px; color: var(--muted); }}
     .slide-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }}
     .panel {{ background: rgba(255,255,255,0.86); border: 1px solid rgba(15,23,42,0.06); border-radius: 18px; padding: 18px; }}
     .panel.primary {{ background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, white), rgba(255,255,255,0.92)); }}

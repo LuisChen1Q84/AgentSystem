@@ -104,6 +104,67 @@ class McKinseyPptEngineTest(unittest.TestCase):
         self.assertIn("export_manifest", out)
         self.assertTrue(Path(out["pptx_path"]).exists())
 
+    def test_structured_business_data_flows_into_visual_payload_and_pptx(self):
+        with tempfile.TemporaryDirectory(dir="/Volumes/Luis_MacData/AgentSystem") as td:
+            out = run_request(
+                "帮我做支付业务增长战略汇报",
+                {
+                    "page_count": 10,
+                    "metric_values": [
+                        {"label": "收入增长", "value": "+18%", "context": "近两个季度改善"},
+                        {"label": "毛利率", "value": "+3.2pp", "context": "结构优化驱动"},
+                    ],
+                    "benchmarks": [
+                        {"capability": "渠道转化", "current": "0.9x", "target": "1.3x", "gap": "+0.4x"},
+                        {"capability": "客户留存", "current": "82%", "target": "89%", "gap": "+7pp"},
+                    ],
+                    "options": [
+                        {"name": "聚焦大客户", "value": "高收入杠杆", "effort": "中", "risk": "渠道依赖"},
+                        {"name": "推进产品组合", "value": "利润质量改善", "effort": "中高", "risk": "执行复杂"},
+                    ],
+                    "initiatives": [
+                        {"name": "KA提效", "impact": "85", "feasibility": "76", "quadrant": "Quick Wins"},
+                        {"name": "交叉销售", "impact": "74", "feasibility": "58", "quadrant": "Scale Bets"},
+                    ],
+                    "roadmap": [
+                        {"wave": "Wave 1", "timing": "0-30天", "focus": "冻结低效投放并校准预算", "owner": "增长负责人"},
+                        {"wave": "Wave 2", "timing": "31-90天", "focus": "推进大客户和组合销售动作", "owner": "销售负责人"},
+                    ],
+                    "risks": [
+                        {"risk": "渠道依赖过高", "indicator": "前五大渠道贡献过度集中", "mitigation": "替代渠道试点", "owner": "增长负责人"},
+                        {"risk": "组织执行失速", "indicator": "关键动作延期超过2周", "mitigation": "双周治理会", "owner": "COO"},
+                    ],
+                    "decision_items": [
+                        {"ask": "批准资源向 KA 与组合销售倾斜", "impact": "提升增长质量", "timing": "本周"},
+                        {"ask": "批准低效投放收缩", "impact": "释放预算", "timing": "立即"},
+                    ],
+                },
+                Path(td),
+            )
+
+            slides = out["slides"]
+            self.assertEqual(slides[0]["visual_payload"]["hero_metrics"][0]["label"], "收入增长")
+            self.assertEqual(slides[2]["visual_payload"]["bars"][0]["value"], "+18%")
+            self.assertEqual(slides[4]["visual_payload"]["rows"][0]["capability"], "渠道转化")
+            self.assertEqual(slides[5]["visual_payload"]["options"][0]["name"], "聚焦大客户")
+            self.assertEqual(slides[6]["visual_payload"]["matrix_points"][0]["name"], "KA提效")
+            self.assertEqual(slides[8]["visual_payload"]["risks"][0]["risk"], "渠道依赖过高")
+            self.assertEqual(slides[9]["visual_payload"]["items"][0]["ask"], "批准资源向 KA 与组合销售倾斜")
+
+            with ZipFile(out["pptx_path"]) as zf:
+                slide1 = zf.read("ppt/slides/slide1.xml").decode("utf-8")
+                slide5 = zf.read("ppt/slides/slide5.xml").decode("utf-8")
+                slide6 = zf.read("ppt/slides/slide6.xml").decode("utf-8")
+                slide7 = zf.read("ppt/slides/slide7.xml").decode("utf-8")
+                slide9 = zf.read("ppt/slides/slide9.xml").decode("utf-8")
+                slide10 = zf.read("ppt/slides/slide10.xml").decode("utf-8")
+                self.assertIn("收入增长", slide1)
+                self.assertIn("渠道转化", slide5)
+                self.assertIn("聚焦大客户", slide6)
+                self.assertIn("KA提效", slide7)
+                self.assertIn("替代渠道试点", slide9)
+                self.assertIn("批准资源向 KA 与组合销售倾斜", slide10)
+
 
 if __name__ == "__main__":
     unittest.main()
