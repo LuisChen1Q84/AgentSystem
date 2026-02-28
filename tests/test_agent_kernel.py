@@ -28,6 +28,7 @@ class AgentKernelTest(unittest.TestCase):
             self.assertIn("run_context", out["kernel"])
             self.assertIn("execution_plan", out["kernel"])
             self.assertIn("delivery_bundle", out)
+            self.assertIn("delivery_protocol", out)
             items = out.get("deliver_assets", {}).get("items", [])
             self.assertGreaterEqual(len(items), 4)
             self.assertTrue((root / "agent" / "agent_evaluations.jsonl").exists())

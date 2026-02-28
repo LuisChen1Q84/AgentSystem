@@ -113,6 +113,31 @@ def _failure_review_cmd(reg: AgentServiceRegistry, days: int, limit: int, data_d
     return 0
 
 
+def _repair_apply_cmd(
+    reg: AgentServiceRegistry,
+    days: int,
+    limit: int,
+    apply: bool,
+    data_dir: str,
+    out_dir: str,
+    profile_overrides_file: str,
+    strategy_overrides_file: str,
+) -> int:
+    _print_json(
+        reg.execute(
+            "agent.repairs.apply",
+            days=days,
+            limit=limit,
+            apply=apply,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+            profile_overrides_file=profile_overrides_file,
+            strategy_overrides_file=strategy_overrides_file,
+        )
+    )
+    return 0
+
+
 def _run_inspect_cmd(reg: AgentServiceRegistry, run_id: str, data_dir: str, out_dir: str) -> int:
     _print_json(
         reg.execute(
@@ -202,7 +227,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "failure-review [days], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "failure-review [days], repair-apply [days], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -234,6 +259,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "failure-review":
             _failure_review_cmd(reg, days=int(args[0]) if args else 14, limit=10, data_dir=data_dir, out_dir="")
+            continue
+        if cmd == "repair-apply":
+            _repair_apply_cmd(reg, days=int(args[0]) if args else 14, limit=10, apply=False, data_dir=data_dir, out_dir="", profile_overrides_file="", strategy_overrides_file="")
             continue
         if cmd == "run-inspect":
             if not args:
@@ -302,6 +330,14 @@ def build_cli() -> argparse.ArgumentParser:
     frev.add_argument("--limit", type=int, default=10)
     frev.add_argument("--out-dir", default="")
 
+    rapply = sp.add_parser("repair-apply")
+    rapply.add_argument("--days", type=int, default=14)
+    rapply.add_argument("--limit", type=int, default=10)
+    rapply.add_argument("--apply", action="store_true")
+    rapply.add_argument("--out-dir", default="")
+    rapply.add_argument("--profile-overrides-file", default="")
+    rapply.add_argument("--strategy-overrides-file", default="")
+
     inspect = sp.add_parser("run-inspect")
     inspect.add_argument("--run-id", required=True)
     inspect.add_argument("--out-dir", default="")
@@ -350,6 +386,17 @@ def main() -> int:
         return _diagnostics_cmd(reg, days=int(args.days), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "failure-review":
         return _failure_review_cmd(reg, days=int(args.days), limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir))
+    if args.cmd == "repair-apply":
+        return _repair_apply_cmd(
+            reg,
+            days=int(args.days),
+            limit=int(args.limit),
+            apply=bool(args.apply),
+            data_dir=data_dir,
+            out_dir=str(args.out_dir),
+            profile_overrides_file=str(args.profile_overrides_file),
+            strategy_overrides_file=str(args.strategy_overrides_file),
+        )
     if args.cmd == "run-inspect":
         return _run_inspect_cmd(reg, run_id=str(args.run_id), data_dir=data_dir, out_dir=str(args.out_dir))
     if args.cmd == "slo":

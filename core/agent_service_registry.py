@@ -23,6 +23,7 @@ from services.observability_service import ObservabilityService
 from services.policy_service import PolicyService
 from services.ppt_service import PPTService
 from services.recommendation_service import RecommendationService
+from services.repair_apply_service import RepairApplyService
 from services.run_diagnostics_service import RunDiagnosticsService
 from services.slo_service import SLOService
 
@@ -36,6 +37,7 @@ class AgentServiceRegistry:
         self.diagnostics = DiagnosticsService(root=self.root)
         self.failure_review = FailureReviewService(root=self.root)
         self.recommend = RecommendationService(root=self.root)
+        self.repair_apply = RepairApplyService(root=self.root)
         self.slo = SLOService(root=self.root)
         self.policy = PolicyService(root=self.root)
         self.run_diagnostics = RunDiagnosticsService(root=self.root)
@@ -57,6 +59,7 @@ class AgentServiceRegistry:
             "agent.feedback.pending": ServiceSpec("agent.feedback.pending", "feedback", "List runs pending feedback", "low"),
             "agent.diagnostics": ServiceSpec("agent.diagnostics", "observability", "Build agent diagnostics dashboard", "low"),
             "agent.failures.review": ServiceSpec("agent.failures.review", "observability", "Review recent failed runs with grouped diagnostics", "low"),
+            "agent.repairs.apply": ServiceSpec("agent.repairs.apply", "governance", "Build or apply controlled repair overrides", "medium"),
             "mcp.run": ServiceSpec("mcp.run", "tooling", "Run MCP candidate routing and execution", "medium"),
             "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
             "image.generate": ServiceSpec("image.generate", "creative", "Generate image assets through image hub", "medium"),
@@ -140,6 +143,17 @@ class AgentServiceRegistry:
             days=max(1, int(kwargs.get("days", 14))),
             limit=max(1, int(kwargs.get("limit", 10))),
             out_dir=str(kwargs.get("out_dir", "")),
+        ).to_dict()
+
+    def _exec_agent_repairs_apply(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.repair_apply.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            limit=max(1, int(kwargs.get("limit", 10))),
+            apply=bool(kwargs.get("apply", False)),
+            out_dir=str(kwargs.get("out_dir", "")),
+            profile_overrides_file=str(kwargs.get("profile_overrides_file", "")),
+            strategy_overrides_file=str(kwargs.get("strategy_overrides_file", "")),
         ).to_dict()
 
     def _exec_mcp_run(self, **kwargs: Any) -> Dict[str, Any]:

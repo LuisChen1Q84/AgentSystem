@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""Controlled repair application from failure review and policy tuning."""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+from core.kernel.failure_review import build_failure_review
+from core.kernel.memory_store import load_memory
+from core.kernel.policy_tuner import tune_policy
+
+
+def _load_json(path: Path, default: Dict[str, Any]) -> Dict[str, Any]:
+    if not path.exists():
+        return dict(default)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return dict(default)
+    return raw if isinstance(raw, dict) else dict(default)
+
+
+def _load_jsonl(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: List[Dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(item, dict):
+                rows.append(item)
+    return rows
+
+
+def _merge_unique(*groups: List[str]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for group in groups:
+        for item in group:
+            clean = str(item).strip()
+            if not clean or clean in seen:
+                continue
+            seen.add(clean)
+            out.append(clean)
+    return out
+
+
+def _profile_payload(ts: str, existing: Dict[str, Any], policy_report: Dict[str, Any], failure_report: Dict[str, Any]) -> Dict[str, Any]:
+    current_default = str(existing.get("default_profile", "")).strip()
+    suggested_default = str(policy_report.get("summary", {}).get("suggested_default_profile", "")).strip()
+    default_profile = suggested_default or current_default or "strict"
+    task_kind_profiles = dict(existing.get("task_kind_profiles", {}) if isinstance(existing.get("task_kind_profiles", {}), dict) else {})
+
+    policy_tk = policy_report.get("task_kind_profiles", {}) if isinstance(policy_report.get("task_kind_profiles", {}), dict) else {}
+    for kind, profile in policy_tk.items():
+        clean_kind = str(kind).strip()
+        clean_profile = str(profile).strip()
+        if clean_kind and clean_profile:
+            task_kind_profiles[clean_kind] = clean_profile
+
+    for action in failure_report.get("repair_actions", []):
+        if not isinstance(action, dict):
+            continue
+        if str(action.get("scope", "")) != "task_kind":
+            continue
+        target = str(action.get("target", "")).strip()
+        if not target:
+            continue
+        # Failure-driven repairs are conservative: prefer strict until evidence improves.
+        task_kind_profiles[target] = "strict"
+
+    return {
+        "updated_at": ts,
+        "default_profile": default_profile,
+        "task_kind_profiles": dict(sorted(task_kind_profiles.items())),
+    }
+
+
+def _strategy_payload(ts: str, existing: Dict[str, Any], policy_report: Dict[str, Any], failure_report: Dict[str, Any]) -> Dict[str, Any]:
+    current_global = list(existing.get("global_blocked_strategies", [])) if isinstance(existing.get("global_blocked_strategies", []), list) else []
+    current_profile = dict(existing.get("profile_blocked_strategies", {}) if isinstance(existing.get("profile_blocked_strategies", {}), dict) else {})
+    strict_existing = list(current_profile.get("strict", [])) if isinstance(current_profile.get("strict", []), list) else []
+    strict_policy = [str(x).strip() for x in policy_report.get("strict_block_candidates", []) if str(x).strip()]
+    strict_failure = [
+        str(x.get("target", "")).strip()
+        for x in failure_report.get("repair_actions", [])
+        if isinstance(x, dict) and str(x.get("scope", "")) == "strategy" and str(x.get("priority", "")) == "high"
+    ]
+    strict_blocks = _merge_unique(strict_existing, strict_policy, strict_failure)
+    profile_map = dict(current_profile)
+    profile_map["strict"] = strict_blocks
+    return {
+        "updated_at": ts,
+        "global_blocked_strategies": _merge_unique(current_global),
+        "profile_blocked_strategies": {k: v for k, v in sorted(profile_map.items()) if isinstance(v, list)},
+    }
+
+
+def _changed(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
+    return json.dumps(before, ensure_ascii=False, sort_keys=True) != json.dumps(after, ensure_ascii=False, sort_keys=True)
+
+
+def build_repair_apply_plan(
+    *,
+    data_dir: Path,
+    days: int,
+    limit: int,
+    profile_overrides_file: Path,
+    strategy_overrides_file: Path,
+) -> Dict[str, Any]:
+    ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    runs = _load_jsonl(data_dir / "agent_runs.jsonl")
+    evals = _load_jsonl(data_dir / "agent_evaluations.jsonl")
+    memory = load_memory(data_dir / "memory.json")
+
+    failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
+    policy_report = tune_policy(run_rows=runs, evaluation_rows=evals, memory=memory, days=max(1, int(days)))
+
+    current_profile = _load_json(profile_overrides_file, {"updated_at": "", "default_profile": "", "task_kind_profiles": {}})
+    current_strategy = _load_json(strategy_overrides_file, {"updated_at": "", "global_blocked_strategies": [], "profile_blocked_strategies": {}})
+
+    proposed_profile = _profile_payload(ts, current_profile, policy_report, failure_report)
+    proposed_strategy = _strategy_payload(ts, current_strategy, policy_report, failure_report)
+
+    return {
+        "ts": ts,
+        "summary": {
+            "days": max(1, int(days)),
+            "limit": max(1, int(limit)),
+            "failure_count": int(failure_report.get("summary", {}).get("failure_count", 0) or 0),
+            "repair_actions": len(failure_report.get("repair_actions", [])),
+            "strict_block_candidates": len(policy_report.get("strict_block_candidates", [])),
+        },
+        "failure_review": failure_report,
+        "policy_tuning": policy_report,
+        "current": {
+            "profile_overrides": current_profile,
+            "strategy_overrides": current_strategy,
+        },
+        "proposed": {
+            "profile_overrides": proposed_profile,
+            "strategy_overrides": proposed_strategy,
+        },
+        "changes": {
+            "profile_overrides_changed": _changed(current_profile, proposed_profile),
+            "strategy_overrides_changed": _changed(current_strategy, proposed_strategy),
+        },
+        "targets": {
+            "profile_overrides_file": str(profile_overrides_file),
+            "strategy_overrides_file": str(strategy_overrides_file),
+        },
+    }
+
+
+def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
+    profile_path = Path(str(plan.get("targets", {}).get("profile_overrides_file", "")))
+    strategy_path = Path(str(plan.get("targets", {}).get("strategy_overrides_file", "")))
+    profile_payload = plan.get("proposed", {}).get("profile_overrides", {})
+    strategy_payload = plan.get("proposed", {}).get("strategy_overrides", {})
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    strategy_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text(json.dumps(profile_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    strategy_path.write_text(json.dumps(strategy_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return {"profile_overrides_file": str(profile_path), "strategy_overrides_file": str(strategy_path)}
+
+
+def render_repair_plan_md(plan: Dict[str, Any]) -> str:
+    s = plan.get("summary", {})
+    lines = [
+        f"# Agent Repair Apply Plan | {plan.get('ts', '')}",
+        "",
+        "## Summary",
+        "",
+        f"- failure_count: {s.get('failure_count', 0)}",
+        f"- repair_actions: {s.get('repair_actions', 0)}",
+        f"- strict_block_candidates: {s.get('strict_block_candidates', 0)}",
+        "",
+        "## Changes",
+        "",
+        f"- profile_overrides_changed: {plan.get('changes', {}).get('profile_overrides_changed', False)}",
+        f"- strategy_overrides_changed: {plan.get('changes', {}).get('strategy_overrides_changed', False)}",
+        "",
+        "## Targets",
+        "",
+        f"- profile_overrides_file: {plan.get('targets', {}).get('profile_overrides_file', '')}",
+        f"- strategy_overrides_file: {plan.get('targets', {}).get('strategy_overrides_file', '')}",
+        "",
+        "## Repair Actions",
+        "",
+    ]
+    repair_rows = 0
+    for action in plan.get("failure_review", {}).get("repair_actions", []):
+        if not isinstance(action, dict):
+            continue
+        repair_rows += 1
+        lines.append(f"- [{action.get('priority', '')}] {action.get('scope', '')}:{action.get('target', '')} | {action.get('action', '')}")
+    if repair_rows == 0:
+        lines.append("- none")
+    return "\n".join(lines) + "\n"
+
+
+def write_repair_plan_files(plan: Dict[str, Any], out_dir: Path) -> Dict[str, str]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "agent_repair_apply_latest.json"
+    md_path = out_dir / "agent_repair_apply_latest.md"
+    json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    md_path.write_text(render_repair_plan_md(plan), encoding="utf-8")
+    return {"json": str(json_path), "md": str(md_path)}

@@ -17,6 +17,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.diagnostics", names)
         self.assertIn("agent.failures.review", names)
         self.assertIn("agent.policy.tune", names)
+        self.assertIn("agent.repairs.apply", names)
         self.assertIn("agent.run.inspect", names)
         self.assertIn("mcp.run", names)
         self.assertIn("ppt.generate", names)
@@ -244,6 +245,87 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("service_diagnostics", out)
             self.assertIn("delivery_protocol", out)
             self.assertTrue(out.get("report", {}).get("repair_actions", []))
+
+    def test_execute_agent_repairs_apply(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "agent_run_20260228_100500.json"
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "mode": "strict",
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "request": {"text": "生成汇报PPT", "params": {}},
+                        "clarification": {"needed": True},
+                        "result": {
+                            "ok": False,
+                            "top_gap": 0.02,
+                            "selected": {"strategy": "mckinsey-ppt", "executor": "ppt"},
+                            "candidates": [{"strategy": "mckinsey-ppt", "executor": "ppt", "score": 0.56, "rank": 1}],
+                            "attempts": [{"strategy": "mckinsey-ppt", "executor": "ppt", "ok": False, "mode": "ppt", "result": {"ok": False}}],
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "selected_strategy": "mckinsey-ppt",
+                        "attempt_count": 1,
+                        "payload_path": str(payload_path),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "success": False,
+                        "quality_score": 0.28,
+                        "policy_signals": ["low_selection_confidence", "clarification_heavy", "manual_takeover"],
+                        "policy_recommendations": ["Review failed strategy path and consider stricter allow-list for this task kind."],
+                        "eval_reason": "delegated_autonomy_failed",
+                        "ts": "2026-02-28 10:05:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            out = reg.execute(
+                "agent.repairs.apply",
+                data_dir=str(root),
+                days=14,
+                limit=10,
+                apply=True,
+                profile_overrides_file=str(root / "profile_overrides.json"),
+                strategy_overrides_file=str(root / "strategy_overrides.json"),
+                out_dir=str(root / "out"),
+            )
+            self.assertTrue(out.get("ok", False))
+            self.assertTrue(out.get("applied", False))
+            self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_protocol", out)
+            self.assertTrue(Path(root / "profile_overrides.json").exists())
+            self.assertTrue(Path(root / "strategy_overrides.json").exists())
 
     def test_execute_agent_run_inspect(self):
         with tempfile.TemporaryDirectory() as td:

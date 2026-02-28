@@ -5,6 +5,7 @@ capability_catalog_cfg = "config/capability_catalog.toml"
 governance_cfg = "config/agent_governance.toml"
 packs_cfg = "config/agent_domain_packs.json"
 profile_overrides_file = "config/agent_profile_overrides.json"
+strategy_overrides_file = "config/agent_strategy_overrides.json"
 contracts_cfg = "config/skill_contracts.toml"
 
 [profiles.strict]

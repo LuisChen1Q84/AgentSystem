@@ -94,5 +94,6 @@ def build_service_diagnostics(service: str, payload: Dict[str, Any], *, entrypoi
 def annotate_payload(service: str, payload: Dict[str, Any], *, entrypoint: str) -> Dict[str, Any]:
     out = dict(payload)
     out["service_diagnostics"] = build_service_diagnostics(service, out, entrypoint=entrypoint)
-    out["delivery_protocol"] = build_delivery_protocol(service, out, entrypoint=entrypoint)
+    if not isinstance(out.get("delivery_protocol", {}), dict) or not out.get("delivery_protocol"):
+        out["delivery_protocol"] = build_delivery_protocol(service, out, entrypoint=entrypoint)
     return out

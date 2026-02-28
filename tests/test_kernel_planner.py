@@ -31,6 +31,27 @@ class KernelPlannerTest(unittest.TestCase):
             self.assertIn("selected_strategy", blueprint["execution_plan"].to_dict())
             self.assertTrue(blueprint["clarification"].get("needed", False))
 
+    def test_strategy_overrides_block_allowed_strategy(self):
+        cfg = load_agent_cfg()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            strategy_overrides = root / "strategy_overrides.json"
+            strategy_overrides.write_text(
+                '{"updated_at":"", "global_blocked_strategies": [], "profile_blocked_strategies": {"strict": ["mcp-generalist"]}}\n',
+                encoding="utf-8",
+            )
+            blueprint = build_run_blueprint(
+                "请生成周报框架",
+                {
+                    "profile": "strict",
+                    "strategy_overrides_file": str(strategy_overrides),
+                    "dry_run": True,
+                },
+                cfg,
+            )
+            self.assertNotIn("mcp-generalist", blueprint["strategy_controls"]["allowed_strategies"])
+            self.assertIn("mcp-generalist", blueprint["strategy_controls"]["override_blocked_strategies"])
+
 
 if __name__ == "__main__":
     unittest.main()

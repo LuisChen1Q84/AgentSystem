@@ -19,10 +19,12 @@ if str(ROOT) not in sys.path:
 try:
     from core.kernel.models import DeliveryBundle, EvaluationRecord
     from core.kernel.strategy_evaluator import evaluate_payload
+    from core.registry.delivery_protocol import build_delivery_protocol
     from scripts.agent_delivery_card import build_card, render_md as render_delivery_md
 except ModuleNotFoundError:  # direct
     from models import DeliveryBundle, EvaluationRecord  # type: ignore
     from strategy_evaluator import evaluate_payload  # type: ignore
+    from delivery_protocol import build_delivery_protocol  # type: ignore
     from agent_delivery_card import build_card, render_md as render_delivery_md  # type: ignore
 
 
@@ -103,8 +105,6 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
     log_dir.mkdir(parents=True, exist_ok=True)
     ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     out_file = log_dir / f"agent_run_{ts}.json"
-    out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
     delivery_bundle = build_delivery_bundle(payload)
     card_json = log_dir / f"agent_delivery_{ts}.json"
     card_md = log_dir / f"agent_delivery_{ts}.md"
@@ -155,4 +155,15 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
         {"path": str(log_dir / "agent_deliveries.jsonl")},
     ]
     payload["delivery_bundle"] = delivery_bundle.to_dict()
+    payload["delivery_protocol"] = build_delivery_protocol(
+        "agent.run",
+        {
+            "ok": bool(payload.get("ok", False)),
+            "summary": delivery_bundle.summary,
+            "artifacts": delivery_bundle.artifacts,
+            "loop_closure": payload.get("loop_closure", {}),
+        },
+        entrypoint="core.kernel.evaluator",
+    )
+    out_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {"items": delivery_bundle.artifacts}

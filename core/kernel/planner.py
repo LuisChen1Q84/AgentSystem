@@ -18,6 +18,7 @@ CFG_DEFAULT = ROOT / "config" / "agent_os.toml"
 GOV_CFG_DEFAULT = ROOT / "config" / "agent_governance.toml"
 PACKS_CFG_DEFAULT = ROOT / "config" / "agent_domain_packs.json"
 PROFILE_OVERRIDES_DEFAULT = ROOT / "config" / "agent_profile_overrides.json"
+STRATEGY_OVERRIDES_DEFAULT = ROOT / "config" / "agent_strategy_overrides.json"
 
 import sys
 if str(ROOT) not in sys.path:
@@ -88,6 +89,7 @@ def load_agent_cfg(path: Path = CFG_DEFAULT) -> Dict[str, Any]:
                 "governance_cfg": str(GOV_CFG_DEFAULT),
                 "packs_cfg": str(PACKS_CFG_DEFAULT),
                 "profile_overrides_file": str(PROFILE_OVERRIDES_DEFAULT),
+                "strategy_overrides_file": str(STRATEGY_OVERRIDES_DEFAULT),
             },
             "profiles": {
                 "strict": {
@@ -208,6 +210,10 @@ def _load_profile_overrides(path: Path) -> Dict[str, Any]:
     return _load_json(path, default={"default_profile": "", "task_kind_profiles": {}})
 
 
+def _load_strategy_overrides(path: Path) -> Dict[str, Any]:
+    return _load_json(path, default={"global_blocked_strategies": [], "profile_blocked_strategies": {}})
+
+
 
 def resolve_profile(
     cfg: Dict[str, Any],
@@ -301,6 +307,7 @@ def build_strategy_controls(
     values: Dict[str, Any],
     cfg: Dict[str, Any],
     capability: Dict[str, Any],
+    strategy_overrides_file: Path,
 ) -> Dict[str, Any]:
     defaults = cfg.get("defaults", {})
     gov_cfg_path = resolve_path(str(values.get("governance_cfg", defaults.get("governance_cfg", str(GOV_CFG_DEFAULT)))), ROOT)
@@ -326,6 +333,15 @@ def build_strategy_controls(
 
     strategy_risk = gov.get("strategy_risk", {}) if isinstance(gov, dict) else {}
     strategy_risk = {str(k): str(v).strip().lower() for k, v in (strategy_risk.items() if isinstance(strategy_risk, dict) else [])}
+    strategy_overrides = _load_strategy_overrides(strategy_overrides_file)
+    global_blocked = {str(x).strip() for x in strategy_overrides.get("global_blocked_strategies", []) if str(x).strip()}
+    profile_block_map = strategy_overrides.get("profile_blocked_strategies", {}) if isinstance(strategy_overrides.get("profile_blocked_strategies", {}), dict) else {}
+    profile_blocked = {
+        str(x).strip()
+        for x in (profile_block_map.get(profile_name, []) if isinstance(profile_block_map.get(profile_name, []), list) else [])
+        if str(x).strip()
+    }
+    override_blocked = global_blocked | profile_blocked
 
     rows = capability.get("skills", []) if isinstance(capability.get("skills", []), list) else []
     row_map = {str(r.get("skill", "")): r for r in rows}
@@ -352,6 +368,8 @@ def build_strategy_controls(
             reasons.append(f"maturity_blocked:{maturity}")
         if int(risk_rank.get(risk, 99)) > int(risk_rank.get(max_risk, 99)):
             reasons.append(f"risk_blocked:{risk}>{max_risk}")
+        if strategy in override_blocked:
+            reasons.append("override_blocked")
 
         if reasons:
             blocked_details.append({"strategy": strategy, "layer": layer, "maturity": maturity, "risk": risk, "reasons": reasons})
@@ -367,6 +385,8 @@ def build_strategy_controls(
         "allow_high_risk": allow_high_risk,
         "governance_cfg": str(gov_cfg_path),
         "packs_cfg": str(packs_cfg_path),
+        "strategy_overrides_file": str(strategy_overrides_file),
+        "override_blocked_strategies": sorted(override_blocked),
     }
 
 
@@ -415,12 +435,16 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
         str(values.get("profile_overrides_file", defaults.get("profile_overrides_file", str(PROFILE_OVERRIDES_DEFAULT)))),
         ROOT,
     )
+    strategy_overrides_file = resolve_path(
+        str(values.get("strategy_overrides_file", defaults.get("strategy_overrides_file", str(STRATEGY_OVERRIDES_DEFAULT)))),
+        ROOT,
+    )
     profile_name, governor, profile_meta = resolve_profile(cfg, str(values.get("profile", "")), text, overrides_file)
     task = build_task_spec(text, values, task_kind=str(profile_meta.get("task_kind", "general")))
     clarification = build_clarification_plan(text, task.task_kind)
     capability = capability_report(values, cfg)
     cap_snapshot = capability_snapshot(capability)
-    strategy_controls = build_strategy_controls(profile_name, values, cfg, capability)
+    strategy_controls = build_strategy_controls(profile_name, values, cfg, capability, strategy_overrides_file)
     run_request = RunRequest(
         run_id=new_id("agent"),
         task=task,

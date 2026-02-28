@@ -28,6 +28,7 @@ class AgentOSTest(unittest.TestCase):
             self.assertIn("strategy_controls", out)
             self.assertIn("result", out)
             self.assertIn("deliver_assets", out)
+            self.assertIn("delivery_protocol", out)
             self.assertIn("task_kind", out)
             self.assertGreaterEqual(int(out.get("duration_ms", 0)), 0)
 
