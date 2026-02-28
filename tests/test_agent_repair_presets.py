@@ -213,8 +213,12 @@ class AgentRepairPresetsTest(unittest.TestCase):
             self.assertGreater(item["effectiveness_score"], 0)
             self.assertEqual(item["observed_outcomes"]["baseline_runs"], 1)
             self.assertEqual(item["observed_outcomes"]["followup_runs"], 1)
+            self.assertEqual(item["observed_outcomes"]["recent_window_count"], 1)
             self.assertGreater(item["observed_outcomes"]["quality_delta"], 0)
             self.assertGreater(item["observed_outcomes"]["success_delta"], 0)
+            self.assertGreater(item["observed_outcomes"]["recent_avg_quality_delta"], 0)
+            self.assertGreater(item["observed_outcomes"]["positive_window_ratio"], 0)
+            self.assertGreater(item["effectiveness_components"]["trend_quality_bonus"], 0)
 
 
 if __name__ == "__main__":

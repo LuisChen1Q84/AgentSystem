@@ -375,6 +375,11 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertEqual(auto_preview.get("report", {}).get("selection", {}).get("selector_preset_requested"), "auto")
             self.assertEqual(auto_preview.get("report", {}).get("selection", {}).get("selector_preset"), "presentation_recovery")
             self.assertGreaterEqual(auto_preview.get("report", {}).get("selection", {}).get("selector_auto_candidate_count", 0), 1)
+            self.assertEqual(auto_preview.get("report", {}).get("selection", {}).get("selector_auto_choice_card", {}).get("preset_name"), "presentation_recovery")
+            self.assertIn(
+                "matched_actions=",
+                auto_preview.get("report", {}).get("selection", {}).get("selector_auto_choice_card", {}).get("selection_explanation", ""),
+            )
             gated_auto_preview = reg.execute(
                 "agent.repairs.apply",
                 data_dir=str(root),
@@ -397,6 +402,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertEqual(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_min_effectiveness_score"), 5)
             self.assertTrue(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_only_if_effective"))
             self.assertTrue(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_avoid_rolled_back"))
+            self.assertEqual(gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_choice_card"), {})
             self.assertIn("threshold 5", gated_auto_preview.get("report", {}).get("selection", {}).get("selector_auto_reason", ""))
             approval_code = str(preview.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)

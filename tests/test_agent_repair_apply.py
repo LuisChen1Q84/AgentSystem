@@ -247,6 +247,8 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(auto_plan["selection"]["selector_auto_min_effectiveness_score"], 0)
             self.assertFalse(auto_plan["selection"]["selector_auto_only_if_effective"])
             self.assertFalse(auto_plan["selection"]["selector_auto_avoid_rolled_back"])
+            self.assertEqual(auto_plan["selection"]["selector_auto_choice_card"]["preset_name"], "presentation_recovery")
+            self.assertIn("matched_actions=", auto_plan["selection"]["selector_auto_choice_card"]["selection_explanation"])
             self.assertEqual(auto_plan["selection"]["selector"]["strategies"], ["mckinsey-ppt"])
 
             gated_auto_plan = build_repair_apply_plan(
@@ -269,6 +271,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(gated_auto_plan["selection"]["selector_auto_min_effectiveness_score"], 5)
             self.assertTrue(gated_auto_plan["selection"]["selector_auto_only_if_effective"])
             self.assertTrue(gated_auto_plan["selection"]["selector_auto_avoid_rolled_back"])
+            self.assertEqual(gated_auto_plan["selection"]["selector_auto_choice_card"], {})
             self.assertIn("threshold 5", gated_auto_plan["selection"]["selector_auto_reason"])
 
             no_op_plan = build_repair_apply_plan(

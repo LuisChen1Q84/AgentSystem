@@ -204,6 +204,7 @@ def _resolve_auto_selector_preset(
         "only_if_effective": bool(choice.get("only_if_effective", False)),
         "avoid_rolled_back": bool(choice.get("avoid_rolled_back", False)),
         "selection_reason": str(choice.get("selection_reason", "")),
+        "selected_card": dict(choice.get("selected_card", {})) if isinstance(choice.get("selected_card", {}), dict) else {},
         "candidates": list(choice.get("candidates", [])) if isinstance(choice.get("candidates", []), list) else [],
     }
 
@@ -734,6 +735,7 @@ def build_repair_apply_plan(
             "selector_auto_only_if_effective": bool(auto_selector.get("only_if_effective", False)),
             "selector_auto_avoid_rolled_back": bool(auto_selector.get("avoid_rolled_back", False)),
             "selector_auto_reason": str(auto_selector.get("selection_reason", "")),
+            "selector_auto_choice_card": dict(auto_selector.get("selected_card", {})) if isinstance(auto_selector.get("selected_card", {}), dict) else {},
             "selector_auto_candidates": list(auto_selector.get("candidates", []))[:5],
             "selected_scopes": sorted(selected_scopes),
             "selected_action_count": len(filtered_failure_report.get("repair_actions", [])),
@@ -1033,6 +1035,26 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
     s = plan.get("summary", {})
     selection = plan.get("selection", {}) if isinstance(plan.get("selection", {}), dict) else {}
     selector = selection.get("selector", {}) if isinstance(selection.get("selector", {}), dict) else {}
+    choice_card = selection.get("selector_auto_choice_card", {}) if isinstance(selection.get("selector_auto_choice_card", {}), dict) else {}
+    auto_selector_lines = [
+        "## Auto Selector",
+        "",
+    ]
+    if choice_card:
+        breakdown = choice_card.get("score_breakdown", {}) if isinstance(choice_card.get("score_breakdown", {}), dict) else {}
+        details = choice_card.get("effectiveness_details", {}) if isinstance(choice_card.get("effectiveness_details", {}), dict) else {}
+        observed = details.get("observed_outcomes", {}) if isinstance(details.get("observed_outcomes", {}), dict) else {}
+        auto_selector_lines += [
+            f"- preset_name: {choice_card.get('preset_name', '')}",
+            f"- selection_explanation: {choice_card.get('selection_explanation', '')}",
+            f"- score_breakdown: action={breakdown.get('action_score', 0)} | effectiveness={breakdown.get('effectiveness_score', 0)} | match={breakdown.get('match_bonus', 0)} | specificity={breakdown.get('specificity_bonus', 0)} | total={breakdown.get('total_score', 0)}",
+            f"- observed_trend: recent_quality_delta={observed.get('recent_avg_quality_delta', 0.0)} | recent_success_delta={observed.get('recent_avg_success_delta', 0.0)} | windows={observed.get('recent_window_count', 0)}",
+            f"- risk_flags: {','.join(choice_card.get('risk_flags', []))}",
+            "",
+        ]
+    else:
+        auto_selector_lines += ["- none", ""]
+
     lines = [
         f"# Agent Repair Apply Plan | {plan.get('ts', '')}",
         "",
@@ -1061,6 +1083,7 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- exclude_strategies: {','.join(selector.get('exclude_strategies', []))}",
         f"- exclude_task_kinds: {','.join(selector.get('exclude_task_kinds', []))}",
         "",
+        *auto_selector_lines,
         "## Changes",
         "",
         f"- profile_overrides_changed: {plan.get('changes', {}).get('profile_overrides_changed', False)}",

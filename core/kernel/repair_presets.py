@@ -105,6 +105,27 @@ def _parse_ts(text: str) -> dt.datetime | None:
     return None
 
 
+def _empty_observed_outcomes() -> Dict[str, Any]:
+    return {
+        "baseline_runs": 0,
+        "followup_runs": 0,
+        "baseline_avg_quality": 0.0,
+        "followup_avg_quality": 0.0,
+        "baseline_success_rate": 0.0,
+        "followup_success_rate": 0.0,
+        "quality_delta": 0.0,
+        "success_delta": 0.0,
+        "recent_window_count": 0,
+        "recent_avg_quality_delta": 0.0,
+        "recent_avg_success_delta": 0.0,
+        "positive_quality_windows": 0,
+        "positive_success_windows": 0,
+        "positive_window_ratio": 0.0,
+        "latest_snapshot_id": "",
+        "latest_lifecycle": "",
+    }
+
+
 def default_selector_presets_file() -> Path:
     return ROOT / "config/agent_repair_selector_presets.json"
 
@@ -348,16 +369,7 @@ def _observed_outcome_metrics(
 ) -> Dict[str, Any]:
     runs_path = data_dir / "agent_runs.jsonl"
     if not runs_path.exists():
-        return {
-            "baseline_runs": 0,
-            "followup_runs": 0,
-            "baseline_avg_quality": 0.0,
-            "followup_avg_quality": 0.0,
-            "baseline_success_rate": 0.0,
-            "followup_success_rate": 0.0,
-            "quality_delta": 0.0,
-            "success_delta": 0.0,
-        }
+        return _empty_observed_outcomes()
     run_rows: List[Dict[str, Any]] = []
     try:
         with runs_path.open("r", encoding="utf-8") as f:
@@ -373,16 +385,7 @@ def _observed_outcome_metrics(
     eval_map = _evaluation_map(data_dir)
     pivot = _parse_ts(snapshot_ts)
     if pivot is None:
-        return {
-            "baseline_runs": 0,
-            "followup_runs": 0,
-            "baseline_avg_quality": 0.0,
-            "followup_avg_quality": 0.0,
-            "baseline_success_rate": 0.0,
-            "followup_success_rate": 0.0,
-            "quality_delta": 0.0,
-            "success_delta": 0.0,
-        }
+        return _empty_observed_outcomes()
     baseline_rows: List[Dict[str, Any]] = []
     followup_rows: List[Dict[str, Any]] = []
     for row in run_rows:
@@ -420,6 +423,117 @@ def _observed_outcome_metrics(
         "quality_delta": round(followup_avg_quality - baseline_avg_quality, 4),
         "success_delta": round(followup_success_rate - baseline_success_rate, 4),
     }
+
+
+def _aggregate_observed_outcomes(
+    *,
+    data_dir: Path,
+    selector: Dict[str, List[str]],
+    matching_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    base = _empty_observed_outcomes()
+    if not matching_rows:
+        return base
+    latest_row = next((row for row in matching_rows if _parse_ts(str(row.get("ts", ""))) is not None), {})
+    latest_snapshot_id = str(latest_row.get("snapshot_id", "")) if latest_row else ""
+    latest_lifecycle = str(latest_row.get("lifecycle", "")) if latest_row else ""
+    latest_metrics = (
+        _observed_outcome_metrics(
+            data_dir=data_dir,
+            selector=selector,
+            snapshot_ts=str(latest_row.get("ts", "")),
+        )
+        if latest_row
+        else _empty_observed_outcomes()
+    )
+    merged = _empty_observed_outcomes()
+    merged.update(latest_metrics)
+    trend_metrics: List[Dict[str, Any]] = []
+    for row in matching_rows:
+        if str(row.get("lifecycle", "")).strip() not in {"applied", "rolled_back"}:
+            continue
+        row_ts = str(row.get("ts", "")).strip()
+        if not _parse_ts(row_ts):
+            continue
+        observed = _observed_outcome_metrics(
+            data_dir=data_dir,
+            selector=selector,
+            snapshot_ts=row_ts,
+        )
+        if int(observed.get("baseline_runs", 0) or 0) <= 0 and int(observed.get("followup_runs", 0) or 0) <= 0:
+            continue
+        trend_metrics.append(observed)
+    trend_metrics = trend_metrics[:5]
+    if not trend_metrics:
+        merged["latest_snapshot_id"] = latest_snapshot_id
+        merged["latest_lifecycle"] = latest_lifecycle
+        return merged
+
+    avg_quality_delta = round(
+        sum(float(item.get("quality_delta", 0.0) or 0.0) for item in trend_metrics) / max(1, len(trend_metrics)),
+        4,
+    )
+    avg_success_delta = round(
+        sum(float(item.get("success_delta", 0.0) or 0.0) for item in trend_metrics) / max(1, len(trend_metrics)),
+        4,
+    )
+    positive_quality_windows = sum(1 for item in trend_metrics if float(item.get("quality_delta", 0.0) or 0.0) > 0)
+    positive_success_windows = sum(1 for item in trend_metrics if float(item.get("success_delta", 0.0) or 0.0) > 0)
+    positive_window_ratio = round(
+        (positive_quality_windows + positive_success_windows) / max(1, len(trend_metrics) * 2),
+        4,
+    )
+    merged.update(
+        {
+            "recent_window_count": len(trend_metrics),
+            "recent_avg_quality_delta": avg_quality_delta,
+            "recent_avg_success_delta": avg_success_delta,
+            "positive_quality_windows": positive_quality_windows,
+            "positive_success_windows": positive_success_windows,
+            "positive_window_ratio": positive_window_ratio,
+            "latest_snapshot_id": latest_snapshot_id,
+            "latest_lifecycle": latest_lifecycle,
+        }
+    )
+    return merged
+
+
+def _effectiveness_components(
+    *,
+    governance_score: int,
+    observed: Dict[str, Any],
+    manual_bonus: int,
+) -> Dict[str, Any]:
+    latest_quality_bonus = int(round(float(observed.get("quality_delta", 0.0) or 0.0) * 20))
+    latest_success_bonus = int(round(float(observed.get("success_delta", 0.0) or 0.0) * 10))
+    trend_quality_bonus = int(round(float(observed.get("recent_avg_quality_delta", 0.0) or 0.0) * 12))
+    trend_success_bonus = int(round(float(observed.get("recent_avg_success_delta", 0.0) or 0.0) * 6))
+    stability_bonus = int(round(float(observed.get("positive_window_ratio", 0.0) or 0.0) * 8))
+    total = governance_score + latest_quality_bonus + latest_success_bonus + trend_quality_bonus + trend_success_bonus + stability_bonus + int(manual_bonus or 0)
+    return {
+        "governance_score": governance_score,
+        "latest_quality_bonus": latest_quality_bonus,
+        "latest_success_bonus": latest_success_bonus,
+        "trend_quality_bonus": trend_quality_bonus,
+        "trend_success_bonus": trend_success_bonus,
+        "stability_bonus": stability_bonus,
+        "manual_bonus": int(manual_bonus or 0),
+        "total": total,
+    }
+
+
+def _candidate_risk_flags(item: Dict[str, Any]) -> List[str]:
+    flags: List[str] = []
+    if str(item.get("last_lifecycle", "")).strip() == "rolled_back":
+        flags.append("recent_rollback")
+    observed = item.get("observed_outcomes", {}) if isinstance(item.get("observed_outcomes", {}), dict) else {}
+    if int(observed.get("followup_runs", 0) or 0) <= 0 and int(observed.get("recent_window_count", 0) or 0) <= 0:
+        flags.append("no_followup_evidence")
+    if float(observed.get("recent_avg_quality_delta", 0.0) or 0.0) < 0:
+        flags.append("negative_quality_trend")
+    if float(observed.get("recent_avg_success_delta", 0.0) or 0.0) < 0:
+        flags.append("negative_success_trend")
+    return flags
 
 
 def build_repair_preset_inventory(
@@ -469,26 +583,17 @@ def build_repair_preset_inventory(
             lifecycle_counts["applied"] / max(1, lifecycle_counts["applied"] + lifecycle_counts["rolled_back"]),
             4,
         ) if usage_count else 0.0
-        observed = _observed_outcome_metrics(
+        observed = _aggregate_observed_outcomes(
             data_dir=data_dir,
             selector=selector,
-            snapshot_ts=str(last_row.get("ts", "")),
-        ) if last_row else {
-            "baseline_runs": 0,
-            "followup_runs": 0,
-            "baseline_avg_quality": 0.0,
-            "followup_avg_quality": 0.0,
-            "baseline_success_rate": 0.0,
-            "followup_success_rate": 0.0,
-            "quality_delta": 0.0,
-            "success_delta": 0.0,
-        }
-        effectiveness_score = (
-            governance_score
-            + int(round(float(observed.get("quality_delta", 0.0) or 0.0) * 20))
-            + int(round(float(observed.get("success_delta", 0.0) or 0.0) * 10))
-            + int(persisted_row.get("manual_bonus", 0) or 0)
+            matching_rows=matching_rows,
         )
+        components = _effectiveness_components(
+            governance_score=governance_score,
+            observed=observed,
+            manual_bonus=int(persisted_row.get("manual_bonus", 0) or 0),
+        )
+        effectiveness_score = int(components.get("total", 0) or 0)
         items.append(
             {
                 "preset_name": name,
@@ -500,6 +605,7 @@ def build_repair_preset_inventory(
                 "success_rate": success_rate,
                 "observed_outcomes": observed,
                 "governance_score": governance_score,
+                "effectiveness_components": components,
                 "effectiveness_score": effectiveness_score,
                 "manual_bonus": int(persisted_row.get("manual_bonus", 0) or 0),
                 "notes": list(persisted_row.get("notes", [])) if isinstance(persisted_row.get("notes", []), list) else [],
@@ -551,7 +657,16 @@ def recommend_selector_preset_for_failure_report(
         action_score = sum(int(action.get("priority_score", 0) or 0) for action in matched)
         specificity = _selector_specificity(selector)
         effectiveness_score = int(item.get("effectiveness_score", 0) or 0)
+        match_bonus = len(matched) * 3
         total_score = action_score + effectiveness_score + (len(matched) * 3) + specificity
+        observed = item.get("observed_outcomes", {}) if isinstance(item.get("observed_outcomes", {}), dict) else {}
+        components = item.get("effectiveness_components", {}) if isinstance(item.get("effectiveness_components", {}), dict) else {}
+        explanation = (
+            f"matched_actions={len(matched)}, action_score={action_score}, "
+            f"effectiveness={effectiveness_score}, specificity={specificity}, "
+            f"recent_quality_delta={observed.get('recent_avg_quality_delta', 0.0)}, "
+            f"recent_success_delta={observed.get('recent_avg_success_delta', 0.0)}"
+        )
         candidates.append(
             {
                 "preset_name": str(item.get("preset_name", "")),
@@ -568,7 +683,25 @@ def recommend_selector_preset_for_failure_report(
                 "action_score": action_score,
                 "effectiveness_score": effectiveness_score,
                 "specificity": specificity,
+                "match_bonus": match_bonus,
                 "total_score": total_score,
+                "score_breakdown": {
+                    "action_score": action_score,
+                    "effectiveness_score": effectiveness_score,
+                    "match_bonus": match_bonus,
+                    "specificity_bonus": specificity,
+                    "total_score": total_score,
+                },
+                "effectiveness_details": {
+                    "usage_count": int(item.get("usage_count", 0) or 0),
+                    "last_lifecycle": str(item.get("last_lifecycle", "")),
+                    "success_rate": float(item.get("success_rate", 0.0) or 0.0),
+                    "governance_score": int(item.get("governance_score", 0) or 0),
+                    "observed_outcomes": observed,
+                    "components": components,
+                },
+                "risk_flags": _candidate_risk_flags(item),
+                "selection_explanation": explanation,
             }
         )
     threshold = max(1 if only_if_effective else 0, int(min_effectiveness_score or 0))
@@ -587,13 +720,14 @@ def recommend_selector_preset_for_failure_report(
     return {
         "selected_preset": str(selected.get("preset_name", "")),
         "selected_selector": dict(selected.get("selector", {})) if isinstance(selected.get("selector", {}), dict) else {},
+        "selected_card": dict(selected) if isinstance(selected, dict) else {},
         "candidate_count": len(candidates),
         "candidates": candidates[:5],
         "min_effectiveness_score": threshold,
         "only_if_effective": bool(only_if_effective),
         "avoid_rolled_back": bool(avoid_rolled_back),
         "selection_reason": (
-            f"Selected preset {selected.get('preset_name', '')} with total_score={selected.get('total_score', 0)}"
+            f"Selected preset {selected.get('preset_name', '')}: {selected.get('selection_explanation', '')}"
             if selected
             else (
                 f"No preset matched current repair actions after effectiveness threshold {threshold}."
@@ -697,7 +831,7 @@ def render_repair_preset_report_md(report: Dict[str, Any]) -> str:
         if not isinstance(item, dict):
             continue
         lines.append(
-            f"- [#{item.get('effectiveness_rank', 0)}|score={item.get('effectiveness_score', 0)}] {item.get('preset_name', '')} | uses={item.get('usage_count', 0)} | last={item.get('last_lifecycle', '')} | success_rate={item.get('success_rate', 0.0)} | quality_delta={item.get('observed_outcomes', {}).get('quality_delta', 0.0)}"
+            f"- [#{item.get('effectiveness_rank', 0)}|score={item.get('effectiveness_score', 0)}] {item.get('preset_name', '')} | uses={item.get('usage_count', 0)} | last={item.get('last_lifecycle', '')} | success_rate={item.get('success_rate', 0.0)} | quality_delta={item.get('observed_outcomes', {}).get('quality_delta', 0.0)} | trend_quality_delta={item.get('observed_outcomes', {}).get('recent_avg_quality_delta', 0.0)}"
         )
     lines += [
         "",
