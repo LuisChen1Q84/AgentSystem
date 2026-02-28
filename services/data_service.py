@@ -32,7 +32,10 @@ class DataService:
                 "data.query",
                 str(payload.get("error", "query_failed")),
                 code=str(payload.get("error_code", "query_failed")),
-                payload={"service_diagnostics": diag_payload.get("service_diagnostics", {})},
+                payload={
+                    "service_diagnostics": diag_payload.get("service_diagnostics", {}),
+                    "delivery_protocol": diag_payload.get("delivery_protocol", {}),
+                },
             )
         out = {"filters": payload.get("filters", {}), "items": payload.get("items", [])}
         return ok_response(

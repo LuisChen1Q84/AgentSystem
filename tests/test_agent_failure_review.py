@@ -84,6 +84,7 @@ class AgentFailureReviewTest(unittest.TestCase):
             self.assertEqual(report["summary"]["reviewed_count"], 1)
             self.assertTrue(report["failures"])
             self.assertTrue(report["recommendations"])
+            self.assertTrue(report["repair_actions"])
 
             files = write_failure_review_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())

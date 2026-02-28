@@ -130,6 +130,7 @@ class AgentStudioTest(unittest.TestCase):
             self.assertTrue(payload.get("ok", False))
             self.assertIn("report", payload)
             self.assertIn("service_diagnostics", payload)
+            self.assertIn("delivery_protocol", payload)
 
     def test_failure_review_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -203,6 +204,8 @@ class AgentStudioTest(unittest.TestCase):
             self.assertTrue(payload.get("ok", False))
             self.assertIn("report", payload)
             self.assertIn("service_diagnostics", payload)
+            self.assertIn("delivery_protocol", payload)
+            self.assertTrue(payload.get("report", {}).get("repair_actions", []))
 
     def test_policy_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -251,6 +254,7 @@ class AgentStudioTest(unittest.TestCase):
             self.assertTrue(payload.get("ok", False))
             self.assertIn("report", payload)
             self.assertIn("service_diagnostics", payload)
+            self.assertIn("delivery_protocol", payload)
 
     def test_run_inspect_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -308,6 +312,7 @@ class AgentStudioTest(unittest.TestCase):
             self.assertTrue(payload.get("ok", False))
             self.assertIn("report", payload)
             self.assertIn("service_diagnostics", payload)
+            self.assertIn("delivery_protocol", payload)
 
 
 if __name__ == "__main__":

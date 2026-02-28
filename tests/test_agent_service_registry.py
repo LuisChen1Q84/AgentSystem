@@ -42,6 +42,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(out.get("ok", False))
             self.assertIn("task_kind", out)
             self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_protocol", out)
 
     def test_feedback_services(self):
         with tempfile.TemporaryDirectory() as td:
@@ -97,6 +98,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertFalse(out.get("ok", True))
         self.assertEqual(out.get("error_code"), "missing_query_spec")
         self.assertIn("service_diagnostics", out)
+        self.assertIn("delivery_protocol", out)
 
     def test_execute_agent_diagnostics(self):
         with tempfile.TemporaryDirectory() as td:
@@ -125,6 +127,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("report", out)
             self.assertIn("deliver_assets", out)
             self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_protocol", out)
 
     def test_execute_agent_policy_tune(self):
         with tempfile.TemporaryDirectory() as td:
@@ -169,6 +172,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(out.get("ok", False))
             self.assertIn("report", out)
             self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_protocol", out)
 
     def test_execute_agent_failures_review(self):
         with tempfile.TemporaryDirectory() as td:
@@ -238,6 +242,8 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertTrue(out.get("ok", False))
             self.assertIn("report", out)
             self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_protocol", out)
+            self.assertTrue(out.get("report", {}).get("repair_actions", []))
 
     def test_execute_agent_run_inspect(self):
         with tempfile.TemporaryDirectory() as td:
@@ -292,6 +298,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("report", out)
             self.assertIn("deliver_assets", out)
             self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_protocol", out)
 
 
 if __name__ == "__main__":

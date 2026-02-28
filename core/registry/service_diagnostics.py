@@ -6,6 +6,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
+from core.registry.delivery_protocol import build_delivery_protocol
+
 
 def _string_paths(values: Any) -> List[str]:
     out: List[str] = []
@@ -92,4 +94,5 @@ def build_service_diagnostics(service: str, payload: Dict[str, Any], *, entrypoi
 def annotate_payload(service: str, payload: Dict[str, Any], *, entrypoint: str) -> Dict[str, Any]:
     out = dict(payload)
     out["service_diagnostics"] = build_service_diagnostics(service, out, entrypoint=entrypoint)
+    out["delivery_protocol"] = build_delivery_protocol(service, out, entrypoint=entrypoint)
     return out

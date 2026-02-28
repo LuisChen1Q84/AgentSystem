@@ -35,6 +35,16 @@ def _scope_days(days: int) -> set[str]:
     return {(today - dt.timedelta(days=i)).isoformat() for i in range(max(1, int(days)))}
 
 
+def _repair_action(*, scope: str, target: str, action: str, reason: str, priority: str) -> Dict[str, Any]:
+    return {
+        "scope": scope,
+        "target": target,
+        "action": action,
+        "reason": reason,
+        "priority": priority,
+    }
+
+
 def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> Dict[str, Any]:
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     scope = _scope_days(days)
@@ -44,6 +54,8 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
     task_counter: Counter[str] = Counter()
     strategy_counter: Counter[str] = Counter()
     signal_counter: Counter[str] = Counter()
+    strategy_signals: Dict[str, Counter[str]] = {}
+    task_signals: Dict[str, Counter[str]] = {}
     pending_feedback = 0
 
     for row in failed[: max(1, int(limit))]:
@@ -59,8 +71,13 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         selected_strategy = str(selection.get("selected_strategy", ""))
         task_counter.update([task_kind or "unknown"])
         strategy_counter.update([selected_strategy or "unknown"])
+        strategy_signals.setdefault(selected_strategy or "unknown", Counter())
+        task_signals.setdefault(task_kind or "unknown", Counter())
         for signal in evaluation.get("policy_signals", []):
-            signal_counter.update([str(signal)])
+            signal = str(signal)
+            signal_counter.update([signal])
+            strategy_signals[selected_strategy or "unknown"].update([signal])
+            task_signals[task_kind or "unknown"].update([signal])
         if bool(feedback.get("pending", False)):
             pending_feedback += 1
         details.append(
@@ -91,6 +108,96 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
     if not details:
         recommendations.append("No failed runs in the selected window.")
 
+    repair_actions: List[Dict[str, Any]] = []
+    for strategy, count in strategy_counter.most_common(5):
+        signals = strategy_signals.get(strategy, Counter())
+        if count >= 2 or signals:
+            if signals.get("low_selection_confidence", 0) > 0:
+                repair_actions.append(
+                    _repair_action(
+                        scope="strategy",
+                        target=strategy,
+                        action="Tighten routing triggers and reduce candidate overlap for this strategy.",
+                        reason=f"{strategy} has {count} failures with low selection confidence.",
+                        priority="high",
+                    )
+                )
+            elif signals.get("deep_fallback_chain", 0) > 0:
+                repair_actions.append(
+                    _repair_action(
+                        scope="strategy",
+                        target=strategy,
+                        action="Lower fallback depth or demote this strategy in strict mode.",
+                        reason=f"{strategy} repeatedly depends on fallback chain recovery.",
+                        priority="high",
+                    )
+                )
+            else:
+                repair_actions.append(
+                    _repair_action(
+                        scope="strategy",
+                        target=strategy,
+                        action="Review executor path and add targeted regression cases for this strategy.",
+                        reason=f"{strategy} appears in {count} recent failures.",
+                        priority="medium",
+                    )
+                )
+
+    for task_kind, count in task_counter.most_common(5):
+        signals = task_signals.get(task_kind, Counter())
+        if count >= 2 or signals.get("clarification_heavy", 0) > 0:
+            if signals.get("clarification_heavy", 0) > 0:
+                repair_actions.append(
+                    _repair_action(
+                        scope="task_kind",
+                        target=task_kind,
+                        action="Strengthen task template defaults and add clearer expected-output hints.",
+                        reason=f"{task_kind} failures frequently require clarification.",
+                        priority="high",
+                    )
+                )
+            else:
+                repair_actions.append(
+                    _repair_action(
+                        scope="task_kind",
+                        target=task_kind,
+                        action="Add task-specific constraints and validation checks before execution.",
+                        reason=f"{task_kind} appears in {count} recent failures.",
+                        priority="medium",
+                    )
+                )
+
+    if signal_counter.get("manual_takeover", 0) >= 2:
+        repair_actions.append(
+            _repair_action(
+                scope="policy",
+                target="manual_takeover",
+                action="Tighten strict-mode allow-list and require stronger evidence before autonomous execution.",
+                reason="Manual takeover appears repeatedly across failures.",
+                priority="high",
+            )
+        )
+    if pending_feedback > 0:
+        repair_actions.append(
+            _repair_action(
+                scope="feedback",
+                target="pending_failures",
+                action="Request labels for failed runs before the next policy tuning cycle.",
+                reason=f"{pending_feedback} failed runs are still missing feedback.",
+                priority="medium",
+            )
+        )
+
+    deduped_repairs: List[Dict[str, Any]] = []
+    seen_repairs = set()
+    for item in repair_actions:
+        key = (item["scope"], item["target"], item["action"])
+        if key in seen_repairs:
+            continue
+        seen_repairs.add(key)
+        deduped_repairs.append(item)
+    repair_actions = deduped_repairs[:8]
+
     return {
         "as_of": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "summary": {
@@ -103,6 +210,7 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         "strategy_top": [{"strategy": k, "count": v} for k, v in strategy_counter.most_common(5)],
         "policy_signal_top": [{"signal": k, "count": v} for k, v in signal_counter.most_common(5)],
         "failures": details,
+        "repair_actions": repair_actions,
         "recommendations": recommendations,
         "sources": {
             "runs": str(data_dir / "agent_runs.jsonl"),
@@ -127,6 +235,14 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
         "",
     ]
     lines += [f"- {item}" for item in report.get("recommendations", [])]
+    lines += ["", "## Repair Actions", ""]
+    if report.get("repair_actions"):
+        for item in report["repair_actions"]:
+            lines.append(
+                f"- [{item.get('priority', '')}] {item.get('scope', '')}:{item.get('target', '')} | {item.get('action', '')}"
+            )
+    else:
+        lines.append("- none")
     lines += ["", "## Failures", ""]
     if report.get("failures"):
         for row in report["failures"]:
