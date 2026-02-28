@@ -12,9 +12,19 @@ class MarketHubAppTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             app = MarketHubApp(root=root)
+            base_committee = {
+                "participants": [{"role": "portfolio_manager", "stance": "accumulate_small", "thesis": "base", "evidence": []}],
+                "decision": {
+                    "stance": "accumulate_small",
+                    "conviction": "high",
+                    "position_sizing_note": "Start small.",
+                    "guardrails": [],
+                },
+                "risk_gate": {"risk_level": "low", "risk_flags": []},
+            }
             with patch("apps.market_hub.app.load_cfg", return_value={"defaults": {"default_universe": "global_core"}}), \
                 patch("apps.market_hub.app.pick_symbols", return_value=["SPY"]), \
-                patch("apps.market_hub.app.run_committee", return_value={"ok": True, "market_committee": {"participants": []}}), \
+                patch("apps.market_hub.app.run_committee", return_value={"ok": True, "market_committee": base_committee}), \
                 patch(
                     "apps.market_hub.app.lookup_sources",
                     return_value={
@@ -40,14 +50,25 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertEqual(out.get("market_committee", {}).get("sec_form_digest", [])[0]["form"], "10-K")
             self.assertEqual(out.get("source_risk_gate", {}).get("status"), "clear")
             self.assertEqual(out.get("market_committee", {}).get("source_gate_status"), "clear")
+            self.assertFalse(out.get("market_committee", {}).get("decision", {}).get("source_adjusted", True))
 
     def test_run_committee_marks_source_gate_when_connectors_are_stale_or_missing(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             app = MarketHubApp(root=root)
+            base_committee = {
+                "participants": [{"role": "portfolio_manager", "stance": "accumulate_small", "thesis": "base", "evidence": []}],
+                "decision": {
+                    "stance": "accumulate_small",
+                    "conviction": "high",
+                    "position_sizing_note": "Start small.",
+                    "guardrails": [],
+                },
+                "risk_gate": {"risk_level": "low", "risk_flags": []},
+            }
             with patch("apps.market_hub.app.load_cfg", return_value={"defaults": {"default_universe": "global_core"}}), \
                 patch("apps.market_hub.app.pick_symbols", return_value=["SPY"]), \
-                patch("apps.market_hub.app.run_committee", return_value={"ok": True, "market_committee": {"participants": [], "risk_gate": {"risk_level": "low", "risk_flags": []}}}), \
+                patch("apps.market_hub.app.run_committee", return_value={"ok": True, "market_committee": base_committee}), \
                 patch(
                     "apps.market_hub.app.lookup_sources",
                     return_value={
@@ -63,6 +84,9 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertTrue(out.get("source_risk_gate", {}).get("evidence_freshness_warning"))
             self.assertIn("source_gap", out.get("market_committee", {}).get("risk_gate", {}).get("risk_flags", []))
             self.assertEqual(out.get("market_committee", {}).get("risk_gate", {}).get("risk_level"), "medium")
+            self.assertTrue(out.get("market_committee", {}).get("decision", {}).get("source_adjusted"))
+            self.assertEqual(out.get("market_committee", {}).get("decision", {}).get("stance"), "defensive")
+            self.assertEqual(out.get("market_committee", {}).get("decision", {}).get("conviction"), "low")
 
 
 if __name__ == "__main__":

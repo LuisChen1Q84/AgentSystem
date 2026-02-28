@@ -361,6 +361,7 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
         sources = payload.get("sources", []) if isinstance(payload.get("sources", []), list) else []
         prisma_flow = payload.get("prisma_flow", []) if isinstance(payload.get("prisma_flow", []), list) else []
         quality_rows = payload.get("quality_rows", []) if isinstance(payload.get("quality_rows", []), list) else []
+        citation_rows = payload.get("citation_rows", []) if isinstance(payload.get("citation_rows", []), list) else []
         appendix_assets = payload.get("appendix_assets", []) if isinstance(payload.get("appendix_assets", []), list) else []
         return (
             '<section class="visual-stage">'
@@ -386,6 +387,12 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                     for item in quality_rows
                 )
                 + '</ul></div>'
+                '<div class="visual-card"><h4>Citation Appendix</h4><ul>'
+                + "".join(
+                    f'<li>{_esc(item.get("id", ""))} | {_esc(item.get("title", ""))} | {_esc(item.get("type", ""))}</li>'
+                    for item in citation_rows
+                )
+                + '</ul></div>'
                 '<div class="visual-card"><h4>Appendix Assets</h4><ul>'
                 + "".join(
                     f'<li>{_esc(item.get("label", ""))}: {_esc(item.get("path", ""))}</li>'
@@ -393,7 +400,7 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
                 )
                 + '</ul></div>'
                 '</div>'
-                if prisma_flow or quality_rows or appendix_assets
+                if prisma_flow or quality_rows or citation_rows or appendix_assets
                 else ""
             )
             + '</section>'

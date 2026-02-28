@@ -586,6 +586,15 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
                 for item in quality_scorecard[:4]
                 if str(item.get("study_id", "")).strip()
             ],
+            "citation_rows": [
+                {
+                    "id": str(item.get("id", "")).strip(),
+                    "title": str(item.get("title", "")).strip(),
+                    "type": str(item.get("type", "")).strip(),
+                }
+                for item in (citation_appendix[:4] if citation_appendix else research_citations[:4])
+                if str(item.get("title", "")).strip()
+            ],
             "appendix_assets": [
                 {
                     "label": str(item.get("label", "")).strip(),

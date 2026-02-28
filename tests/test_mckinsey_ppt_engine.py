@@ -223,16 +223,19 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertEqual(appendix["kind"], "appendix_evidence")
             self.assertEqual(appendix["prisma_flow"][0]["count"], 120)
             self.assertEqual(appendix["quality_rows"][0]["study_id"], "S1")
+            self.assertEqual(appendix["citation_rows"][0]["id"], "S1")
             self.assertEqual(appendix["appendix_assets"][0]["label"], "PRISMA SVG")
 
             html_text = Path(out["html_path"]).read_text(encoding="utf-8")
             self.assertIn("PRISMA Flow", html_text)
+            self.assertIn("Citation Appendix", html_text)
             self.assertIn(str(prisma_svg), html_text)
 
             with ZipFile(out["pptx_path"]) as zf:
                 slide_xml = zf.read(f"ppt/slides/slide{len(out['slides'])}.xml").decode("utf-8")
                 slide_rels = zf.read(f"ppt/slides/_rels/slide{len(out['slides'])}.xml.rels").decode("utf-8")
                 self.assertIn("identified: 120", slide_xml)
+                self.assertIn("S1 | 行业报告A", slide_xml)
                 self.assertIn("rId2", slide_xml)
                 self.assertIn("image", slide_rels)
                 self.assertIn("appendix_prisma_", slide_rels)

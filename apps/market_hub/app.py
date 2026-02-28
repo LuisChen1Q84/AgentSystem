@@ -199,6 +199,67 @@ def _source_risk_gate(summary: dict[str, Any], requested_connectors: list[str]) 
     }
 
 
+def _downgrade_decision_for_source_gate(committee: dict[str, Any], source_gate: dict[str, Any]) -> None:
+    decision = committee.get("decision", {}) if isinstance(committee.get("decision", {}), dict) else {}
+    if not decision:
+        return
+    flags = source_gate.get("flags", []) if isinstance(source_gate.get("flags", []), list) else []
+    if not flags:
+        decision["source_adjusted"] = False
+        committee["decision"] = decision
+        return
+    original_stance = str(decision.get("stance", "")).strip()
+    original_conviction = str(decision.get("conviction", "")).strip()
+    downgraded_stance = original_stance
+    if "source_gap" in flags and "evidence_freshness_warning" in flags:
+        downgraded_stance = "defensive"
+    elif "connector_conflict" in flags and original_stance == "accumulate_small":
+        downgraded_stance = "watchlist_only"
+    elif "source_gap" in flags and original_stance in {"accumulate_small", "watchlist_only"}:
+        downgraded_stance = "watchlist_only" if original_stance == "accumulate_small" else "defensive"
+    elif "evidence_freshness_warning" in flags and original_stance == "accumulate_small":
+        downgraded_stance = "watchlist_only"
+
+    conviction_map = {"high": "medium", "medium": "low", "low": "low"}
+    if downgraded_stance == "defensive":
+        downgraded_conviction = "low"
+    elif downgraded_stance != original_stance:
+        downgraded_conviction = conviction_map.get(original_conviction, "low")
+    else:
+        downgraded_conviction = original_conviction
+    decision["source_adjusted"] = downgraded_stance != original_stance or downgraded_conviction != original_conviction
+    decision["pre_source_gate_stance"] = original_stance
+    decision["pre_source_gate_conviction"] = original_conviction
+    decision["stance"] = downgraded_stance
+    decision["conviction"] = downgraded_conviction
+    if downgraded_stance == "accumulate_small":
+        decision["position_sizing_note"] = "Start small (20-30% of normal size) and expand only after fresher corroboration."
+    elif downgraded_stance == "watchlist_only":
+        decision["position_sizing_note"] = "Keep on watchlist or paper-trade only until source quality and recency improve."
+    else:
+        decision["position_sizing_note"] = "Stay defensive until missing or stale evidence is repaired."
+    guardrails = decision.get("guardrails", []) if isinstance(decision.get("guardrails", []), list) else []
+    decision["guardrails"] = list(dict.fromkeys(guardrails + ["Do not scale while source gate remains elevated."]))
+    decision["source_gate_reason"] = ", ".join(flags)
+    committee["decision"] = decision
+
+    participants = committee.get("participants", []) if isinstance(committee.get("participants", []), list) else []
+    for item in participants:
+        if str(item.get("role", "")).strip() == "portfolio_manager":
+            item["stance"] = downgraded_stance
+            item["thesis"] = (
+                f"Decision={downgraded_stance}; conviction={downgraded_conviction}; "
+                f"source_gate={source_gate.get('status', 'clear')}; reason={decision.get('source_gate_reason', '')}."
+            )
+            evidence = item.get("evidence", []) if isinstance(item.get("evidence", []), list) else []
+            item["evidence"] = list(dict.fromkeys(evidence + flags))
+        elif str(item.get("role", "")).strip() == "risk_committee" and flags:
+            item["stance"] = "cautious"
+            evidence = item.get("evidence", []) if isinstance(item.get("evidence", []), list) else []
+            item["evidence"] = list(dict.fromkeys(evidence + flags))
+    committee["participants"] = participants
+
+
 class MarketHubApp:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
@@ -252,4 +313,5 @@ class MarketHubApp:
                 if source_flags and risk_gate.get("risk_level") == "low":
                     risk_gate["risk_level"] = "medium"
                 payload["market_committee"]["risk_gate"] = risk_gate
+            _downgrade_decision_for_source_gate(payload["market_committee"], payload["source_risk_gate"])
         return payload

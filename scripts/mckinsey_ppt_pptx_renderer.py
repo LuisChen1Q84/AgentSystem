@@ -529,6 +529,7 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
     sources = payload.get("sources", []) if isinstance(payload.get("sources", []), list) else []
     prisma_flow = payload.get("prisma_flow", []) if isinstance(payload.get("prisma_flow", []), list) else []
     quality_rows = payload.get("quality_rows", []) if isinstance(payload.get("quality_rows", []), list) else []
+    citation_rows = payload.get("citation_rows", []) if isinstance(payload.get("citation_rows", []), list) else []
     appendix_assets = payload.get("appendix_assets", []) if isinstance(payload.get("appendix_assets", []), list) else []
     media_rel_id = str(slide.get("_media_rel_id", "")).strip()
     shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
@@ -561,6 +562,11 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
         for item in quality_rows[:4]
         if str(item.get("study_id", "")).strip()
     ]
+    citation_lines = ["Citation appendix"] + [
+        f"{item.get('id', '')} | {item.get('title', '')} | {item.get('type', '')}"
+        for item in citation_rows[:4]
+        if str(item.get("title", "")).strip()
+    ]
     asset_lines = ["Appendix assets"] + [
         f"{item.get('label', '')}: {item.get('path', '')}"
         for item in appendix_assets[:3]
@@ -591,9 +597,26 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
                 5500000,
                 3900000 if media_rel_id else 2100000,
                 4600000,
-                1500000,
+                1200000,
                 quality_lines,
                 font_size=1180,
+                color=colors["ink"],
+                fill=colors["panel"],
+                line=colors["line"],
+                bold_first=True,
+            )
+        )
+    if len(citation_lines) > 1:
+        shapes.append(
+            _textbox_shape(
+                12,
+                "Citation Summary",
+                5500000,
+                5200000 if media_rel_id else 3600000,
+                4600000,
+                1100000,
+                citation_lines,
+                font_size=1080,
                 color=colors["ink"],
                 fill=colors["panel"],
                 line=colors["line"],
@@ -603,14 +626,14 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
     if len(asset_lines) > 1:
         shapes.append(
             _textbox_shape(
-                12,
+                13,
                 "Appendix Assets",
                 5500000,
-                5500000 if media_rel_id else 3800000,
+                6300000 if media_rel_id else 4800000,
                 4600000,
-                900000,
+                500000,
                 asset_lines,
-                font_size=1120,
+                font_size=980,
                 color=colors["ink"],
                 fill=colors["panel"],
                 line=colors["line"],
