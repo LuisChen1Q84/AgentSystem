@@ -47,6 +47,7 @@ class MCPCliTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertTrue(out["candidates"])
         self.assertIn("selected", out)
+        self.assertIn("delivery_bundle", out)
         self.assertIn("delivery_protocol", out)
 
     def test_run_dry_run(self):
@@ -63,6 +64,7 @@ class MCPCliTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out["mode"], "dry-run")
         self.assertIn("selected", out)
+        self.assertIn("delivery_bundle", out)
         self.assertIn("delivery_protocol", out)
 
     def test_run_fallback_success_with_fake_runtime(self):
@@ -85,6 +87,7 @@ class MCPCliTest(unittest.TestCase):
             self.assertTrue(out["ok"])
             self.assertIn("run_file", out)
             self.assertGreaterEqual(len(out["attempts"]), 1)
+            self.assertIn("delivery_bundle", out)
             self.assertIn("delivery_protocol", out)
 
     def test_replay_dry_run(self):

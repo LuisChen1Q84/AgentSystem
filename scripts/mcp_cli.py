@@ -20,7 +20,7 @@ ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from core.registry.delivery_protocol import build_delivery_protocol
+from core.registry.delivery_protocol import build_delivery_bundle_payload, build_delivery_protocol
 
 try:
     from scripts.mcp_connector import MCPError, Registry, Router, Runtime, parse_params
@@ -314,6 +314,7 @@ def cmd_route_smart(
         "candidates": ranked,
         "risk": risk,
     }
+    payload["delivery_bundle"] = build_delivery_bundle_payload("mcp.run", payload, entrypoint="scripts.mcp_cli.route_smart")
     payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.route_smart")
     return payload
 
@@ -350,6 +351,7 @@ def cmd_run(
 
     if not ranked:
         payload = {"ok": False, "error": "no candidates"}
+        payload["delivery_bundle"] = build_delivery_bundle_payload("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
         payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
         return payload
 
@@ -365,6 +367,7 @@ def cmd_run(
             "candidates": ranked,
             "risk": _derive_risk(chosen["server"], chosen["tool"]),
         }
+        payload["delivery_bundle"] = build_delivery_bundle_payload("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
         payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
         return payload
 
@@ -462,6 +465,7 @@ def cmd_run(
     run_file = runs_dir / f"{run_id}.json"
     _write_json(run_file, payload)
     payload["run_file"] = str(run_file)
+    payload["delivery_bundle"] = build_delivery_bundle_payload("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
     payload["delivery_protocol"] = build_delivery_protocol("mcp.run", payload, entrypoint="scripts.mcp_cli.run")
     _write_json(run_file, payload)
     return payload

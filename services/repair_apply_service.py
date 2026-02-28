@@ -13,7 +13,14 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.kernel.repair_apply import apply_repair_plan, build_repair_apply_plan, rollback_repair_plan, write_repair_plan_files
+from core.kernel.repair_apply import (
+    apply_repair_plan,
+    build_repair_apply_plan,
+    list_repair_snapshots,
+    rollback_repair_plan,
+    write_repair_plan_files,
+    write_snapshot_list_files,
+)
 from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import ok_response
 
@@ -83,12 +90,19 @@ class RepairRollbackService:
         *,
         data_dir: str,
         snapshot_id: str,
+        only: str = "both",
         backup_dir: str = "",
         out_dir: str = "",
     ):
         base = Path(data_dir) if data_dir else self.root / "日志/agent_os"
         actual_backup_dir = Path(backup_dir) if backup_dir else base / "repair_backups"
-        rollback = rollback_repair_plan(backup_dir=actual_backup_dir, snapshot_id=snapshot_id)
+        only_mode = str(only or "both").strip().lower()
+        rollback = rollback_repair_plan(
+            backup_dir=actual_backup_dir,
+            snapshot_id=snapshot_id,
+            restore_profile=only_mode in {"both", "profile"},
+            restore_strategy=only_mode in {"both", "strategy"},
+        )
         payload = annotate_payload(
             "agent.repairs.rollback",
             {
@@ -100,5 +114,39 @@ class RepairRollbackService:
         return ok_response(
             "agent.repairs.rollback",
             payload=payload,
-            meta={"data_dir": str(base), "backup_dir": str(actual_backup_dir), "out_dir": str(out_dir)},
+            meta={"data_dir": str(base), "backup_dir": str(actual_backup_dir), "out_dir": str(out_dir), "only": only_mode},
+        )
+
+
+class RepairListService:
+    def __init__(self, root: Path = ROOT):
+        self.root = Path(root)
+
+    def run(
+        self,
+        *,
+        data_dir: str,
+        limit: int,
+        backup_dir: str = "",
+        out_dir: str = "",
+    ):
+        base = Path(data_dir) if data_dir else self.root / "日志/agent_os"
+        actual_backup_dir = Path(backup_dir) if backup_dir else base / "repair_backups"
+        report = list_repair_snapshots(backup_dir=actual_backup_dir, limit=max(1, int(limit)))
+        target_dir = Path(out_dir) if out_dir else base
+        files = write_snapshot_list_files(report, target_dir)
+        payload = annotate_payload(
+            "agent.repairs.list",
+            {
+                "summary": f"Listed {report.get('count', 0)} repair snapshots",
+                "rows": report.get("rows", []),
+                "report": report,
+                "deliver_assets": {"items": [{"path": files["json"]}, {"path": files["md"]}]},
+            },
+            entrypoint="core.kernel.repair_apply",
+        )
+        return ok_response(
+            "agent.repairs.list",
+            payload=payload,
+            meta={"data_dir": str(base), "backup_dir": str(actual_backup_dir), "out_dir": str(target_dir), "limit": max(1, int(limit))},
         )

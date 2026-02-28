@@ -16,7 +16,7 @@ ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from core.registry.delivery_protocol import build_delivery_protocol
+from core.registry.delivery_protocol import build_delivery_bundle_payload, build_delivery_protocol
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 
 
@@ -225,6 +225,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             next_actions=["Use deck_spec JSON to render PPTX", "Review evidence gaps before visual polishing"],
         ),
     }
+    payload["delivery_bundle"] = build_delivery_bundle_payload("ppt.generate", payload, entrypoint="scripts.mckinsey_ppt_engine")
     payload["delivery_protocol"] = build_delivery_protocol("ppt.generate", payload, entrypoint="scripts.mckinsey_ppt_engine")
     return payload
 

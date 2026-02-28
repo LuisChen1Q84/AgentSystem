@@ -18,6 +18,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.failures.review", names)
         self.assertIn("agent.policy.tune", names)
         self.assertIn("agent.repairs.apply", names)
+        self.assertIn("agent.repairs.list", names)
         self.assertIn("agent.repairs.rollback", names)
         self.assertIn("agent.run.inspect", names)
         self.assertIn("mcp.run", names)
@@ -319,15 +320,28 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 apply=True,
                 profile_overrides_file=str(root / "profile_overrides.json"),
                 strategy_overrides_file=str(root / "strategy_overrides.json"),
+                backup_dir=str(root / "backups"),
                 out_dir=str(root / "out"),
             )
             self.assertTrue(out.get("ok", False))
             self.assertTrue(out.get("applied", False))
             self.assertIn("service_diagnostics", out)
+            self.assertIn("delivery_bundle", out)
             self.assertIn("delivery_protocol", out)
             self.assertTrue(Path(root / "profile_overrides.json").exists())
             self.assertTrue(Path(root / "strategy_overrides.json").exists())
             self.assertTrue(out.get("applied_files", {}).get("snapshot_id", ""))
+
+            listed = reg.execute(
+                "agent.repairs.list",
+                data_dir=str(root),
+                limit=10,
+                backup_dir=str(root / "backups"),
+                out_dir=str(root / "out"),
+            )
+            self.assertTrue(listed.get("ok", False))
+            self.assertIn("delivery_bundle", listed)
+            self.assertEqual(listed.get("report", {}).get("count"), 1)
 
     def test_execute_agent_repairs_rollback(self):
         with tempfile.TemporaryDirectory() as td:
@@ -411,13 +425,16 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 "agent.repairs.rollback",
                 data_dir=str(root),
                 snapshot_id=snapshot_id,
+                only="strategy",
                 backup_dir=str(root / "backups"),
                 out_dir=str(root / "out"),
             )
             self.assertTrue(rolled_back.get("ok", False))
             self.assertIn("service_diagnostics", rolled_back)
+            self.assertIn("delivery_bundle", rolled_back)
             self.assertIn("delivery_protocol", rolled_back)
             self.assertEqual(rolled_back.get("rollback", {}).get("snapshot_id"), snapshot_id)
+            self.assertEqual(rolled_back.get("rollback", {}).get("restored_components"), ["strategy"])
 
     def test_execute_agent_run_inspect(self):
         with tempfile.TemporaryDirectory() as td:

@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List
 
-from core.registry.delivery_protocol import build_delivery_protocol
+from core.registry.delivery_protocol import build_delivery_bundle_payload, build_delivery_protocol
 
 
 def _string_paths(values: Any) -> List[str]:
@@ -93,7 +93,11 @@ def build_service_diagnostics(service: str, payload: Dict[str, Any], *, entrypoi
 
 def annotate_payload(service: str, payload: Dict[str, Any], *, entrypoint: str) -> Dict[str, Any]:
     out = dict(payload)
+    if "ok" not in out:
+        out["ok"] = not bool(str(out.get("error", "")).strip())
     out["service_diagnostics"] = build_service_diagnostics(service, out, entrypoint=entrypoint)
     if not isinstance(out.get("delivery_protocol", {}), dict) or not out.get("delivery_protocol"):
         out["delivery_protocol"] = build_delivery_protocol(service, out, entrypoint=entrypoint)
+    if not isinstance(out.get("delivery_bundle", {}), dict) or not out.get("delivery_bundle"):
+        out["delivery_bundle"] = build_delivery_bundle_payload(service, out, entrypoint=entrypoint)
     return out

@@ -4,7 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.kernel.repair_apply import apply_repair_plan, build_repair_apply_plan, write_repair_plan_files
+from core.kernel.repair_apply import (
+    apply_repair_plan,
+    build_repair_apply_plan,
+    list_repair_snapshots,
+    rollback_repair_plan,
+    write_repair_plan_files,
+)
 
 
 class AgentRepairApplyTest(unittest.TestCase):
@@ -120,6 +126,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             )
             self.assertTrue(plan["failure_review"]["repair_actions"])
             self.assertTrue(plan["changes"]["profile_overrides_changed"] or plan["changes"]["strategy_overrides_changed"])
+            self.assertGreater(plan["preview_diff"]["change_count"], 0)
 
             files = write_repair_plan_files(plan, root / "out")
             self.assertTrue(Path(files["json"]).exists())
@@ -129,10 +136,26 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertTrue(Path(applied["profile_overrides_file"]).exists())
             self.assertTrue(Path(applied["strategy_overrides_file"]).exists())
             self.assertTrue(Path(applied["snapshot_file"]).exists())
+            profile_after_apply = json.loads(profile_path.read_text(encoding="utf-8"))
+            strategy_before_apply = plan["current"]["strategy_overrides"]
 
             strategy_payload = json.loads(strategy_path.read_text(encoding="utf-8"))
             strict_blocks = strategy_payload.get("profile_blocked_strategies", {}).get("strict", [])
             self.assertIn("mckinsey-ppt", strict_blocks)
+
+            listed = list_repair_snapshots(backup_dir=root / "repair_backups", limit=10)
+            self.assertEqual(listed["count"], 1)
+            self.assertEqual(listed["rows"][0]["snapshot_id"], applied["snapshot_id"])
+
+            rollback = rollback_repair_plan(
+                backup_dir=root / "repair_backups",
+                snapshot_id=applied["snapshot_id"],
+                restore_profile=False,
+                restore_strategy=True,
+            )
+            self.assertEqual(rollback["restored_components"], ["strategy"])
+            self.assertEqual(json.loads(profile_path.read_text(encoding="utf-8")), profile_after_apply)
+            self.assertEqual(json.loads(strategy_path.read_text(encoding="utf-8")), strategy_before_apply)
 
 
 if __name__ == "__main__":

@@ -1207,10 +1207,64 @@ run_agent_repair_apply() {
   automation_log "INFO" "agent-repair-apply" "done"
 }
 
+run_agent_repair_list() {
+  automation_log "INFO" "agent-repair-list" "start"
+  local data_dir=""
+  local limit=""
+  local out_dir=""
+  local backup_dir=""
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir)
+        data_dir="${2:-}"
+        shift 2 || true
+        ;;
+      --limit)
+        limit="${2:-}"
+        shift 2 || true
+        ;;
+      --out-dir)
+        out_dir="${2:-}"
+        shift 2 || true
+        ;;
+      --backup-dir)
+        backup_dir="${2:-}"
+        shift 2 || true
+        ;;
+      *)
+        extra+=("$1")
+        shift || true
+        ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then
+    cmd+=(--data-dir "${data_dir}")
+  fi
+  cmd+=(repair-list)
+  if [ -n "${limit}" ]; then
+    cmd+=(--limit "${limit}")
+  fi
+  if [ -n "${out_dir}" ]; then
+    cmd+=(--out-dir "${out_dir}")
+  fi
+  if [ -n "${backup_dir}" ]; then
+    cmd+=(--backup-dir "${backup_dir}")
+  fi
+  if [ "${#extra[@]}" -gt 0 ]; then
+    cmd+=("${extra[@]}")
+  fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-repair-list" "done"
+}
+
 run_agent_repair_rollback() {
   automation_log "INFO" "agent-repair-rollback" "start"
   local data_dir=""
   local snapshot_id=""
+  local only=""
   local out_dir=""
   local backup_dir=""
   local extra=()
@@ -1223,6 +1277,10 @@ run_agent_repair_rollback() {
         ;;
       --snapshot-id)
         snapshot_id="${2:-}"
+        shift 2 || true
+        ;;
+      --only)
+        only="${2:-}"
         shift 2 || true
         ;;
       --out-dir)
@@ -1246,6 +1304,9 @@ run_agent_repair_rollback() {
   cmd+=(repair-rollback)
   if [ -n "${snapshot_id}" ]; then
     cmd+=(--snapshot-id "${snapshot_id}")
+  fi
+  if [ -n "${only}" ]; then
+    cmd+=(--only "${only}")
   fi
   if [ -n "${out_dir}" ]; then
     cmd+=(--out-dir "${out_dir}")
@@ -1558,7 +1619,8 @@ Usage:
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
   scripts/agentsys.sh agent-failure-review [--days N --limit N --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --data-dir <path> --backup-dir <path>]
-  scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-list [--limit N --data-dir <path> --backup-dir <path> --out-dir <path>]
+  scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --only both|profile|strategy --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-run-inspect --run-id <run_id> [--data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-policy [--days N --memory-file <path> --data-dir <path>]
   scripts/agentsys.sh agent-pack [list|enable|disable] [--name <pack>] [--cfg <path>]
@@ -1568,7 +1630,7 @@ Usage:
   scripts/agentsys.sh agent-feedback [add|stats|pending] [args...]
   scripts/agentsys.sh agent-learn [--apply --cfg <path>]
   scripts/agentsys.sh skill-contract-lint [--strict --cfg <path>]
-  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|failure-review|repair-apply|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
+  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|failure-review|repair-apply|repair-list|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
@@ -1671,6 +1733,7 @@ case "${cmd}" in
   agent-recommend) shift; run_agent_recommend "$@" ;;
   agent-failure-review) shift; run_agent_failure_review "$@" ;;
   agent-repair-apply) shift; run_agent_repair_apply "$@" ;;
+  agent-repair-list) shift; run_agent_repair_list "$@" ;;
   agent-repair-rollback) shift; run_agent_repair_rollback "$@" ;;
   agent-run-inspect) shift; run_agent_run_inspect "$@" ;;
   agent-policy) shift; run_agent_policy "$@" ;;

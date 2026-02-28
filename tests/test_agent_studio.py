@@ -34,16 +34,48 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a43.cmd, "repair-apply")
         self.assertEqual(a43.backup_dir, "")
 
-        a44 = parser.parse_args(["repair-rollback", "--snapshot-id", "snap1"])
-        self.assertEqual(a44.cmd, "repair-rollback")
-        self.assertEqual(a44.snapshot_id, "snap1")
+        a44 = parser.parse_args(["repair-list"])
+        self.assertEqual(a44.cmd, "repair-list")
+        self.assertEqual(a44.limit, 20)
 
-        a45 = parser.parse_args(["run-inspect", "--run-id", "r1"])
-        self.assertEqual(a45.cmd, "run-inspect")
-        self.assertEqual(a45.run_id, "r1")
+        a45 = parser.parse_args(["repair-rollback", "--snapshot-id", "snap1", "--only", "strategy"])
+        self.assertEqual(a45.cmd, "repair-rollback")
+        self.assertEqual(a45.snapshot_id, "snap1")
+        self.assertEqual(a45.only, "strategy")
+
+        a46 = parser.parse_args(["run-inspect", "--run-id", "r1"])
+        self.assertEqual(a46.cmd, "run-inspect")
+        self.assertEqual(a46.run_id, "r1")
 
         a5 = parser.parse_args(["policy"])
         self.assertEqual(a5.cmd, "policy")
+
+    def test_repair_list_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            backup_dir = root / "backups"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            (backup_dir / "repair_snapshot_20260228_100000.json").write_text(
+                json.dumps(
+                    {
+                        "snapshot_id": "repair_snapshot_20260228_100000",
+                        "ts": "2026-02-28 10:00:00",
+                        "preview_diff": {"profile_overrides": [{"path": "default_profile"}], "strategy_overrides": [], "change_count": 1},
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._repair_list_cmd(reg, limit=10, data_dir=str(root), out_dir=str(root / "out"), backup_dir=str(backup_dir))
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertIn("delivery_bundle", payload)
+            self.assertEqual(payload.get("report", {}).get("count"), 1)
 
     def test_feedback_add_and_stats_cmd(self):
         with tempfile.TemporaryDirectory() as td:
@@ -436,6 +468,7 @@ class AgentStudioTest(unittest.TestCase):
                 code_rollback = agent_studio._repair_rollback_cmd(
                     reg,
                     snapshot_id=snapshot_id,
+                    only="both",
                     data_dir=str(root),
                     out_dir=str(root / "out"),
                     backup_dir=str(root / "backups"),
@@ -443,6 +476,7 @@ class AgentStudioTest(unittest.TestCase):
             self.assertEqual(code_rollback, 0)
             rollback_payload = json.loads(rollback_buf.getvalue())
             self.assertTrue(rollback_payload.get("ok", False))
+            self.assertIn("delivery_bundle", rollback_payload)
             self.assertIn("delivery_protocol", rollback_payload)
             self.assertEqual(rollback_payload.get("rollback", {}).get("snapshot_id"), snapshot_id)
 

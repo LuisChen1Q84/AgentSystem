@@ -6,7 +6,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from core.kernel.failure_review import build_failure_review
 from core.kernel.memory_store import load_memory
@@ -109,6 +109,26 @@ def _changed(before: Dict[str, Any], after: Dict[str, Any]) -> bool:
     return json.dumps(before, ensure_ascii=False, sort_keys=True) != json.dumps(after, ensure_ascii=False, sort_keys=True)
 
 
+def _diff_rows(before: Any, after: Any, prefix: str = "") -> List[Dict[str, Any]]:
+    if before == after:
+        return []
+    path = prefix or "$"
+    if isinstance(before, dict) and isinstance(after, dict):
+        rows: List[Dict[str, Any]] = []
+        keys = sorted(set(before.keys()) | set(after.keys()))
+        for key in keys:
+            child_path = f"{path}.{key}" if path != "$" else str(key)
+            if key not in before:
+                rows.append({"path": child_path, "change": "added", "before": None, "after": after.get(key)})
+                continue
+            if key not in after:
+                rows.append({"path": child_path, "change": "removed", "before": before.get(key), "after": None})
+                continue
+            rows.extend(_diff_rows(before.get(key), after.get(key), child_path))
+        return rows
+    return [{"path": path, "change": "updated", "before": before, "after": after}]
+
+
 def _snapshot_id(ts: str) -> str:
     compact = (
         str(ts)
@@ -141,6 +161,8 @@ def build_repair_apply_plan(
 
     proposed_profile = _profile_payload(ts, current_profile, policy_report, failure_report)
     proposed_strategy = _strategy_payload(ts, current_strategy, policy_report, failure_report)
+    profile_diff = _diff_rows(current_profile, proposed_profile)
+    strategy_diff = _diff_rows(current_strategy, proposed_strategy)
 
     return {
         "ts": ts,
@@ -164,6 +186,11 @@ def build_repair_apply_plan(
         "changes": {
             "profile_overrides_changed": _changed(current_profile, proposed_profile),
             "strategy_overrides_changed": _changed(current_strategy, proposed_strategy),
+        },
+        "preview_diff": {
+            "profile_overrides": profile_diff,
+            "strategy_overrides": strategy_diff,
+            "change_count": len(profile_diff) + len(strategy_diff),
         },
         "targets": {
             "profile_overrides_file": str(profile_overrides_file),
@@ -198,6 +225,8 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
                 "strategy_overrides_before": current_strategy,
                 "profile_overrides_after": profile_payload,
                 "strategy_overrides_after": strategy_payload,
+                "changes": plan.get("changes", {}),
+                "preview_diff": plan.get("preview_diff", {}),
             },
             ensure_ascii=False,
             indent=2,
@@ -215,7 +244,42 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def rollback_repair_plan(*, backup_dir: Path, snapshot_id: str = "") -> Dict[str, Any]:
+def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any]:
+    backup_dir = Path(backup_dir)
+    rows: List[Dict[str, Any]] = []
+    for snapshot_file in sorted(backup_dir.glob("repair_snapshot_*.json"), reverse=True)[: max(1, int(limit))]:
+        snapshot = _load_json(snapshot_file, {})
+        preview_diff = snapshot.get("preview_diff", {}) if isinstance(snapshot.get("preview_diff", {}), dict) else {}
+        profile_rows = preview_diff.get("profile_overrides", []) if isinstance(preview_diff.get("profile_overrides", []), list) else []
+        strategy_rows = preview_diff.get("strategy_overrides", []) if isinstance(preview_diff.get("strategy_overrides", []), list) else []
+        rows.append(
+            {
+                "snapshot_id": str(snapshot.get("snapshot_id", snapshot_file.stem)),
+                "ts": str(snapshot.get("ts", "")),
+                "snapshot_file": str(snapshot_file),
+                "profile_overrides_file": str(snapshot.get("profile_overrides_file", "")),
+                "strategy_overrides_file": str(snapshot.get("strategy_overrides_file", "")),
+                "change_count": int(preview_diff.get("change_count", len(profile_rows) + len(strategy_rows)) or 0),
+                "changed_components": [
+                    component
+                    for component, changed in (
+                        ("profile", bool(profile_rows)),
+                        ("strategy", bool(strategy_rows)),
+                    )
+                    if changed
+                ],
+            }
+        )
+    return {"backup_dir": str(backup_dir), "rows": rows, "count": len(rows)}
+
+
+def rollback_repair_plan(
+    *,
+    backup_dir: Path,
+    snapshot_id: str = "",
+    restore_profile: bool = True,
+    restore_strategy: bool = True,
+) -> Dict[str, Any]:
     backup_dir = Path(backup_dir)
     candidates = sorted(backup_dir.glob("repair_snapshot_*.json"))
     if snapshot_id.strip():
@@ -224,21 +288,29 @@ def rollback_repair_plan(*, backup_dir: Path, snapshot_id: str = "") -> Dict[str
         snapshot_file = candidates[-1]
     else:
         raise FileNotFoundError(f"no repair snapshots found in {backup_dir}")
+    if not restore_profile and not restore_strategy:
+        raise ValueError("at least one component must be restored")
 
     snapshot = _load_json(snapshot_file, {})
     profile_path = Path(str(snapshot.get("profile_overrides_file", "")).strip())
     strategy_path = Path(str(snapshot.get("strategy_overrides_file", "")).strip())
     profile_before = snapshot.get("profile_overrides_before", {})
     strategy_before = snapshot.get("strategy_overrides_before", {})
-    profile_path.parent.mkdir(parents=True, exist_ok=True)
-    strategy_path.parent.mkdir(parents=True, exist_ok=True)
-    profile_path.write_text(json.dumps(profile_before, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    strategy_path.write_text(json.dumps(strategy_before, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    restored_components: List[str] = []
+    if restore_profile:
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        profile_path.write_text(json.dumps(profile_before, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        restored_components.append("profile")
+    if restore_strategy:
+        strategy_path.parent.mkdir(parents=True, exist_ok=True)
+        strategy_path.write_text(json.dumps(strategy_before, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        restored_components.append("strategy")
     return {
         "snapshot_file": str(snapshot_file),
         "snapshot_id": str(snapshot.get("snapshot_id", "")),
         "profile_overrides_file": str(profile_path),
         "strategy_overrides_file": str(strategy_path),
+        "restored_components": restored_components,
     }
 
 
@@ -265,9 +337,30 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- backup_dir: {plan.get('targets', {}).get('backup_dir', '')}",
         f"- snapshot_id: {plan.get('targets', {}).get('snapshot_id', '')}",
         "",
+        "## Preview Diff",
+        "",
+        f"- change_count: {plan.get('preview_diff', {}).get('change_count', 0)}",
+        "",
         "## Repair Actions",
         "",
     ]
+    preview_rows = 0
+    for section in ("profile_overrides", "strategy_overrides"):
+        rows = plan.get("preview_diff", {}).get(section, [])
+        if not isinstance(rows, list):
+            continue
+        lines.append(f"### {section}")
+        lines.append("")
+        if not rows:
+            lines.append("- none")
+            lines.append("")
+            continue
+        for row in rows[:20]:
+            if not isinstance(row, dict):
+                continue
+            preview_rows += 1
+            lines.append(f"- [{row.get('change', '')}] {row.get('path', '')}: {json.dumps(row.get('before'), ensure_ascii=False)} -> {json.dumps(row.get('after'), ensure_ascii=False)}")
+        lines.append("")
     repair_rows = 0
     for action in plan.get("failure_review", {}).get("repair_actions", []):
         if not isinstance(action, dict):
@@ -285,4 +378,28 @@ def write_repair_plan_files(plan: Dict[str, Any], out_dir: Path) -> Dict[str, st
     md_path = out_dir / "agent_repair_apply_latest.md"
     json_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     md_path.write_text(render_repair_plan_md(plan), encoding="utf-8")
+    return {"json": str(json_path), "md": str(md_path)}
+
+
+def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str, str]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "agent_repair_snapshots_latest.json"
+    md_path = out_dir / "agent_repair_snapshots_latest.md"
+    lines = [
+        f"# Agent Repair Snapshots | count={report.get('count', 0)}",
+        "",
+        f"- backup_dir: {report.get('backup_dir', '')}",
+        "",
+    ]
+    rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
+    if not rows:
+        lines.append("- none")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)}"
+        )
+    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return {"json": str(json_path), "md": str(md_path)}

@@ -140,11 +140,32 @@ def _repair_apply_cmd(
     return 0
 
 
-def _repair_rollback_cmd(reg: AgentServiceRegistry, snapshot_id: str, data_dir: str, out_dir: str, backup_dir: str) -> int:
+def _repair_list_cmd(reg: AgentServiceRegistry, limit: int, data_dir: str, out_dir: str, backup_dir: str) -> int:
+    _print_json(
+        reg.execute(
+            "agent.repairs.list",
+            limit=limit,
+            data_dir=data_dir or str(ROOT / "日志/agent_os"),
+            out_dir=out_dir,
+            backup_dir=backup_dir,
+        )
+    )
+    return 0
+
+
+def _repair_rollback_cmd(
+    reg: AgentServiceRegistry,
+    snapshot_id: str,
+    only: str,
+    data_dir: str,
+    out_dir: str,
+    backup_dir: str,
+) -> int:
     _print_json(
         reg.execute(
             "agent.repairs.rollback",
             snapshot_id=snapshot_id,
+            only=only,
             data_dir=data_dir or str(ROOT / "日志/agent_os"),
             out_dir=out_dir,
             backup_dir=backup_dir,
@@ -242,7 +263,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "failure-review [days], repair-apply [days], repair-rollback [snapshot_id], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "failure-review [days], repair-apply [days], repair-list [limit], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -278,8 +299,18 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
         if cmd == "repair-apply":
             _repair_apply_cmd(reg, days=int(args[0]) if args else 14, limit=10, apply=False, data_dir=data_dir, out_dir="", profile_overrides_file="", strategy_overrides_file="", backup_dir="")
             continue
+        if cmd == "repair-list":
+            _repair_list_cmd(reg, limit=int(args[0]) if args else 20, data_dir=data_dir, out_dir="", backup_dir="")
+            continue
         if cmd == "repair-rollback":
-            _repair_rollback_cmd(reg, snapshot_id=str(args[0]) if args else "", data_dir=data_dir, out_dir="", backup_dir="")
+            _repair_rollback_cmd(
+                reg,
+                snapshot_id=str(args[0]) if args else "",
+                only=str(args[1]) if len(args) > 1 else "both",
+                data_dir=data_dir,
+                out_dir="",
+                backup_dir="",
+            )
             continue
         if cmd == "run-inspect":
             if not args:
@@ -357,8 +388,14 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--strategy-overrides-file", default="")
     rapply.add_argument("--backup-dir", default="")
 
+    rlist = sp.add_parser("repair-list")
+    rlist.add_argument("--limit", type=int, default=20)
+    rlist.add_argument("--out-dir", default="")
+    rlist.add_argument("--backup-dir", default="")
+
     rrollback = sp.add_parser("repair-rollback")
     rrollback.add_argument("--snapshot-id", default="")
+    rrollback.add_argument("--only", choices=["both", "profile", "strategy"], default="both")
     rrollback.add_argument("--out-dir", default="")
     rrollback.add_argument("--backup-dir", default="")
 
@@ -422,10 +459,13 @@ def main() -> int:
             strategy_overrides_file=str(args.strategy_overrides_file),
             backup_dir=str(args.backup_dir),
         )
+    if args.cmd == "repair-list":
+        return _repair_list_cmd(reg, limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir), backup_dir=str(args.backup_dir))
     if args.cmd == "repair-rollback":
         return _repair_rollback_cmd(
             reg,
             snapshot_id=str(args.snapshot_id),
+            only=str(args.only),
             data_dir=data_dir,
             out_dir=str(args.out_dir),
             backup_dir=str(args.backup_dir),

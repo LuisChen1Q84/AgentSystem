@@ -137,3 +137,28 @@ def build_delivery_protocol(service: str, payload: Dict[str, Any], *, entrypoint
         },
         "followups": _followups(service, payload, len(artifacts), count),
     }
+
+
+def build_delivery_bundle_payload(service: str, payload: Dict[str, Any], *, entrypoint: str) -> Dict[str, Any]:
+    protocol = build_delivery_protocol(service, payload, entrypoint=entrypoint)
+    existing_bundle = payload.get("delivery_bundle", {}) if isinstance(payload.get("delivery_bundle", {}), dict) else {}
+    quality_score = existing_bundle.get("quality_score", payload.get("quality_score", 0.0))
+    try:
+        quality_value = float(quality_score or 0.0)
+    except Exception:
+        quality_value = 0.0
+    delivery_card = existing_bundle.get("delivery_card", payload.get("delivery_card", {}))
+    if not isinstance(delivery_card, dict):
+        delivery_card = {}
+    evidence = dict(protocol.get("evidence", {}))
+    evidence["service"] = service
+    evidence["payload_key_count"] = len(payload.keys())
+    return {
+        "summary": str(protocol.get("summary", "")),
+        "artifacts": list(protocol.get("artifacts", [])),
+        "evidence": evidence,
+        "quality_score": quality_value,
+        "risk_notes": list(protocol.get("risk", {}).get("notes", [])) if isinstance(protocol.get("risk", {}), dict) else [],
+        "followups": list(protocol.get("followups", [])) if isinstance(protocol.get("followups", []), list) else [],
+        "delivery_card": delivery_card,
+    }

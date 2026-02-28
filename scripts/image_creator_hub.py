@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from core.registry.delivery_protocol import build_delivery_protocol
+from core.registry.delivery_protocol import build_delivery_bundle_payload, build_delivery_protocol
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 CFG_DEFAULT = ROOT / "config" / "image_creator_hub.toml"
 
@@ -1075,6 +1075,7 @@ def aggregate_logs(log_dir: Path, days: int = 7) -> Dict[str, Any]:
 
 def run_request(cfg: Dict[str, Any], text: str, values: Dict[str, Any]) -> Dict[str, Any]:
     def finish(payload: Dict[str, Any]) -> Dict[str, Any]:
+        payload["delivery_bundle"] = build_delivery_bundle_payload("image.generate", payload, entrypoint="scripts.image_creator_hub")
         payload["delivery_protocol"] = build_delivery_protocol("image.generate", payload, entrypoint="scripts.image_creator_hub")
         return payload
 
