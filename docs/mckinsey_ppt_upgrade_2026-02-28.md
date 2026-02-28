@@ -83,6 +83,46 @@
   - 三波路线图页
 - 这一步的意义是让最终交付更像真正的咨询 deck，而不是“同一种信息卡片重复 8 次”。
 
+## 第五轮优化（visual payload + HTML/PPTX 双端一致）
+- 每页新增 `visual_payload`
+  - `cover_signal`
+  - `executive_summary`
+  - `situation_snapshot`
+  - `issue_tree`
+  - `benchmark_matrix`
+  - `strategic_options`
+  - `initiative_portfolio`
+  - `roadmap_track`
+  - `risk_control`
+  - `decision_ask`
+  - `appendix_evidence`
+  - `metric_deep_dive`
+- 输入参数新增结构化业务数据支持：
+  - `metric_values`
+  - `benchmarks`
+  - `options`
+  - `initiatives`
+  - `roadmap`
+  - `risks`
+  - `decision_items`
+- `quality_review` 新增：
+  - `visual_contract_coverage`
+  - `asset_completeness_score`
+  - `pptx_readiness`
+- 新增 `export_manifest`
+  - 统一记录 JSON / Markdown / HTML / PPTX 资产
+  - 记录 review 顺序与视觉载荷覆盖率
+- HTML 预览不再只是通用信息面板，已改成页型专属审稿组件：
+  - benchmark table
+  - option scorecard
+  - priority matrix
+  - wave roadmap
+  - risk grid
+  - decision checklist
+- Native PPTX 现在也直接消费这些 `visual_payload`
+  - 不再只用标题 + evidence list 做文本拼接
+  - 关键页型导出和 HTML 审稿开始共享同一套结构化内容
+
 ## 后续建议
 - 若要继续提升成品质量，下一步应该做 PPTX 原生导出模板，而不是再扩提示词。
 - 若要适配多个审美方向，应在 `assets/mckinsey_ppt/` 下继续扩主题与布局，而不是在 engine 里写分支。

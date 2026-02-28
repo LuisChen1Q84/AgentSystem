@@ -16,7 +16,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
                 {
                     "audience": "CEO",
                     "objective": "推进预算决策",
-                    "page_count": 8,
+                    "page_count": 10,
                     "time_horizon": "18 months",
                     "key_metrics": ["收入增长", "毛利率", "回收期"],
                 },
@@ -34,9 +34,10 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("delivery_protocol", out)
             self.assertIn("quality_review", out)
             self.assertIn("design_handoff", out)
+            self.assertIn("export_manifest", out)
             self.assertIn("html_path", out)
             self.assertIn("pptx_path", out)
-            self.assertEqual(out["request"]["page_count"], 8)
+            self.assertEqual(out["request"]["page_count"], 10)
             self.assertIn("theme_label", out["design_system"])
             self.assertIn("slide_navigation", out["design_handoff"])
 
@@ -49,11 +50,15 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("quality_review", spec)
             self.assertIn("slides", spec)
             self.assertIn("design_handoff", spec)
+            self.assertIn("export_manifest", spec)
             self.assertGreaterEqual(spec["quality_review"]["consulting_score"], 60)
-            self.assertEqual(len(spec["slides"]), 8)
+            self.assertEqual(len(spec["slides"]), 10)
             self.assertIn("decision_link", spec["slides"][0])
             self.assertIn("designer_handoff", spec["slides"][0])
+            self.assertIn("visual_payload", spec["slides"][0])
             self.assertIn("theme_summary", spec["design_handoff"])
+            self.assertIn("visual_contract_coverage", spec["quality_review"])
+            self.assertIn("pptx_readiness", spec["quality_review"])
 
             html_text = Path(out["html_path"]).read_text(encoding="utf-8")
             self.assertIn("slide-card", html_text)
@@ -61,6 +66,8 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("Slide Preview", html_text)
             self.assertIn("Slide Map", html_text)
             self.assertIn("Designer Brief", html_text)
+            self.assertIn("Benchmark Matrix", html_text)
+            self.assertIn("Export Sequence", html_text)
 
             with ZipFile(out["pptx_path"]) as zf:
                 names = set(zf.namelist())
@@ -73,9 +80,15 @@ class McKinseyPptEngineTest(unittest.TestCase):
                 slide_xml = zf.read("ppt/slides/slide1.xml").decode("utf-8")
                 self.assertIn("Decision Ask", slide_xml)
                 slide2_xml = zf.read("ppt/slides/slide2.xml").decode("utf-8")
+                slide5_xml = zf.read("ppt/slides/slide5.xml").decode("utf-8")
                 slide8_xml = zf.read("ppt/slides/slide8.xml").decode("utf-8")
+                slide9_xml = zf.read("ppt/slides/slide9.xml").decode("utf-8")
+                slide10_xml = zf.read("ppt/slides/slide10.xml").decode("utf-8")
                 self.assertIn("Core Judgment", slide2_xml)
+                self.assertIn("Capability", slide5_xml)
                 self.assertIn("Wave 1", slide8_xml)
+                self.assertIn("Mitigation", slide9_xml)
+                self.assertIn("Approve now", slide10_xml)
 
     def test_page_count_is_bounded_and_quality_review_exists(self):
         out = run_request("Growth strategy", {"page_count": 99, "theme": "ivory-ledger"})
@@ -88,6 +101,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
         self.assertIn("consulting_score", out["quality_review"])
         self.assertEqual(out["design_system"]["theme"], "ivory-ledger")
         self.assertIn("visual_variety_score", out["quality_review"])
+        self.assertIn("export_manifest", out)
         self.assertTrue(Path(out["pptx_path"]).exists())
 
 

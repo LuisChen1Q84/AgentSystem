@@ -125,6 +125,240 @@ def _render_handoff(payload: Dict[str, Any]) -> str:
     )
 
 
+def _render_export_manifest(payload: Dict[str, Any]) -> str:
+    manifest = payload.get("export_manifest", {}) if isinstance(payload.get("export_manifest", {}), dict) else {}
+    assets = manifest.get("assets", []) if isinstance(manifest.get("assets", []), list) else []
+    return (
+        '<section class="handoff-strip export-strip">'
+        '<div class="panel primary">'
+        '<h3>Export Sequence</h3>'
+        '<ul>' + ''.join(f'<li>{_esc(item)}</li>' for item in manifest.get("export_sequence", [])[:3]) + '</ul>'
+        '</div>'
+        '<div class="panel">'
+        '<h3>Assets</h3>'
+        '<ul>' + ''.join(f'<li>{_esc(item.get("type", ""))}: {_esc(item.get("path", ""))}</li>' for item in assets) + '</ul>'
+        '</div>'
+        '<div class="panel">'
+        '<h3>Coverage</h3>'
+        f'<p><strong>Visual Payload:</strong> {_esc(manifest.get("visual_payload_coverage", ""))}</p>'
+        f'<p><strong>Primary Review:</strong> {_esc(manifest.get("primary_review_asset", ""))}</p>'
+        '</div>'
+        '</section>'
+    )
+
+
+def _render_visual_payload(slide: Dict[str, Any]) -> str:
+    payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
+    kind = str(payload.get("kind", "generic"))
+    if kind == "cover_signal":
+        metrics = payload.get("hero_metrics", []) if isinstance(payload.get("hero_metrics", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Hero Signal</div>'
+            '<div class="visual-grid metric-grid">'
+            + "".join(
+                '<div class="visual-card metric-hero-large">'
+                f'<span>{_esc(item.get("label", ""))}</span>'
+                f'<strong>{_esc(item.get("value", ""))}</strong>'
+                f'<small>{_esc(item.get("context", ""))}</small>'
+                '</div>'
+                for item in metrics
+            )
+            + '</div>'
+            f'<div class="stage-note">{_esc(payload.get("decision_bar", ""))}</div>'
+            '</section>'
+        )
+    if kind == "executive_summary":
+        cards = payload.get("cards", []) if isinstance(payload.get("cards", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Summary Cards</div>'
+            '<div class="visual-grid three-up">'
+            + "".join(
+                '<div class="visual-card">'
+                f'<span class="mini-kicker">{_esc(item.get("title", ""))}</span>'
+                f'<h4>{_esc(item.get("headline", ""))}</h4>'
+                f'<p>{_esc(item.get("proof", ""))}</p>'
+                f'<small>{_esc(item.get("action", ""))}</small>'
+                '</div>'
+                for item in cards
+            )
+            + '</div></section>'
+        )
+    if kind == "situation_snapshot":
+        callouts = payload.get("callouts", []) if isinstance(payload.get("callouts", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Current State Signal</div>'
+            '<div class="visual-grid three-up">'
+            + "".join(
+                '<div class="visual-card metric-hero-large">'
+                f'<span>{_esc(item.get("label", ""))}</span>'
+                f'<strong>{_esc(item.get("value", ""))}</strong>'
+                f'<small>{_esc(item.get("context", ""))}</small>'
+                '</div>'
+                for item in callouts
+            )
+            + '</div>'
+            '<div class="chip-row">'
+            + _join_badges(payload.get("pressure_points", []), "chip accent")
+            + '</div></section>'
+        )
+    if kind == "issue_tree":
+        branches = payload.get("branches", []) if isinstance(payload.get("branches", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Issue Tree</div>'
+            '<div class="visual-grid three-up">'
+            + "".join(
+                '<div class="visual-card">'
+                f'<h4>{_esc(item.get("name", ""))}</h4>'
+                f'<p>{_esc(item.get("detail", ""))}</p>'
+                '</div>'
+                for item in branches
+            )
+            + '</div></section>'
+        )
+    if kind == "benchmark_matrix":
+        rows = payload.get("rows", []) if isinstance(payload.get("rows", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Benchmark Matrix</div>'
+            '<div class="table-shell">'
+            '<div class="table-row table-head"><span>Capability</span><span>Current</span><span>Target</span><span>Gap</span></div>'
+            + "".join(
+                '<div class="table-row">'
+                f'<span>{_esc(item.get("capability", ""))}</span>'
+                f'<span>{_esc(item.get("current", ""))}</span>'
+                f'<span>{_esc(item.get("target", ""))}</span>'
+                f'<span>{_esc(item.get("gap", ""))}</span>'
+                '</div>'
+                for item in rows
+            )
+            + '</div></section>'
+        )
+    if kind == "strategic_options":
+        options = payload.get("options", []) if isinstance(payload.get("options", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Option Scorecard</div>'
+            '<div class="visual-grid three-up">'
+            + "".join(
+                '<div class="visual-card">'
+                f'<span class="mini-kicker">{_esc(item.get("name", ""))}</span>'
+                f'<h4>{_esc(item.get("value", ""))}</h4>'
+                f'<p>Effort: {_esc(item.get("effort", ""))}</p>'
+                f'<small>Risk: {_esc(item.get("risk", ""))}</small>'
+                '</div>'
+                for item in options
+            )
+            + '</div></section>'
+        )
+    if kind == "initiative_portfolio":
+        quadrants = payload.get("quadrants", []) if isinstance(payload.get("quadrants", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Priority Matrix</div>'
+            '<div class="matrix-grid">'
+            + "".join(
+                '<div class="visual-card">'
+                f'<span class="mini-kicker">{_esc(item.get("name", ""))}</span>'
+                '<ul>' + ''.join(f'<li>{_esc(entry)}</li>' for entry in item.get("items", [])) + '</ul>'
+                '</div>'
+                for item in quadrants
+            )
+            + '</div></section>'
+        )
+    if kind == "roadmap_track":
+        waves = payload.get("waves", []) if isinstance(payload.get("waves", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Wave Roadmap</div>'
+            '<div class="wave-strip">'
+            + "".join(
+                '<div class="visual-card wave-card">'
+                f'<span class="mini-kicker">{_esc(item.get("wave", ""))}</span>'
+                f'<h4>{_esc(item.get("focus", ""))}</h4>'
+                f'<p>{_esc(item.get("timing", ""))}</p>'
+                f'<small>{_esc(item.get("owner", ""))}</small>'
+                '</div>'
+                for item in waves
+            )
+            + '</div></section>'
+        )
+    if kind == "risk_control":
+        risks = payload.get("risks", []) if isinstance(payload.get("risks", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Risk & Governance Grid</div>'
+            '<div class="table-shell">'
+            '<div class="table-row table-head"><span>Risk</span><span>Indicator</span><span>Mitigation</span><span>Owner</span></div>'
+            + "".join(
+                '<div class="table-row">'
+                f'<span>{_esc(item.get("risk", ""))}</span>'
+                f'<span>{_esc(item.get("indicator", ""))}</span>'
+                f'<span>{_esc(item.get("mitigation", ""))}</span>'
+                f'<span>{_esc(item.get("owner", ""))}</span>'
+                '</div>'
+                for item in risks
+            )
+            + '</div></section>'
+        )
+    if kind == "decision_ask":
+        items = payload.get("items", []) if isinstance(payload.get("items", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Decision Checklist</div>'
+            '<div class="check-list">'
+            + "".join(
+                '<div class="visual-card checklist-item">'
+                f'<h4>{_esc(item.get("ask", ""))}</h4>'
+                f'<p>{_esc(item.get("impact", ""))}</p>'
+                f'<small>{_esc(item.get("timing", ""))}</small>'
+                '</div>'
+                for item in items
+            )
+            + '</div></section>'
+        )
+    if kind == "appendix_evidence":
+        sources = payload.get("sources", []) if isinstance(payload.get("sources", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Evidence Index</div>'
+            '<div class="table-shell">'
+            + "".join(
+                '<div class="table-row">'
+                f'<span>{_esc(item.get("label", ""))}</span>'
+                f'<span>{_esc(item.get("status", ""))}</span>'
+                '</div>'
+                for item in sources
+            )
+            + '</div></section>'
+        )
+    if kind == "metric_deep_dive":
+        metric = payload.get("focus_metric", {}) if isinstance(payload.get("focus_metric", {}), dict) else {}
+        bullets = payload.get("proof_bullets", []) if isinstance(payload.get("proof_bullets", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Metric Deep Dive</div>'
+            '<div class="visual-grid two-up">'
+            '<div class="visual-card metric-hero-large">'
+            f'<span>{_esc(metric.get("label", ""))}</span>'
+            f'<strong>{_esc(metric.get("value", ""))}</strong>'
+            f'<small>{_esc(metric.get("context", ""))}</small>'
+            '</div>'
+            '<div class="visual-card"><ul>'
+            + ''.join(f'<li>{_esc(item)}</li>' for item in bullets)
+            + '</ul></div></div></section>'
+        )
+    return (
+        '<section class="visual-stage">'
+        '<div class="visual-head">Proof Bullets</div>'
+        f'<div class="chip-row">{_join_badges(payload.get("proof_bullets", []), "chip")}</div>'
+        '</section>'
+    )
+
+
 def _render_slide(slide: Dict[str, Any]) -> str:
     layout_meta = slide.get("layout_meta", {}) if isinstance(slide.get("layout_meta", {}), dict) else {}
     modules = layout_meta.get("visual_modules", []) if isinstance(layout_meta.get("visual_modules", []), list) else []
@@ -147,6 +381,7 @@ def _render_slide(slide: Dict[str, Any]) -> str:
         '</div>'
         f'<h2 class="slide-title">{_esc(slide.get("title_assertion", ""))}</h2>'
         f'<p class="slide-sowhat">{_esc(slide.get("so_what", ""))}</p>'
+        f'{_render_visual_payload(slide)}'
         '<div class="slide-grid">'
         '<section class="panel primary">'
         '<h3>Decision Link</h3>'
@@ -322,6 +557,27 @@ def render_deck_html(payload: Dict[str, Any], out_path: Path) -> Path:
     .slide-topline {{ display: flex; gap: 8px; flex-wrap: wrap; }}
     .slide-title {{ margin: 16px 0 10px; font-size: clamp(24px, 3vw, 34px); line-height: 1.12; }}
     .slide-sowhat {{ margin: 0 0 18px; color: var(--muted); font-size: 15px; line-height: 1.65; max-width: 72ch; }}
+    .visual-stage {{ margin: 0 0 16px; padding: 18px; background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.7)); border: 1px solid rgba(15,23,42,0.06); border-radius: 18px; }}
+    .visual-head {{ color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }}
+    .visual-grid, .matrix-grid, .wave-strip, .check-list {{ display: grid; gap: 12px; }}
+    .visual-grid.three-up {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+    .visual-grid.two-up {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    .metric-grid {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+    .matrix-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    .wave-strip {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+    .check-list {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+    .visual-card {{ background: rgba(255,255,255,0.88); border: 1px solid rgba(15,23,42,0.06); border-radius: 16px; padding: 16px; min-height: 120px; }}
+    .visual-card h4 {{ margin: 8px 0; font-size: 18px; line-height: 1.3; }}
+    .visual-card p, .visual-card li, .visual-card small {{ color: var(--muted); font-size: 13px; line-height: 1.6; }}
+    .mini-kicker {{ color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }}
+    .metric-hero-large strong {{ display: block; margin-top: 10px; font-size: 32px; line-height: 1; }}
+    .metric-hero-large span {{ color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}
+    .metric-hero-large small {{ display: block; margin-top: 10px; }}
+    .stage-note {{ margin-top: 12px; color: var(--accent); font-size: 13px; font-weight: 700; }}
+    .table-shell {{ display: grid; gap: 8px; }}
+    .table-row {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.88); border: 1px solid rgba(15,23,42,0.06); }}
+    .table-row.table-head {{ background: var(--accent-soft); color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }}
+    .table-row span {{ font-size: 13px; line-height: 1.5; }}
     .slide-grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }}
     .panel {{ background: rgba(255,255,255,0.86); border: 1px solid rgba(15,23,42,0.06); border-radius: 18px; padding: 18px; }}
     .panel.primary {{ background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, white), rgba(255,255,255,0.92)); }}
@@ -337,7 +593,7 @@ def render_deck_html(payload: Dict[str, Any], out_path: Path) -> Path:
     .meta-grid strong {{ font-size: 14px; line-height: 1.4; }}
     .footer-note {{ margin: 22px 0 0; color: var(--muted); font-size: 13px; }}
     @media (max-width: 1240px) {{ .app-shell {{ grid-template-columns: 1fr; }} .sidebar {{ position: static; grid-template-columns: 1fr 1fr; }} }}
-    @media (max-width: 1080px) {{ .hero-grid, .storyline-ribbon, .slide-grid, .metric-row, .meta-grid, .handoff-strip, .sidebar {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 1080px) {{ .hero-grid, .storyline-ribbon, .slide-grid, .metric-row, .meta-grid, .handoff-strip, .sidebar, .visual-grid.three-up, .visual-grid.two-up, .metric-grid, .matrix-grid, .wave-strip, .check-list {{ grid-template-columns: 1fr; }} .table-row {{ grid-template-columns: 1fr; }} }}
     @media (max-width: 820px) {{ .app-shell {{ width: min(100vw - 20px, 100%); margin: 10px auto 24px; }} .hero {{ padding: 22px; }} .slide-card {{ grid-template-columns: 1fr; }} .slide-rail {{ border-right: 0; border-bottom: 1px solid rgba(15,23,42,0.06); flex-direction: row; align-items: center; justify-content: space-between; }} .slide-main {{ padding: 20px; }} }}
   </style>
 </head>
@@ -373,6 +629,7 @@ def render_deck_html(payload: Dict[str, Any], out_path: Path) -> Path:
         {_render_storyline(storyline)}
       </section>
       {_render_handoff(payload)}
+      {_render_export_manifest(payload)}
       <div class="section-header">
         <h2>Slide Preview</h2>
         <span class="eyebrow soft">{_esc(len(slides))} slides</span>

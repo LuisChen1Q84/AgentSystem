@@ -43,6 +43,20 @@ def _as_list(value: Any) -> List[str]:
     return []
 
 
+def _as_dict_list(value: Any) -> List[Dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    rows: List[Dict[str, str]] = []
+    for item in value:
+        if isinstance(item, dict):
+            row = {str(key).strip(): str(val).strip() for key, val in item.items() if str(key).strip() and str(val).strip()}
+            if row:
+                rows.append(row)
+        elif isinstance(item, str) and item.strip():
+            rows.append({"label": item.strip()})
+    return rows
+
+
 def _read_reference_points(path: Path) -> List[str]:
     if not path.exists():
         return []
@@ -113,6 +127,271 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "decision_ask": str(values.get("decision_ask", default_decision_ask)).strip(),
         "key_metrics": _as_list(values.get("key_metrics") or default_metrics),
         "must_include": _as_list(values.get("must_include") or default_must_include),
+        "metric_values": _as_dict_list(values.get("metric_values")),
+        "benchmarks": _as_dict_list(values.get("benchmarks")),
+        "options": _as_dict_list(values.get("options")),
+        "initiatives": _as_dict_list(values.get("initiatives")),
+        "roadmap": _as_dict_list(values.get("roadmap")),
+        "risks": _as_dict_list(values.get("risks")),
+        "decision_items": _as_dict_list(values.get("decision_items")),
+    }
+
+
+def _metric_value_rows(req: Dict[str, Any], lang: str) -> List[Dict[str, str]]:
+    rows = req.get("metric_values", [])
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "label": str(item.get("label", item.get("metric", ""))).strip() or f"Metric {idx + 1}",
+                "value": str(item.get("value", item.get("target", item.get("status", "")))).strip() or ("待补数据" if lang == "zh" else "TBD"),
+                "context": str(item.get("context", item.get("note", ""))).strip() or ("关键指标" if lang == "zh" else "Key metric"),
+            }
+            for idx, item in enumerate(rows[:4])
+        ]
+    defaults = ["收入增长", "毛利率", "回收期"] if lang == "zh" else ["Growth", "Margin", "Payback"]
+    contexts = ["当前趋势", "结构改善", "投资纪律"] if lang == "zh" else ["Current trend", "Structural improvement", "Investment discipline"]
+    return [
+        {"label": label, "value": "待补数据" if lang == "zh" else "TBD", "context": contexts[idx % len(contexts)]}
+        for idx, label in enumerate((req.get("key_metrics") or defaults)[:3])
+    ]
+
+
+def _benchmark_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict[str, str]]:
+    rows = req.get("benchmarks", [])
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "capability": str(item.get("capability", item.get("label", f"Capability {idx + 1}"))).strip(),
+                "current": str(item.get("current", item.get("baseline", "TBD"))).strip(),
+                "target": str(item.get("target", item.get("winner", "TBD"))).strip(),
+                "gap": str(item.get("gap", item.get("delta", "TBD"))).strip(),
+            }
+            for idx, item in enumerate(rows[:3])
+        ]
+    defaults = evidence[:3] or (["能力 A", "能力 B", "能力 C"] if lang == "zh" else ["Capability A", "Capability B", "Capability C"])
+    return [
+        {
+            "capability": item,
+            "current": "当前偏弱" if lang == "zh" else "Current gap",
+            "target": "优胜者水平" if lang == "zh" else "Winner level",
+            "gap": "优先补齐" if lang == "zh" else "Priority gap",
+        }
+        for item in defaults[:3]
+    ]
+
+
+def _option_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict[str, str]]:
+    rows = req.get("options", [])
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "name": str(item.get("name", item.get("label", f"Option {idx + 1}"))).strip(),
+                "value": str(item.get("value", item.get("benefit", "TBD"))).strip(),
+                "effort": str(item.get("effort", item.get("cost", "TBD"))).strip(),
+                "risk": str(item.get("risk", "TBD")).strip(),
+            }
+            for idx, item in enumerate(rows[:3])
+        ]
+    defaults = ["方案 A", "方案 B", "方案 C"] if lang == "zh" else ["Option A", "Option B", "Option C"]
+    return [
+        {
+            "name": defaults[idx],
+            "value": evidence[idx] if idx < len(evidence) else ("高回报" if lang == "zh" else "High return"),
+            "effort": "中等投入" if lang == "zh" else "Medium effort",
+            "risk": "可控风险" if lang == "zh" else "Controlled risk",
+        }
+        for idx in range(3)
+    ]
+
+
+def _initiative_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict[str, str]]:
+    rows = req.get("initiatives", [])
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "name": str(item.get("name", item.get("initiative", f"Initiative {idx + 1}"))).strip(),
+                "impact": str(item.get("impact", "TBD")).strip(),
+                "feasibility": str(item.get("feasibility", item.get("effort", "TBD"))).strip(),
+                "quadrant": str(item.get("quadrant", "Scale Bets")).strip(),
+            }
+            for idx, item in enumerate(rows[:4])
+        ]
+    quadrants = ["Quick Wins", "Scale Bets", "Capability Build", "Deprioritize"]
+    if lang == "zh":
+        quadrants = ["Quick Wins", "Scale Bets", "Capability Build", "Deprioritize"]
+    return [
+        {
+            "name": evidence[idx] if idx < len(evidence) else (f"动作 {idx + 1}" if lang == "zh" else f"Initiative {idx + 1}"),
+            "impact": "高" if lang == "zh" else "High",
+            "feasibility": "中" if lang == "zh" else "Medium",
+            "quadrant": quadrants[idx],
+        }
+        for idx in range(4)
+    ]
+
+
+def _roadmap_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict[str, str]]:
+    rows = req.get("roadmap", [])
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "wave": str(item.get("wave", f"Wave {idx + 1}")).strip(),
+                "timing": str(item.get("timing", item.get("when", "TBD"))).strip(),
+                "focus": str(item.get("focus", item.get("outcome", "TBD"))).strip(),
+                "owner": str(item.get("owner", "Owner TBD")).strip(),
+            }
+            for idx, item in enumerate(rows[:3])
+        ]
+    timings = ["0-30 天", "31-90 天", "季度扩展"] if lang == "zh" else ["0-30 days", "31-90 days", "Quarter scale"]
+    return [
+        {
+            "wave": f"Wave {idx + 1}",
+            "timing": timings[idx],
+            "focus": evidence[idx] if idx < len(evidence) else ("关键里程碑" if lang == "zh" else "Key milestone"),
+            "owner": "业务 owner" if lang == "zh" else "Business owner",
+        }
+        for idx in range(3)
+    ]
+
+
+def _risk_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict[str, str]]:
+    rows = req.get("risks", [])
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "risk": str(item.get("risk", item.get("name", f"Risk {idx + 1}"))).strip(),
+                "indicator": str(item.get("indicator", item.get("signal", "TBD"))).strip(),
+                "mitigation": str(item.get("mitigation", "TBD")).strip(),
+                "owner": str(item.get("owner", "Owner TBD")).strip(),
+            }
+            for idx, item in enumerate(rows[:3])
+        ]
+    return [
+        {
+            "risk": evidence[idx] if idx < len(evidence) else ("执行偏航" if lang == "zh" else "Execution drift"),
+            "indicator": "周度领先指标" if lang == "zh" else "Weekly leading indicator",
+            "mitigation": "双周治理校准" if lang == "zh" else "Bi-weekly governance reset",
+            "owner": "PMO / BU" if lang == "zh" else "PMO / BU",
+        }
+        for idx in range(3)
+    ]
+
+
+def _decision_rows(req: Dict[str, Any], evidence: List[str], lang: str) -> List[Dict[str, str]]:
+    rows = req.get("decision_items", [])
+    if isinstance(rows, list) and rows:
+        return [
+            {
+                "ask": str(item.get("ask", item.get("name", f"Decision {idx + 1}"))).strip(),
+                "impact": str(item.get("impact", "TBD")).strip(),
+                "timing": str(item.get("timing", item.get("when", "Immediate"))).strip(),
+            }
+            for idx, item in enumerate(rows[:3])
+        ]
+    return [
+        {
+            "ask": evidence[idx] if idx < len(evidence) else ("批准优先级" if lang == "zh" else "Approve priority"),
+            "impact": "释放资源" if lang == "zh" else "Unlock resources",
+            "timing": "本周" if lang == "zh" else "This week",
+        }
+        for idx in range(3)
+    ]
+
+
+def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: str) -> Dict[str, Any]:
+    layout = str(slide.get("layout", ""))
+    evidence = list(slide.get("evidence_needed", []))
+    if layout == "cover_signal":
+        return {
+            "kind": "cover_signal",
+            "hero_metrics": _metric_value_rows(req, lang)[:3],
+            "decision_bar": str(req.get("decision_ask", "")),
+            "review_prompt": "先看结论是否够硬，再看指标是否支撑" if lang == "zh" else "Validate verdict first, then confirm metrics support it",
+        }
+    if layout == "executive_summary":
+        metrics = _metric_value_rows(req, lang)
+        return {
+            "kind": "executive_summary",
+            "cards": [
+                {
+                    "title": "Core Judgment",
+                    "headline": str(slide.get("so_what", "")),
+                    "proof": evidence[0] if evidence else ("关键证据待补充" if lang == "zh" else "Proof pending"),
+                    "action": str(slide.get("decision_link", "")),
+                },
+                {
+                    "title": "Signal Metric",
+                    "headline": metrics[0]["label"] if metrics else "",
+                    "proof": metrics[0]["value"] if metrics else "",
+                    "action": metrics[0]["context"] if metrics else "",
+                },
+                {
+                    "title": "Next Move",
+                    "headline": str(req.get("decision_ask", "")),
+                    "proof": evidence[1] if len(evidence) > 1 else ("补一条管理层最关心的数据" if lang == "zh" else "Add the proof leadership will challenge"),
+                    "action": str(req.get("objective", "")),
+                },
+            ],
+        }
+    if layout == "situation_snapshot":
+        return {
+            "kind": "situation_snapshot",
+            "callouts": [
+                {"label": row["label"], "value": row["value"], "context": row["context"]}
+                for row in _metric_value_rows(req, lang)[:3]
+            ],
+            "pressure_points": evidence[:3],
+        }
+    if layout == "issue_tree":
+        roots = evidence[:3] or (["资源配置", "能力短板", "治理节奏"] if lang == "zh" else ["Allocation", "Capability", "Governance"])
+        return {
+            "kind": "issue_tree",
+            "branches": [
+                {"name": root, "detail": f"{root} -> {slide.get('decision_link', '')}"}
+                for root in roots[:3]
+            ],
+        }
+    if layout == "benchmark_matrix":
+        return {"kind": "benchmark_matrix", "rows": _benchmark_rows(req, evidence, lang)}
+    if layout == "strategic_options":
+        return {"kind": "strategic_options", "options": _option_rows(req, evidence, lang)}
+    if layout == "initiative_portfolio":
+        initiatives = _initiative_rows(req, evidence, lang)
+        quadrants = ["Quick Wins", "Scale Bets", "Capability Build", "Deprioritize"]
+        return {
+            "kind": "initiative_portfolio",
+            "quadrants": [
+                {
+                    "name": quadrant,
+                    "items": [item["name"] for item in initiatives if item["quadrant"] == quadrant][:2],
+                }
+                for quadrant in quadrants
+            ],
+        }
+    if layout == "roadmap_track":
+        return {"kind": "roadmap_track", "waves": _roadmap_rows(req, evidence, lang)}
+    if layout == "risk_control":
+        return {"kind": "risk_control", "risks": _risk_rows(req, evidence, lang)}
+    if layout == "decision_ask":
+        return {"kind": "decision_ask", "items": _decision_rows(req, evidence, lang)}
+    if layout == "appendix_evidence":
+        return {
+            "kind": "appendix_evidence",
+            "sources": [
+                {"label": item, "status": "ready" if idx == 0 else "verify"}
+                for idx, item in enumerate(evidence[:4])
+            ],
+        }
+    if layout == "metric_deep_dive":
+        metrics = _metric_value_rows(req, lang)
+        return {
+            "kind": "metric_deep_dive",
+            "focus_metric": metrics[0] if metrics else {},
+            "proof_bullets": evidence[:3],
+        }
+    return {
+        "kind": "generic",
+        "proof_bullets": evidence[:3],
     }
 
 
@@ -520,6 +799,12 @@ def _build_slides(req: Dict[str, Any], lang: str, catalog: Dict[str, Any]) -> Li
                 },
             }
         )
+        slides[-1]["visual_payload"] = _visual_payload_for_slide(slides[-1], req, lang)
+        slides[-1]["pptx_render_hints"] = {
+            "variant": layout_name,
+            "content_priority": "high" if slides[-1]["section"] in {"Executive Summary", "Decision Ask", "Benchmark", "Roadmap"} else "standard",
+            "review_focus": slides[-1]["visual_payload"].get("kind", layout_name),
+        }
     return slides
 
 
@@ -527,6 +812,11 @@ def _quality_review(slides: List[Dict[str, Any]], req: Dict[str, Any], storyline
     total = max(len(slides), 1)
     assertion_titles = sum(1 for slide in slides if str(slide.get("title_assertion", "")).strip())
     evidence_rich = sum(1 for slide in slides if len(slide.get("evidence_needed", [])) >= 2)
+    visual_contract = sum(
+        1
+        for slide in slides
+        if isinstance(slide.get("visual_payload", {}), dict) and str(slide.get("visual_payload", {}).get("kind", "")).strip()
+    )
     sections = {str(slide.get("section", "")).strip() for slide in slides if str(slide.get("section", "")).strip()}
     layout_variety = len({str(slide.get("layout", "")).strip() for slide in slides if str(slide.get("layout", "")).strip()})
     density_flags = []
@@ -568,13 +858,33 @@ def _quality_review(slides: List[Dict[str, Any]], req: Dict[str, Any], storyline
             2,
         ),
     )
+    asset_completeness = min(
+        1.0,
+        round(
+            sum(
+                1
+                for slide in slides
+                if len(slide.get("designer_handoff", {}).get("asset_requests", [])) >= 2
+            )
+            / total,
+            2,
+        ),
+    )
+    pptx_readiness = (
+        "native-export-ready"
+        if visual_contract == total and evidence_rich >= max(total - 2, 1)
+        else "review-html-before-export"
+    )
     return {
         "consulting_score": score,
         "assertion_title_coverage": round(assertion_titles / total, 2),
         "evidence_coverage": round(evidence_rich / total, 2),
+        "visual_contract_coverage": round(visual_contract / total, 2),
+        "asset_completeness_score": asset_completeness,
         "story_continuity_score": story_continuity,
         "visual_variety_score": visual_variety,
         "decision_pressure_score": decision_pressure,
+        "pptx_readiness": pptx_readiness,
         "storyline_blocks": len(storyline),
         "density_flags": density_flags,
         "cheapness_risk_flags": cheapness_risk_flags,
@@ -593,6 +903,40 @@ def _quality_review(slides: List[Dict[str, Any]], req: Dict[str, Any], storyline
             "decision_ask": req["decision_ask"],
             "deliverable": req["deliverable"],
         },
+    }
+
+
+def _build_export_manifest(
+    payload: Dict[str, Any],
+    out_json: Path,
+    out_md: Path,
+    out_html: Path,
+    out_pptx: Path,
+) -> Dict[str, Any]:
+    slides = payload.get("slides", []) if isinstance(payload.get("slides", []), list) else []
+    layout_counts: Dict[str, int] = {}
+    for slide in slides:
+        layout = str(slide.get("layout", "generic")).strip() or "generic"
+        layout_counts[layout] = layout_counts.get(layout, 0) + 1
+    return {
+        "primary_review_asset": str(out_html),
+        "native_pptx_asset": str(out_pptx),
+        "assets": [
+            {"type": "json", "path": str(out_json)},
+            {"type": "markdown", "path": str(out_md)},
+            {"type": "html_preview", "path": str(out_html)},
+            {"type": "native_pptx", "path": str(out_pptx)},
+        ],
+        "layout_counts": layout_counts,
+        "visual_payload_coverage": round(
+            sum(1 for slide in slides if isinstance(slide.get("visual_payload", {}), dict)) / max(len(slides), 1),
+            2,
+        ),
+        "export_sequence": [
+            "Review premium HTML for hierarchy and cheapness risk",
+            "Close evidence gaps and confirm owners",
+            "Open native PPTX for final business-number substitution",
+        ],
     }
 
 
@@ -700,12 +1044,25 @@ def _markdown_report(req: Dict[str, Any], payload: Dict[str, Any]) -> str:
             f"- consulting_score: {review['consulting_score']}",
             f"- assertion_title_coverage: {review['assertion_title_coverage']}",
             f"- evidence_coverage: {review['evidence_coverage']}",
+            f"- visual_contract_coverage: {review['visual_contract_coverage']}",
+            f"- asset_completeness_score: {review['asset_completeness_score']}",
             f"- story_continuity_score: {review['story_continuity_score']}",
             f"- visual_variety_score: {review['visual_variety_score']}",
             f"- decision_pressure_score: {review['decision_pressure_score']}",
             f"- readiness: {review['readiness']}",
+            f"- pptx_readiness: {review['pptx_readiness']}",
         ]
     )
+    export_manifest = payload.get("export_manifest", {}) if isinstance(payload.get("export_manifest", {}), dict) else {}
+    if export_manifest:
+        lines.extend(["", "## Export Manifest", ""])
+        lines.extend(
+            [
+                f"- primary_review_asset: {export_manifest.get('primary_review_asset', '')}",
+                f"- native_pptx_asset: {export_manifest.get('native_pptx_asset', '')}",
+                f"- visual_payload_coverage: {export_manifest.get('visual_payload_coverage', '')}",
+            ]
+        )
     if review["cheapness_risk_flags"]:
         lines.extend(["", "### Cheapness Risks", ""])
         lines.extend(f"- {item}" for item in review["cheapness_risk_flags"])
@@ -721,6 +1078,7 @@ def _markdown_report(req: Dict[str, Any], payload: Dict[str, Any]) -> str:
                 f"- evidence_needed: {', '.join(slide['evidence_needed'])}",
                 f"- visual_brief: {slide['visual_brief']}",
                 f"- primary_visual: {slide['designer_handoff']['primary_visual']}",
+                f"- visual_payload_kind: {slide.get('visual_payload', {}).get('kind', '')}",
                 "",
             ]
         )
@@ -797,11 +1155,12 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     out_md = out_root / f"deck_spec_{ts}.md"
     out_html = out_root / f"deck_preview_{ts}.html"
     out_pptx = out_root / f"deck_native_{ts}.pptx"
+    payload["export_manifest"] = _build_export_manifest(payload, out_json, out_md, out_html, out_pptx)
 
-    out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    out_md.write_text(_markdown_report(req, payload), encoding="utf-8")
     render_deck_html(payload, out_html)
     render_deck_pptx(payload, out_pptx)
+    out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_md.write_text(_markdown_report(req, payload), encoding="utf-8")
 
     result = {
         "ok": True,
@@ -815,6 +1174,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "reference_digest": payload["reference_digest"],
         "design_handoff": design_handoff,
         "slides": slides,
+        "export_manifest": payload["export_manifest"],
         "quality_score": round(float(quality_review["consulting_score"]) / 100.0, 2),
         "json_path": str(out_json),
         "md_path": str(out_md),
