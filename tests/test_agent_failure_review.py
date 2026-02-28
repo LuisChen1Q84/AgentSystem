@@ -98,6 +98,8 @@ class AgentFailureReviewTest(unittest.TestCase):
             self.assertEqual(report["risk_level_top"][0]["risk_level"], "high")
             self.assertIn("evidence", report["repair_actions"][0])
             self.assertTrue(report["repair_actions"][0]["evidence"]["sample_run_ids"])
+            self.assertGreater(report["repair_actions"][0]["priority_score"], 0)
+            self.assertEqual(report["repair_actions"][0]["rank"], 1)
 
             files = write_failure_review_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())

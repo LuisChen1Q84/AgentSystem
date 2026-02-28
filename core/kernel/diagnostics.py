@@ -147,10 +147,12 @@ def _repair_governance_summary(data_dir: Path, limit: int = 20) -> Dict[str, Any
     backup_dir = data_dir / "repair_backups"
     report = list_repair_snapshots(backup_dir=backup_dir, limit=max(1, int(limit)))
     rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
+    activity = report.get("activity", {}) if isinstance(report.get("activity", {}), dict) else {}
     return {
         "backup_dir": str(backup_dir),
         "count": int(report.get("count", 0) or 0),
         "lifecycle": dict(report.get("summary", {})) if isinstance(report.get("summary", {}), dict) else {},
+        "activity": activity,
         "recent_rows": rows[:5],
         "journal_file": str(report.get("journal_file", "")),
     }
@@ -242,6 +244,9 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "repair_approved": int(repair_governance.get("lifecycle", {}).get("approved", 0) or 0),
         "repair_applied": int(repair_governance.get("lifecycle", {}).get("applied", 0) or 0),
         "repair_rolled_back": int(repair_governance.get("lifecycle", {}).get("rolled_back", 0) or 0),
+        "repair_last_approved_at": str(repair_governance.get("activity", {}).get("last_approved", {}).get("ts", "")),
+        "repair_last_applied_at": str(repair_governance.get("activity", {}).get("last_applied", {}).get("ts", "")),
+        "repair_last_rolled_back_at": str(repair_governance.get("activity", {}).get("last_rolled_back", {}).get("ts", "")),
     }
 
     report = {
@@ -302,6 +307,9 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
         f"- approved: {report.get('repair_governance', {}).get('lifecycle', {}).get('approved', 0)}",
         f"- applied: {report.get('repair_governance', {}).get('lifecycle', {}).get('applied', 0)}",
         f"- rolled_back: {report.get('repair_governance', {}).get('lifecycle', {}).get('rolled_back', 0)}",
+        f"- last_approved: {report.get('repair_governance', {}).get('activity', {}).get('last_approved', {}).get('ts', '')} | snapshot={report.get('repair_governance', {}).get('activity', {}).get('last_approved', {}).get('snapshot_id', '')}",
+        f"- last_applied: {report.get('repair_governance', {}).get('activity', {}).get('last_applied', {}).get('ts', '')} | snapshot={report.get('repair_governance', {}).get('activity', {}).get('last_applied', {}).get('snapshot_id', '')}",
+        f"- last_rolled_back: {report.get('repair_governance', {}).get('activity', {}).get('last_rolled_back', {}).get('ts', '')} | snapshot={report.get('repair_governance', {}).get('activity', {}).get('last_rolled_back', {}).get('snapshot_id', '')}",
         "",
         "## Recommendations",
         "",
@@ -348,6 +356,16 @@ def render_dashboard_html(report: Dict[str, Any]) -> str:
         f"<li>{label}: {repair_gov.get(key, 0)}</li>"
         for key, label in (("planned", "Planned"), ("approved", "Approved"), ("applied", "Applied"), ("rolled_back", "Rolled Back"))
     ) or "<li>none</li>"
+    repair_activity = report.get("repair_governance", {}).get("activity", {}) if isinstance(report.get("repair_governance", {}), dict) else {}
+    repair_activity_html = "".join(
+        f"<li>{label}: {record.get('ts','')} | {record.get('snapshot_id','')}</li>"
+        for key, label, record in (
+            ("last_approved", "Last Approved", repair_activity.get("last_approved", {}) if isinstance(repair_activity.get("last_approved", {}), dict) else {}),
+            ("last_applied", "Last Applied", repair_activity.get("last_applied", {}) if isinstance(repair_activity.get("last_applied", {}), dict) else {}),
+            ("last_rolled_back", "Last Rolled Back", repair_activity.get("last_rolled_back", {}) if isinstance(repair_activity.get("last_rolled_back", {}), dict) else {}),
+        )
+        if record
+    ) or "<li>none</li>"
     fail_html = "".join(
         f"<li>{x.get('ts','')} | {x.get('task_kind','')} | {x.get('selected_strategy','')}</li>"
         for x in report.get("recent_failures", [])
@@ -366,7 +384,7 @@ body {{ margin:0; font-family:"IBM Plex Sans","Noto Sans SC",sans-serif; backgro
 .panel {{ background:var(--card); border-radius:16px; padding:16px; margin-top:14px; box-shadow:0 8px 24px rgba(16,33,22,.08); }}
 </style></head><body><div class="wrap"><h1>Agent Dashboard</h1><p>{report.get('as_of','')}</p><div class="grid">{card_html}</div>
 <div class="panel"><h2>Recommendations</h2><ul>{rec_html}</ul></div>
-<div class="panel"><h2>Repair Governance</h2><ul>{repair_html}</ul></div>
+<div class="panel"><h2>Repair Governance</h2><ul>{repair_html}</ul><h3>Recent Activity</h3><ul>{repair_activity_html}</ul></div>
 <div class="panel"><h2>Recent Failures</h2><ul>{fail_html}</ul></div>
 </div></body></html>'''
 

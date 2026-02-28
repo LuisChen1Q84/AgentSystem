@@ -155,6 +155,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertTrue(approval["receipt"]["event_id"])
             listed_after_approve = list_repair_snapshots(backup_dir=root / "repair_backups", limit=10)
             self.assertEqual(listed_after_approve["rows"][0]["lifecycle"], "approved")
+            self.assertEqual(listed_after_approve["activity"]["last_approved"]["snapshot_id"], plan["targets"]["snapshot_id"])
 
             applied = apply_repair_plan(plan)
             self.assertTrue(Path(applied["profile_overrides_file"]).exists())
@@ -172,6 +173,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(listed["rows"][0]["snapshot_id"], applied["snapshot_id"])
             self.assertEqual(listed["rows"][0]["lifecycle"], "applied")
             self.assertEqual(listed["summary"]["applied"], 1)
+            self.assertEqual(listed["activity"]["last_applied"]["snapshot_id"], applied["snapshot_id"])
 
             rollback = rollback_repair_plan(
                 backup_dir=root / "repair_backups",
@@ -185,6 +187,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             listed_after_rollback = list_repair_snapshots(backup_dir=root / "repair_backups", limit=10)
             self.assertEqual(listed_after_rollback["rows"][0]["lifecycle"], "rolled_back")
             self.assertEqual(listed_after_rollback["summary"]["rolled_back"], 1)
+            self.assertEqual(listed_after_rollback["activity"]["last_rolled_back"]["snapshot_id"], applied["snapshot_id"])
 
             second_plan = build_repair_apply_plan(
                 data_dir=root,

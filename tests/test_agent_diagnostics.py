@@ -110,6 +110,8 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertIn("run_objects", report["sources"])
             self.assertEqual(report["repair_governance"]["lifecycle"]["applied"], 1)
             self.assertEqual(report["summary"]["repair_applied"], 1)
+            self.assertEqual(report["summary"]["repair_last_applied_at"], "2026-02-28 10:02:00")
+            self.assertEqual(report["repair_governance"]["activity"]["last_applied"]["snapshot_id"], "repair_snapshot_20260228_100000")
 
             files = write_dashboard_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())

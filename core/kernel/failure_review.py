@@ -79,6 +79,43 @@ def _evidence_summary(
     }
 
 
+def _risk_count(evidence: Dict[str, Any], level: str) -> int:
+    risk_levels = evidence.get("risk_levels", {}) if isinstance(evidence.get("risk_levels", {}), dict) else {}
+    return int(risk_levels.get(level, 0) or 0)
+
+
+def _signal_count(evidence: Dict[str, Any], signal: str) -> int:
+    signals = evidence.get("policy_signals", {}) if isinstance(evidence.get("policy_signals", {}), dict) else {}
+    return int(signals.get(signal, 0) or 0)
+
+
+def _score_from_evidence(evidence: Dict[str, Any]) -> int:
+    failure_count = int(evidence.get("failure_count", 0) or 0)
+    avg_quality = float(evidence.get("avg_quality_score", 0.0) or 0.0)
+    missing_evidence = int(evidence.get("missing_evidence_objects", 0) or 0)
+    missing_delivery = int(evidence.get("missing_delivery_objects", 0) or 0)
+    score = 0
+    score += failure_count * 10
+    score += _risk_count(evidence, "high") * 6
+    score += _risk_count(evidence, "medium") * 3
+    score += _signal_count(evidence, "low_selection_confidence") * 5
+    score += _signal_count(evidence, "deep_fallback_chain") * 5
+    score += _signal_count(evidence, "clarification_heavy") * 4
+    score += _signal_count(evidence, "manual_takeover") * 4
+    score += missing_evidence * 3
+    score += missing_delivery * 2
+    score += int(round(max(0.0, 1.0 - avg_quality) * 10))
+    return score
+
+
+def _priority_from_score(score: int) -> str:
+    if score >= 30:
+        return "high"
+    if score >= 16:
+        return "medium"
+    return "low"
+
+
 def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> Dict[str, Any]:
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     evidence_rows = _load_jsonl(data_dir / "agent_evidence_objects.jsonl")
@@ -282,24 +319,48 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
                 )
 
     if signal_counter.get("manual_takeover", 0) >= 2:
+        evidence = _evidence_summary(
+            count=signal_counter.get("manual_takeover", 0),
+            risk_levels=risk_counter,
+            signals=signal_counter,
+            qualities=[float(x.get("quality_score", 0.0) or 0.0) for x in details if isinstance(x, dict)],
+            missing_evidence=evidence_missing,
+            missing_delivery=delivery_missing,
+            run_ids=[str(x.get("run_id", "")) for x in details if isinstance(x, dict)],
+        )
         repair_actions.append(
-            _repair_action(
-                scope="policy",
-                target="manual_takeover",
-                action="Tighten strict-mode allow-list and require stronger evidence before autonomous execution.",
-                reason="Manual takeover appears repeatedly across failures.",
-                priority="high",
-            )
+            {
+                **_repair_action(
+                    scope="policy",
+                    target="manual_takeover",
+                    action="Tighten strict-mode allow-list and require stronger evidence before autonomous execution.",
+                    reason=f"Manual takeover appears repeatedly across failures; high-risk failures={_risk_count(evidence, 'high')}.",
+                    priority="high",
+                ),
+                "evidence": evidence,
+            }
         )
     if pending_feedback > 0:
+        evidence = {
+            "failure_count": int(pending_feedback),
+            "avg_quality_score": 0.0,
+            "risk_levels": _counter_dict(risk_counter, limit=3),
+            "policy_signals": {"feedback_pending": int(pending_feedback)},
+            "missing_evidence_objects": int(evidence_missing),
+            "missing_delivery_objects": int(delivery_missing),
+            "sample_run_ids": [str(x.get("run_id", "")) for x in details if isinstance(x, dict) and bool(x.get("feedback_pending", False))][:3],
+        }
         repair_actions.append(
-            _repair_action(
-                scope="feedback",
-                target="pending_failures",
-                action="Request labels for failed runs before the next policy tuning cycle.",
-                reason=f"{pending_feedback} failed runs are still missing feedback.",
-                priority="medium",
-            )
+            {
+                **_repair_action(
+                    scope="feedback",
+                    target="pending_failures",
+                    action="Request labels for failed runs before the next policy tuning cycle.",
+                    reason=f"{pending_feedback} failed runs are still missing feedback.",
+                    priority="medium",
+                ),
+                "evidence": evidence,
+            }
         )
 
     deduped_repairs: List[Dict[str, Any]] = []
@@ -309,7 +370,20 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         if key in seen_repairs:
             continue
         seen_repairs.add(key)
+        evidence = item.get("evidence", {}) if isinstance(item.get("evidence", {}), dict) else {}
+        score = _score_from_evidence(evidence)
+        item["priority_score"] = score
+        item["priority"] = _priority_from_score(score)
         deduped_repairs.append(item)
+    deduped_repairs.sort(
+        key=lambda item: (
+            -int(item.get("priority_score", 0) or 0),
+            str(item.get("scope", "")),
+            str(item.get("target", "")),
+        )
+    )
+    for idx, item in enumerate(deduped_repairs, start=1):
+        item["rank"] = idx
     repair_actions = deduped_repairs[:8]
 
     return {
@@ -360,7 +434,7 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
     if report.get("repair_actions"):
         for item in report["repair_actions"]:
             lines.append(
-                f"- [{item.get('priority', '')}] {item.get('scope', '')}:{item.get('target', '')} | {item.get('action', '')} | reason={item.get('reason', '')}"
+                f"- [#{item.get('rank', 0)}|{item.get('priority', '')}|score={item.get('priority_score', 0)}] {item.get('scope', '')}:{item.get('target', '')} | {item.get('action', '')} | reason={item.get('reason', '')}"
             )
     else:
         lines.append("- none")

@@ -204,6 +204,13 @@ def _latest_event_map(backup_dir: Path) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def _latest_event_record(rows: List[Dict[str, Any]], event: str) -> Dict[str, Any]:
+    for row in reversed(rows):
+        if str(row.get("event", "")).strip() == event:
+            return row
+    return {}
+
+
 def _changed_components(preview_diff: Dict[str, Any]) -> List[str]:
     profile_rows = preview_diff.get("profile_overrides", []) if isinstance(preview_diff.get("profile_overrides", []), list) else []
     strategy_rows = preview_diff.get("strategy_overrides", []) if isinstance(preview_diff.get("strategy_overrides", []), list) else []
@@ -465,6 +472,7 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
 
 def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any]:
     backup_dir = Path(backup_dir)
+    journal_rows = _approval_rows(backup_dir)
     approvals = _approval_receipt_map(backup_dir)
     latest_events = _latest_event_map(backup_dir)
     plan_map: Dict[str, Dict[str, Any]] = {}
@@ -547,6 +555,11 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
         "count": len(rows),
         "journal_file": str(_journal_path(backup_dir)),
         "summary": lifecycle_counts,
+        "activity": {
+            "last_approved": _latest_event_record(journal_rows, "approved"),
+            "last_applied": _latest_event_record(journal_rows, "applied"),
+            "last_rolled_back": _latest_event_record(journal_rows, "rolled_back"),
+        },
     }
 
 
