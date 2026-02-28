@@ -23,6 +23,12 @@ from scripts.agent_os_observability import aggregate
 from core.kernel.memory_store import load_memory, memory_snapshot
 from core.kernel.policy_tuner import tune_policy
 from core.kernel.repair_apply import list_repair_snapshots
+from core.kernel.repair_presets import build_repair_preset_inventory
+
+
+def _local_presets_file(data_dir: Path) -> Path | None:
+    path = data_dir / "selector_presets.json"
+    return path if path.exists() else None
 
 
 
@@ -162,6 +168,12 @@ def _repair_governance_summary(data_dir: Path, limit: int = 20) -> Dict[str, Any
                 "change_count": int(row.get("change_count", 0) or 0),
                 "changed_components": list(row.get("changed_components", [])) if isinstance(row.get("changed_components", []), list) else [],
                 "selection": dict(row.get("selection", {})) if isinstance(row.get("selection", {}), dict) else {},
+                "auto_choice_card": (
+                    dict(row.get("selection", {}).get("selector_auto_choice_card", {}))
+                    if isinstance(row.get("selection", {}), dict)
+                    and isinstance(row.get("selection", {}).get("selector_auto_choice_card", {}), dict)
+                    else {}
+                ),
                 "compare_base_snapshot_id": compare_base_snapshot_id,
                 "compare_command": (
                     f"python3 scripts/agent_studio.py --data-dir {data_dir} repair-compare --snapshot-id {snapshot_id} --base-snapshot-id {compare_base_snapshot_id}"
@@ -251,6 +263,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     scoped_evidence_rows = [row for row in evidence_rows if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
     risk_dist = Counter(str(r.get("risk_level", "unknown")) for r in scoped_evidence_rows if str(r.get("risk_level", "")).strip())
     repair_governance = _repair_governance_summary(data_dir)
+    repair_preset_inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=_local_presets_file(data_dir))
 
     summary = {
         "window_days": max(1, int(days)),
@@ -281,6 +294,11 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "evaluation": eval_summary,
         "object_coverage": object_coverage,
         "repair_governance": repair_governance,
+        "repair_preset_effectiveness": {
+            "count": int(repair_preset_inventory.get("count", 0) or 0),
+            "top_presets": list(repair_preset_inventory.get("items", []))[:5],
+            "dimensions": dict(repair_preset_inventory.get("dimensions", {})) if isinstance(repair_preset_inventory.get("dimensions", {}), dict) else {},
+        },
         "risk_level_top": [{"risk_level": k, "count": v} for k, v in risk_dist.most_common(5)],
         "memory_snapshot": mem_snapshot,
         "policy_tuning": policy_tuning,
@@ -310,6 +328,8 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
     repair_governance = report.get("repair_governance", {}) if isinstance(report.get("repair_governance", {}), dict) else {}
     repair_activity = repair_governance.get("activity", {}) if isinstance(repair_governance.get("activity", {}), dict) else {}
     governance_stream = repair_governance.get("stream", []) if isinstance(repair_governance.get("stream", []), list) else []
+    preset_effectiveness = report.get("repair_preset_effectiveness", {}) if isinstance(report.get("repair_preset_effectiveness", {}), dict) else {}
+    preset_dimensions = preset_effectiveness.get("dimensions", {}) if isinstance(preset_effectiveness.get("dimensions", {}), dict) else {}
     lines = [
         f"# Agent Dashboard | {report.get('as_of','')}",
         "",
@@ -355,8 +375,37 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
             lines.append(
                 f"- {row.get('ts','')} | {row.get('snapshot_id','')} | lifecycle={row.get('lifecycle','')} | changes={row.get('change_count',0)} | compare_base={row.get('compare_base_snapshot_id','')} | compare={row.get('compare_command','')}"
             )
+            choice = row.get("auto_choice_card", {}) if isinstance(row.get("auto_choice_card", {}), dict) else {}
+            if choice:
+                lines.append(
+                    f"  auto_choice: {choice.get('preset_name','')} | total={choice.get('score_breakdown', {}).get('total_score', 0) if isinstance(choice.get('score_breakdown', {}), dict) else 0} | explanation={choice.get('selection_explanation','')}"
+                )
     else:
         lines.append("- none")
+    lines += ["", "## Repair Preset Effectiveness", ""]
+    top_presets = preset_effectiveness.get("top_presets", []) if isinstance(preset_effectiveness.get("top_presets", []), list) else []
+    if top_presets:
+        for item in top_presets:
+            if not isinstance(item, dict):
+                continue
+            observed = item.get("observed_outcomes", {}) if isinstance(item.get("observed_outcomes", {}), dict) else {}
+            lines.append(
+                f"- {item.get('preset_name','')} | score={item.get('effectiveness_score',0)} | trend_quality_delta={observed.get('recent_avg_quality_delta',0.0)} | trend_success_delta={observed.get('recent_avg_success_delta',0.0)}"
+            )
+    else:
+        lines.append("- none")
+    for section, label in (("strategy_top", "Top Strategy Dimensions"), ("task_kind_top", "Top Task Kinds"), ("profile_top", "Top Profiles")):
+        lines += ["", f"### {label}", ""]
+        rows = preset_dimensions.get(section, []) if isinstance(preset_dimensions.get(section, []), list) else []
+        if rows:
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                lines.append(
+                    f"- {row.get('name','')} | avg_effectiveness={row.get('avg_effectiveness_score',0.0)} | avg_quality_delta={row.get('avg_recent_quality_delta',0.0)} | avg_success_delta={row.get('avg_recent_success_delta',0.0)} | presets={','.join(row.get('example_presets', []))}"
+                )
+        else:
+            lines.append("- none")
     lines += ["", "## Recommendations", ""]
     lines += [f"- {x}" for x in report.get("recommendations", [])]
     lines += ["", "## Top Strategies", "", "| strategy | runs |", "|---|---:|"]
@@ -416,15 +465,39 @@ def render_dashboard_html(report: Dict[str, Any]) -> str:
         if isinstance(row, dict)
     ) or "<li>none</li>"
     repair_stream = report.get("repair_governance", {}).get("stream", []) if isinstance(report.get("repair_governance", {}), dict) else []
-    repair_stream_html = "".join(
-        (
+    preset_effectiveness = report.get("repair_preset_effectiveness", {}) if isinstance(report.get("repair_preset_effectiveness", {}), dict) else {}
+    preset_dimensions = preset_effectiveness.get("dimensions", {}) if isinstance(preset_effectiveness.get("dimensions", {}), dict) else {}
+    repair_stream_rows: List[str] = []
+    for row in repair_stream:
+        if not isinstance(row, dict):
+            continue
+        line = (
             f"<li>{row.get('ts','')} | {row.get('snapshot_id','')} | {row.get('lifecycle','')} | changes={row.get('change_count',0)}"
             f"{' | compare=' + row.get('compare_base_snapshot_id','') if row.get('compare_base_snapshot_id','') else ''}"
             f"{' | command=' + row.get('compare_command','') if row.get('compare_command','') else ''}</li>"
         )
-        for row in repair_stream
+        repair_stream_rows.append(line)
+        choice = row.get("auto_choice_card", {}) if isinstance(row.get("auto_choice_card", {}), dict) else {}
+        if choice:
+            repair_stream_rows.append(
+                f"<li class='sub'>auto_choice={choice.get('preset_name','')} | {choice.get('selection_explanation','')}</li>"
+            )
+    repair_stream_html = "".join(repair_stream_rows) or "<li>none</li>"
+    preset_html = "".join(
+        f"<li>{row.get('preset_name','')} | score={row.get('effectiveness_score',0)} | trendQ={row.get('observed_outcomes', {}).get('recent_avg_quality_delta',0.0)} | trendS={row.get('observed_outcomes', {}).get('recent_avg_success_delta',0.0)}</li>"
+        for row in preset_effectiveness.get("top_presets", [])
         if isinstance(row, dict)
     ) or "<li>none</li>"
+    dimension_sections = []
+    for section, label in (("strategy_top", "Top Strategy Dimensions"), ("task_kind_top", "Top Task Kinds"), ("profile_top", "Top Profiles")):
+        rows = preset_dimensions.get(section, []) if isinstance(preset_dimensions.get(section, []), list) else []
+        rows_html = "".join(
+            f"<li>{row.get('name','')} | avg_effectiveness={row.get('avg_effectiveness_score',0.0)} | avg_quality_delta={row.get('avg_recent_quality_delta',0.0)} | avg_success_delta={row.get('avg_recent_success_delta',0.0)}</li>"
+            for row in rows
+            if isinstance(row, dict)
+        ) or "<li>none</li>"
+        dimension_sections.append(f"<h3>{label}</h3><ul>{rows_html}</ul>")
+    dimension_html = "".join(dimension_sections)
     fail_html = "".join(
         f"<li>{x.get('ts','')} | {x.get('task_kind','')} | {x.get('selected_strategy','')}</li>"
         for x in report.get("recent_failures", [])
@@ -444,6 +517,7 @@ body {{ margin:0; font-family:"IBM Plex Sans","Noto Sans SC",sans-serif; backgro
 </style></head><body><div class="wrap"><h1>Agent Dashboard</h1><p>{report.get('as_of','')}</p><div class="grid">{card_html}</div>
 <div class="panel"><h2>Recommendations</h2><ul>{rec_html}</ul></div>
 <div class="panel"><h2>Repair Governance</h2><ul>{repair_html}</ul><h3>Recent Activity</h3><ul>{repair_activity_html}</ul><h3>Recent Governance Events</h3><ul>{repair_recent_html}</ul><h3>Governance Stream</h3><ul>{repair_stream_html}</ul></div>
+<div class="panel"><h2>Repair Preset Effectiveness</h2><ul>{preset_html}</ul>{dimension_html}</div>
 <div class="panel"><h2>Recent Failures</h2><ul>{fail_html}</ul></div>
 </div></body></html>'''
 

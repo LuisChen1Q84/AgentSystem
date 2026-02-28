@@ -66,6 +66,22 @@ class AgentDiagnosticsTest(unittest.TestCase):
                 json.dumps({"run_id": "r1", "rating": 1, "ts": "2026-02-28 10:10:00"}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
+            (root / "selector_presets.json").write_text(
+                json.dumps(
+                    {
+                        "presentation_recovery": {
+                            "scopes": ["task_kind"],
+                            "strategies": [],
+                            "task_kinds": ["presentation"],
+                            "exclude_scopes": ["feedback"],
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             repair_backups = root / "repair_backups"
             repair_backups.mkdir(parents=True, exist_ok=True)
             (repair_backups / "repair_plan_repair_snapshot_20260228_090000.json").write_text(
@@ -74,7 +90,11 @@ class AgentDiagnosticsTest(unittest.TestCase):
                         "ts": "2026-02-28 09:00:00",
                         "approval": {"required": True, "code": "old"},
                         "preview_diff": {"profile_overrides": [], "strategy_overrides": [{"path": "strict"}], "change_count": 1},
-                        "selection": {"selector": {"scopes": ["strategy"], "strategies": ["mckinsey-ppt"], "task_kinds": []}},
+                        "selection": {
+                            "selector_preset": "presentation_recovery",
+                            "selector": {"scopes": ["strategy"], "strategies": ["mckinsey-ppt"], "task_kinds": []},
+                            "selector_auto_choice_card": {"preset_name": "presentation_recovery", "selection_explanation": "matched_actions=1"},
+                        },
                         "targets": {
                             "snapshot_id": "repair_snapshot_20260228_090000",
                             "plan_json_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_090000.json"),
@@ -92,7 +112,11 @@ class AgentDiagnosticsTest(unittest.TestCase):
                         "ts": "2026-02-28 10:00:00",
                         "approval": {"required": True, "code": "abc"},
                         "preview_diff": {"profile_overrides": [{"path": "default_profile"}], "strategy_overrides": [], "change_count": 1},
-                        "selection": {"selector": {"scopes": ["task_kind"], "strategies": [], "task_kinds": ["presentation"]}},
+                        "selection": {
+                            "selector_preset": "presentation_recovery",
+                            "selector": {"scopes": ["task_kind"], "strategies": [], "task_kinds": ["presentation"]},
+                            "selector_auto_choice_card": {"preset_name": "presentation_recovery", "selection_explanation": "matched_actions=2"},
+                        },
                         "targets": {
                             "snapshot_id": "repair_snapshot_20260228_100000",
                             "plan_json_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_100000.json"),
@@ -144,6 +168,9 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertEqual(report["repair_governance"]["stream"][0]["compare_base_snapshot_id"], "repair_snapshot_20260228_090000")
             self.assertIn("repair-compare", report["repair_governance"]["stream"][0]["compare_command"])
             self.assertEqual(report["repair_governance"]["stream"][0]["selection"]["selector"]["task_kinds"], ["presentation"])
+            self.assertEqual(report["repair_governance"]["stream"][0]["auto_choice_card"]["preset_name"], "presentation_recovery")
+            self.assertEqual(report["repair_preset_effectiveness"]["count"], 1)
+            self.assertEqual(report["repair_preset_effectiveness"]["dimensions"]["task_kind_top"][0]["name"], "presentation")
 
             files = write_dashboard_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
@@ -151,6 +178,7 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertTrue(Path(files["html"]).exists())
             self.assertIn("Recent Governance Events", Path(files["md"]).read_text(encoding="utf-8"))
             self.assertIn("Governance Stream", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("Repair Preset Effectiveness", Path(files["md"]).read_text(encoding="utf-8"))
             self.assertIn("rolled_back", Path(files["html"]).read_text(encoding="utf-8"))
             self.assertIn("repair-compare", Path(files["html"]).read_text(encoding="utf-8"))
 

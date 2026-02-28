@@ -108,6 +108,54 @@ class AgentRunDiagnosticsTest(unittest.TestCase):
                 json.dumps({"run_id": "r1", "summary": "report handled via mcp-generalist"}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
+            (root / "selector_presets.json").write_text(
+                json.dumps(
+                    {
+                        "report_recovery": {
+                            "scopes": ["strategy", "task_kind"],
+                            "strategies": ["mcp-generalist"],
+                            "task_kinds": ["report"],
+                            "exclude_scopes": ["feedback"],
+                        }
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            repair_backups = root / "repair_backups"
+            repair_backups.mkdir(parents=True, exist_ok=True)
+            (repair_backups / "repair_plan_repair_snapshot_20260228_095500.json").write_text(
+                json.dumps(
+                    {
+                        "ts": "2026-02-28 09:55:00",
+                        "selection": {
+                            "selector_preset": "report_recovery",
+                            "selector": {
+                                "scopes": ["strategy", "task_kind"],
+                                "strategies": ["mcp-generalist"],
+                                "task_kinds": ["report"],
+                                "exclude_scopes": ["feedback"],
+                            },
+                            "selector_auto_choice_card": {"preset_name": "report_recovery", "selection_explanation": "matched_actions=1"},
+                        },
+                        "preview_diff": {"profile_overrides": [], "strategy_overrides": [{"path": "strict"}], "change_count": 1},
+                        "targets": {
+                            "snapshot_id": "repair_snapshot_20260228_095500",
+                            "plan_json_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_095500.json"),
+                            "plan_md_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_095500.md"),
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (repair_backups / "repair_snapshot_20260228_095500.json").write_text(
+                json.dumps({"snapshot_id": "repair_snapshot_20260228_095500", "ts": "2026-02-28 09:55:30"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
 
             report = build_run_diagnostic(data_dir=root, run_id="r1")
             self.assertEqual(report["selection"]["selected_strategy"], "mcp-generalist")
@@ -117,10 +165,15 @@ class AgentRunDiagnosticsTest(unittest.TestCase):
             self.assertEqual(report["request"]["text"], "生成周报框架")
             self.assertEqual(report["objects"]["run_object"]["run_id"], "r1")
             self.assertEqual(report["objects"]["evidence_object"]["risk_level"], "low")
+            self.assertEqual(report["repair_context"]["matched_snapshots"][0]["selector_preset"], "report_recovery")
+            self.assertEqual(report["repair_context"]["matched_snapshots"][0]["choice_card"]["preset_name"], "report_recovery")
+            self.assertEqual(report["repair_context"]["strategy_presets"][0]["preset_name"], "report_recovery")
 
             files = write_run_diagnostic_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())
+            self.assertIn("Repair Context", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("auto_choice:", Path(files["md"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

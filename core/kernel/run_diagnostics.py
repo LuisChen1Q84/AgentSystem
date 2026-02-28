@@ -53,6 +53,79 @@ def _find_latest(rows: List[Dict[str, Any]], run_id: str) -> Dict[str, Any]:
     return {}
 
 
+def _selector_match(selector: Dict[str, Any], strategy: str, task_kind: str) -> bool:
+    scopes = {str(x).strip() for x in selector.get("scopes", []) if str(x).strip()}
+    strategies = {str(x).strip() for x in selector.get("strategies", []) if str(x).strip()}
+    task_kinds = {str(x).strip() for x in selector.get("task_kinds", []) if str(x).strip()}
+    exclude_scopes = {str(x).strip() for x in selector.get("exclude_scopes", []) if str(x).strip()}
+    exclude_strategies = {str(x).strip() for x in selector.get("exclude_strategies", []) if str(x).strip()}
+    exclude_task_kinds = {str(x).strip() for x in selector.get("exclude_task_kinds", []) if str(x).strip()}
+    if "strategy" in exclude_scopes and strategy:
+        return False
+    if "task_kind" in exclude_scopes and task_kind:
+        return False
+    if strategy and strategy in exclude_strategies:
+        return False
+    if task_kind and task_kind in exclude_task_kinds:
+        return False
+    if "strategy" in scopes and strategies and strategy not in strategies:
+        return False
+    if "task_kind" in scopes and task_kinds and task_kind not in task_kinds:
+        return False
+    if not scopes and strategies and strategy not in strategies:
+        return False
+    if not scopes and task_kinds and task_kind not in task_kinds:
+        return False
+    return bool(strategy or task_kind)
+
+
+def _repair_context(data_dir: Path, strategy: str, task_kind: str) -> Dict[str, Any]:
+    from core.kernel.repair_apply import list_repair_snapshots
+    from core.kernel.repair_presets import build_repair_preset_inventory
+
+    presets_file = data_dir / "selector_presets.json"
+    report = list_repair_snapshots(backup_dir=data_dir / "repair_backups", limit=10)
+    rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
+    matched_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        selection = row.get("selection", {}) if isinstance(row.get("selection", {}), dict) else {}
+        selector = selection.get("selector", {}) if isinstance(selection.get("selector", {}), dict) else {}
+        if selector and _selector_match(selector, strategy, task_kind):
+            matched_rows.append(
+                {
+                    "snapshot_id": str(row.get("snapshot_id", "")),
+                    "ts": str(row.get("ts", "")),
+                    "lifecycle": str(row.get("lifecycle", "")),
+                    "selector_preset": str(selection.get("selector_preset", "")),
+                    "choice_card": (
+                        dict(selection.get("selector_auto_choice_card", {}))
+                        if isinstance(selection.get("selector_auto_choice_card", {}), dict)
+                        else {}
+                    ),
+                    "compare_base_snapshot_id": str(row.get("compare_base_snapshot_id", "")),
+                }
+            )
+    preset_inventory = build_repair_preset_inventory(data_dir=data_dir, presets_file=presets_file if presets_file.exists() else None)
+    preset_rows = preset_inventory.get("items", []) if isinstance(preset_inventory.get("items", []), list) else []
+    strategy_presets = []
+    task_kind_presets = []
+    for item in preset_rows:
+        if not isinstance(item, dict):
+            continue
+        selector = item.get("selector", {}) if isinstance(item.get("selector", {}), dict) else {}
+        if strategy and strategy in {str(x).strip() for x in selector.get("strategies", []) if str(x).strip()}:
+            strategy_presets.append(item)
+        if task_kind and task_kind in {str(x).strip() for x in selector.get("task_kinds", []) if str(x).strip()}:
+            task_kind_presets.append(item)
+    return {
+        "matched_snapshots": matched_rows[:3],
+        "strategy_presets": strategy_presets[:3],
+        "task_kind_presets": task_kind_presets[:3],
+    }
+
+
 def _payload_from_summary(run_row: Dict[str, Any], data_dir: Path) -> Dict[str, Any]:
     payload_path = Path(str(run_row.get("payload_path", "")).strip()) if str(run_row.get("payload_path", "")).strip() else None
     if payload_path and payload_path.exists():
@@ -144,6 +217,8 @@ def build_run_diagnostic(*, data_dir: Path, run_id: str) -> Dict[str, Any]:
     clarification = payload.get("clarification", {}) if isinstance(payload.get("clarification", {}), dict) else {}
     request = payload.get("request", {}) if isinstance(payload.get("request", {}), dict) else {}
     delivery_bundle = payload.get("delivery_bundle", {}) if isinstance(payload.get("delivery_bundle", {}), dict) else {}
+    strategy_name = str(selected.get("strategy", run_row.get("selected_strategy", ""))) if run_row or selected else ""
+    task_kind_name = str(run_row.get("task_kind", payload.get("task_kind", ""))) if run_row or payload else ""
 
     return {
         "run_id": run_id,
@@ -192,6 +267,7 @@ def build_run_diagnostic(*, data_dir: Path, run_id: str) -> Dict[str, Any]:
             "summary": str(delivery_row.get("summary", delivery_bundle.get("summary", ""))) if delivery_row or delivery_bundle else "",
             "artifacts": delivery_files,
         },
+        "repair_context": _repair_context(data_dir, strategy_name, task_kind_name),
         "objects": {
             "run_object": run_object_row,
             "evidence_object": evidence_row,
@@ -218,6 +294,7 @@ def render_run_diagnostic_md(report: Dict[str, Any]) -> str:
     evaluation = report.get("evaluation", {})
     feedback = report.get("feedback", {})
     delivery = report.get("delivery", {})
+    repair_context = report.get("repair_context", {}) if isinstance(report.get("repair_context", {}), dict) else {}
     objects = report.get("objects", {})
     lines = [
         f"# Agent Run Diagnostic | {report.get('run_id', '')}",
@@ -269,6 +346,9 @@ def render_run_diagnostic_md(report: Dict[str, Any]) -> str:
         "",
         f"- summary: {delivery.get('summary', '')}",
         "",
+        "## Repair Context",
+        "",
+        "",
         "## Objects",
         "",
         f"- run_object: {bool(objects.get('run_object', {}))}",
@@ -278,6 +358,25 @@ def render_run_diagnostic_md(report: Dict[str, Any]) -> str:
         "## Recommendations",
         "",
     ]
+    matched_snapshots = repair_context.get("matched_snapshots", []) if isinstance(repair_context.get("matched_snapshots", []), list) else []
+    strategy_presets = repair_context.get("strategy_presets", []) if isinstance(repair_context.get("strategy_presets", []), list) else []
+    task_kind_presets = repair_context.get("task_kind_presets", []) if isinstance(repair_context.get("task_kind_presets", []), list) else []
+    if matched_snapshots:
+        for row in matched_snapshots:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"- snapshot={row.get('snapshot_id','')} | lifecycle={row.get('lifecycle','')} | preset={row.get('selector_preset','')} | ts={row.get('ts','')}"
+            )
+            choice = row.get("choice_card", {}) if isinstance(row.get("choice_card", {}), dict) else {}
+            if choice:
+                lines.append(f"  auto_choice: {choice.get('preset_name','')} | {choice.get('selection_explanation','')}")
+    else:
+        lines.append("- matched_snapshots: none")
+    if strategy_presets:
+        lines.append(f"- strategy_presets: {', '.join(str(item.get('preset_name','')) for item in strategy_presets if isinstance(item, dict))}")
+    if task_kind_presets:
+        lines.append(f"- task_kind_presets: {', '.join(str(item.get('preset_name','')) for item in task_kind_presets if isinstance(item, dict))}")
     if evaluation.get("policy_recommendations"):
         lines += [f"- {item}" for item in evaluation["policy_recommendations"]]
     else:

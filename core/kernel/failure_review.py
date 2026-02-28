@@ -238,6 +238,12 @@ def _governance_history_for_action(data_dir: Path, action: Dict[str, Any]) -> Di
         "last_lifecycle": str(latest.get("lifecycle", "")),
         "last_snapshot_id": str(latest.get("snapshot_id", "")),
         "last_ts": str(latest.get("ts", "")),
+        "last_choice_card": (
+            dict(latest.get("selection", {}).get("selector_auto_choice_card", {}))
+            if isinstance(latest.get("selection", {}), dict)
+            and isinstance(latest.get("selection", {}).get("selector_auto_choice_card", {}), dict)
+            else {}
+        ),
         "last_compare_summary": compare_summary,
         "last_compare_conclusion": compare_conclusion,
         "recent_matches": [
@@ -523,11 +529,14 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         item["rank"] = idx
     repair_actions = deduped_repairs[:8]
     actions_with_governance_history = 0
+    actions_with_choice_cards = 0
     for item in repair_actions:
         history = _governance_history_for_action(data_dir, item)
         item["governance_history"] = history
         if int(history.get("match_count", 0) or 0) > 0:
             actions_with_governance_history += 1
+        if history.get("last_choice_card"):
+            actions_with_choice_cards += 1
 
     return {
         "as_of": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -539,6 +548,7 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
             "missing_evidence_objects": evidence_missing,
             "missing_delivery_objects": delivery_missing,
             "actions_with_governance_history": actions_with_governance_history,
+            "actions_with_choice_cards": actions_with_choice_cards,
         },
         "task_kind_top": [{"task_kind": k, "count": v} for k, v in task_counter.most_common(5)],
         "strategy_top": [{"strategy": k, "count": v} for k, v in strategy_counter.most_common(5)],
@@ -585,6 +595,11 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
                 lines.append(
                     f"  governance: matches={history.get('match_count', 0)} | last={history.get('last_lifecycle', '')} | snapshot={history.get('last_snapshot_id', '')} | ts={history.get('last_ts', '')}"
                 )
+                choice = history.get("last_choice_card", {}) if isinstance(history.get("last_choice_card", {}), dict) else {}
+                if choice:
+                    lines.append(
+                        f"  auto_choice: {choice.get('preset_name', '')} | explanation={choice.get('selection_explanation', '')}"
+                    )
                 if str(history.get("last_compare_conclusion", "")).strip():
                     lines.append(f"  compare: {history.get('last_compare_conclusion', '')}")
     else:

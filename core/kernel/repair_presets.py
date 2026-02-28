@@ -123,7 +123,20 @@ def _empty_observed_outcomes() -> Dict[str, Any]:
         "positive_window_ratio": 0.0,
         "latest_snapshot_id": "",
         "latest_lifecycle": "",
+        "profile_top": [],
+        "strategy_top": [],
+        "task_kind_top": [],
     }
+
+
+def _top_counter(rows: List[Dict[str, Any]], field: str, *, limit: int = 3) -> List[Dict[str, Any]]:
+    counter: Dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(field, "")).strip()
+        if not value:
+            continue
+        counter[value] = counter.get(value, 0) + 1
+    return [{"name": key, "count": value} for key, value in sorted(counter.items(), key=lambda item: (-item[1], item[0]))[: max(1, int(limit))]]
 
 
 def default_selector_presets_file() -> Path:
@@ -398,6 +411,9 @@ def _observed_outcome_metrics(
         enriched = {
             "ok": bool(row.get("ok", False)),
             "quality_score": float(eval_row.get("quality_score", 0.0) or 0.0),
+            "profile": str(row.get("profile", "")).strip(),
+            "selected_strategy": str(row.get("selected_strategy", "")).strip(),
+            "task_kind": str(row.get("task_kind", "")).strip(),
         }
         if row_ts < pivot:
             baseline_rows.append(enriched)
@@ -422,7 +438,87 @@ def _observed_outcome_metrics(
         "followup_success_rate": followup_success_rate,
         "quality_delta": round(followup_avg_quality - baseline_avg_quality, 4),
         "success_delta": round(followup_success_rate - baseline_success_rate, 4),
+        "profile_top": _top_counter(baseline_rows + followup_rows, "profile"),
+        "strategy_top": _top_counter(baseline_rows + followup_rows, "selected_strategy"),
+        "task_kind_top": _top_counter(baseline_rows + followup_rows, "task_kind"),
     }
+
+
+def _weighted_avg(total: float, count: int) -> float:
+    return round(total / max(1, count), 4) if count else 0.0
+
+
+def _dimension_tags(item: Dict[str, Any], field: str) -> List[str]:
+    selector = item.get("selector", {}) if isinstance(item.get("selector", {}), dict) else {}
+    observed = item.get("observed_outcomes", {}) if isinstance(item.get("observed_outcomes", {}), dict) else {}
+    if field == "strategy":
+        tags = [str(x).strip() for x in selector.get("strategies", []) if str(x).strip()]
+        if tags:
+            return tags
+        return [str(row.get("name", "")).strip() for row in observed.get("strategy_top", []) if isinstance(row, dict) and str(row.get("name", "")).strip()]
+    if field == "task_kind":
+        tags = [str(x).strip() for x in selector.get("task_kinds", []) if str(x).strip()]
+        if tags:
+            return tags
+        return [str(row.get("name", "")).strip() for row in observed.get("task_kind_top", []) if isinstance(row, dict) and str(row.get("name", "")).strip()]
+    if field == "profile":
+        return [str(row.get("name", "")).strip() for row in observed.get("profile_top", []) if isinstance(row, dict) and str(row.get("name", "")).strip()]
+    return []
+
+
+def _dimension_summary(items: List[Dict[str, Any]], field: str, *, top_n: int = 5) -> List[Dict[str, Any]]:
+    buckets: Dict[str, Dict[str, Any]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for tag in _dimension_tags(item, field):
+            if not tag:
+                continue
+            row = buckets.setdefault(
+                tag,
+                {
+                    "name": tag,
+                    "preset_count": 0,
+                    "usage_count": 0,
+                    "_effectiveness_total": 0.0,
+                    "_recent_quality_total": 0.0,
+                    "_recent_success_total": 0.0,
+                    "_positive_window_ratio_total": 0.0,
+                    "example_presets": [],
+                },
+            )
+            row["preset_count"] += 1
+            row["usage_count"] += int(item.get("usage_count", 0) or 0)
+            row["_effectiveness_total"] += float(item.get("effectiveness_score", 0) or 0)
+            observed = item.get("observed_outcomes", {}) if isinstance(item.get("observed_outcomes", {}), dict) else {}
+            row["_recent_quality_total"] += float(observed.get("recent_avg_quality_delta", 0.0) or 0.0)
+            row["_recent_success_total"] += float(observed.get("recent_avg_success_delta", 0.0) or 0.0)
+            row["_positive_window_ratio_total"] += float(observed.get("positive_window_ratio", 0.0) or 0.0)
+            if len(row["example_presets"]) < 3:
+                row["example_presets"].append(str(item.get("preset_name", "")))
+    out: List[Dict[str, Any]] = []
+    for row in buckets.values():
+        preset_count = int(row.get("preset_count", 0) or 0)
+        out.append(
+            {
+                "name": str(row.get("name", "")),
+                "preset_count": preset_count,
+                "usage_count": int(row.get("usage_count", 0) or 0),
+                "avg_effectiveness_score": _weighted_avg(float(row.get("_effectiveness_total", 0.0) or 0.0), preset_count),
+                "avg_recent_quality_delta": _weighted_avg(float(row.get("_recent_quality_total", 0.0) or 0.0), preset_count),
+                "avg_recent_success_delta": _weighted_avg(float(row.get("_recent_success_total", 0.0) or 0.0), preset_count),
+                "avg_positive_window_ratio": _weighted_avg(float(row.get("_positive_window_ratio_total", 0.0) or 0.0), preset_count),
+                "example_presets": list(row.get("example_presets", [])),
+            }
+        )
+    out.sort(
+        key=lambda item: (
+            -float(item.get("avg_effectiveness_score", 0.0) or 0.0),
+            -int(item.get("usage_count", 0) or 0),
+            str(item.get("name", "")),
+        )
+    )
+    return out[: max(1, int(top_n))]
 
 
 def _aggregate_observed_outcomes(
@@ -625,6 +721,11 @@ def build_repair_preset_inventory(
         "effectiveness_file": str(actual_effectiveness_file),
         "count": len(items),
         "items": items,
+        "dimensions": {
+            "strategy_top": _dimension_summary(items, "strategy", top_n=5),
+            "task_kind_top": _dimension_summary(items, "task_kind", top_n=5),
+            "profile_top": _dimension_summary(items, "profile", top_n=5),
+        },
     }
 
 
@@ -881,6 +982,7 @@ def list_repair_presets(*, data_dir: Path, presets_file: Path | None = None) -> 
         "effectiveness_file": str(inventory.get("effectiveness_file", "")),
         "count": int(inventory.get("count", 0) or 0),
         "items": list(inventory.get("items", [])),
+        "dimensions": dict(inventory.get("dimensions", {})) if isinstance(inventory.get("dimensions", {}), dict) else {},
     }
 
 

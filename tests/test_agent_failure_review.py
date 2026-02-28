@@ -93,6 +93,8 @@ class AgentFailureReviewTest(unittest.TestCase):
                     {
                         "ts": "2026-02-28 10:00:00",
                         "selection": {
+                            "selector_preset": "presentation_recovery",
+                            "selector_auto_choice_card": {"preset_name": "presentation_recovery", "selection_explanation": "matched_actions=1"},
                             "selector": {
                                 "scopes": ["strategy"],
                                 "strategies": ["mckinsey-ppt"],
@@ -131,6 +133,8 @@ class AgentFailureReviewTest(unittest.TestCase):
                         "ts": "2026-02-28 10:02:00",
                         "strategy_overrides_after": {"profile_blocked_strategies": {"strict": ["mckinsey-ppt"]}},
                         "selection": {
+                            "selector_preset": "presentation_recovery",
+                            "selector_auto_choice_card": {"preset_name": "presentation_recovery", "selection_explanation": "matched_actions=1"},
                             "selector": {
                                 "scopes": ["strategy"],
                                 "strategies": ["mckinsey-ppt"],
@@ -176,15 +180,18 @@ class AgentFailureReviewTest(unittest.TestCase):
             self.assertEqual(strategy_action["governance_history"]["match_count"], 1)
             self.assertEqual(strategy_action["governance_history"]["last_lifecycle"], "rolled_back")
             self.assertEqual(strategy_action["governance_history"]["last_snapshot_id"], "repair_snapshot_20260228_100000")
+            self.assertEqual(strategy_action["governance_history"]["last_choice_card"]["preset_name"], "presentation_recovery")
             self.assertEqual(strategy_action["governance_history"]["last_compare_summary"]["component"], "strategy")
             self.assertEqual(strategy_action["governance_history"]["last_compare_summary"]["relevant_change_count"], 1)
             self.assertIn("rolled back after changing strategy", strategy_action["governance_history"]["last_compare_conclusion"])
             self.assertEqual(report["summary"]["actions_with_governance_history"], 1)
+            self.assertEqual(report["summary"]["actions_with_choice_cards"], 1)
 
             files = write_failure_review_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())
             self.assertIn("governance:", Path(files["md"]).read_text(encoding="utf-8"))
+            self.assertIn("auto_choice:", Path(files["md"]).read_text(encoding="utf-8"))
             self.assertIn("compare:", Path(files["md"]).read_text(encoding="utf-8"))
 
 
