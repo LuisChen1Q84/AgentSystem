@@ -325,6 +325,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 max_actions=1,
                 scopes="strategy",
                 strategies="mckinsey-ppt",
+                exclude_scopes="feedback",
                 apply=False,
                 profile_overrides_file=str(root / "profile_overrides.json"),
                 strategy_overrides_file=str(root / "strategy_overrides.json"),
@@ -335,6 +336,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selected_action_count"), 1)
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("scopes"), ["strategy"])
             self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("strategies"), ["mckinsey-ppt"])
+            self.assertEqual(preview.get("report", {}).get("selection", {}).get("selector", {}).get("exclude_scopes"), ["feedback"])
             approval_code = str(preview.get("approval", {}).get("code", ""))
             self.assertTrue(approval_code)
             denied = reg.execute(

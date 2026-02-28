@@ -130,6 +130,9 @@ def _repair_apply_cmd(
     scopes: str,
     strategies: str,
     task_kinds: str,
+    exclude_scopes: str,
+    exclude_strategies: str,
+    exclude_task_kinds: str,
     approve_code: str,
     force: bool,
 ) -> int:
@@ -150,6 +153,9 @@ def _repair_apply_cmd(
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
+        exclude_scopes=exclude_scopes,
+        exclude_strategies=exclude_strategies,
+        exclude_task_kinds=exclude_task_kinds,
         approve_code=approve_code,
         force=force,
     )
@@ -173,6 +179,9 @@ def _repair_approve_cmd(
     scopes: str,
     strategies: str,
     task_kinds: str,
+    exclude_scopes: str,
+    exclude_strategies: str,
+    exclude_task_kinds: str,
     approve_code: str,
     force: bool,
 ) -> int:
@@ -192,6 +201,9 @@ def _repair_approve_cmd(
         scopes=scopes,
         strategies=strategies,
         task_kinds=task_kinds,
+        exclude_scopes=exclude_scopes,
+        exclude_strategies=exclude_strategies,
+        exclude_task_kinds=exclude_task_kinds,
         approve_code=approve_code,
         force=force,
     )
@@ -394,6 +406,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 scopes="",
                 strategies="",
                 task_kinds="",
+                exclude_scopes="",
+                exclude_strategies="",
+                exclude_task_kinds="",
                 approve_code="",
                 force=False,
             )
@@ -418,6 +433,9 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
                 scopes="",
                 strategies="",
                 task_kinds="",
+                exclude_scopes="",
+                exclude_strategies="",
+                exclude_task_kinds="",
                 approve_code="",
                 force=False,
             )
@@ -527,6 +545,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapply.add_argument("--scopes", default="")
     rapply.add_argument("--strategies", default="")
     rapply.add_argument("--task-kinds", default="")
+    rapply.add_argument("--exclude-scopes", default="")
+    rapply.add_argument("--exclude-strategies", default="")
+    rapply.add_argument("--exclude-task-kinds", default="")
     rapply.add_argument("--approve-code", default="")
     rapply.add_argument("--force", action="store_true")
 
@@ -544,6 +565,9 @@ def build_cli() -> argparse.ArgumentParser:
     rapprove.add_argument("--scopes", default="")
     rapprove.add_argument("--strategies", default="")
     rapprove.add_argument("--task-kinds", default="")
+    rapprove.add_argument("--exclude-scopes", default="")
+    rapprove.add_argument("--exclude-strategies", default="")
+    rapprove.add_argument("--exclude-task-kinds", default="")
     rapprove.add_argument("--approve-code", default="")
     rapprove.add_argument("--force", action="store_true")
 
@@ -630,6 +654,9 @@ def main() -> int:
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),
+            exclude_scopes=str(args.exclude_scopes),
+            exclude_strategies=str(args.exclude_strategies),
+            exclude_task_kinds=str(args.exclude_task_kinds),
             approve_code=str(args.approve_code),
             force=bool(args.force),
         )
@@ -650,6 +677,9 @@ def main() -> int:
             scopes=str(args.scopes),
             strategies=str(args.strategies),
             task_kinds=str(args.task_kinds),
+            exclude_scopes=str(args.exclude_scopes),
+            exclude_strategies=str(args.exclude_strategies),
+            exclude_task_kinds=str(args.exclude_task_kinds),
             approve_code=str(args.approve_code),
             force=bool(args.force),
         )

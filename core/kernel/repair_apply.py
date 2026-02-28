@@ -82,11 +82,17 @@ def _repair_selector(
     scopes: List[str] | None = None,
     strategies: List[str] | None = None,
     task_kinds: List[str] | None = None,
+    exclude_scopes: List[str] | None = None,
+    exclude_strategies: List[str] | None = None,
+    exclude_task_kinds: List[str] | None = None,
 ) -> Dict[str, List[str]]:
     return {
         "scopes": _normalize_selector_values(scopes),
         "strategies": _normalize_selector_values(strategies),
         "task_kinds": _normalize_selector_values(task_kinds),
+        "exclude_scopes": _normalize_selector_values(exclude_scopes),
+        "exclude_strategies": _normalize_selector_values(exclude_strategies),
+        "exclude_task_kinds": _normalize_selector_values(exclude_task_kinds),
     }
 
 
@@ -293,10 +299,19 @@ def _repair_action_selected(action: Dict[str, Any], selector: Dict[str, List[str
     allowed_scopes = set(selector.get("scopes", []))
     allowed_strategies = set(selector.get("strategies", []))
     allowed_task_kinds = set(selector.get("task_kinds", []))
+    blocked_scopes = set(selector.get("exclude_scopes", []))
+    blocked_strategies = set(selector.get("exclude_strategies", []))
+    blocked_task_kinds = set(selector.get("exclude_task_kinds", []))
     has_scope_filter = bool(allowed_scopes)
     has_strategy_filter = bool(allowed_strategies)
     has_task_kind_filter = bool(allowed_task_kinds)
 
+    if scope in blocked_scopes:
+        return False
+    if scope == "strategy" and target in blocked_strategies:
+        return False
+    if scope == "task_kind" and target in blocked_task_kinds:
+        return False
     if has_scope_filter and scope not in allowed_scopes:
         return False
     if scope == "strategy" and has_strategy_filter:
@@ -483,6 +498,9 @@ def build_repair_apply_plan(
     scopes: List[str] | None = None,
     strategies: List[str] | None = None,
     task_kinds: List[str] | None = None,
+    exclude_scopes: List[str] | None = None,
+    exclude_strategies: List[str] | None = None,
+    exclude_task_kinds: List[str] | None = None,
 ) -> Dict[str, Any]:
     ts = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     snapshot_id = _snapshot_id(ts)
@@ -491,7 +509,14 @@ def build_repair_apply_plan(
     memory = load_memory(data_dir / "memory.json")
 
     failure_report = build_failure_review(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)))
-    selector = _repair_selector(scopes=scopes, strategies=strategies, task_kinds=task_kinds)
+    selector = _repair_selector(
+        scopes=scopes,
+        strategies=strategies,
+        task_kinds=task_kinds,
+        exclude_scopes=exclude_scopes,
+        exclude_strategies=exclude_strategies,
+        exclude_task_kinds=exclude_task_kinds,
+    )
     selective_mode = int(min_priority_score or 0) > 0 or int(max_actions or 0) > 0 or any(selector.values())
     filtered_failure_report = (
         _filter_repair_actions(
@@ -877,6 +902,9 @@ def render_repair_plan_md(plan: Dict[str, Any]) -> str:
         f"- selector_scopes: {','.join(selector.get('scopes', []))}",
         f"- selector_strategies: {','.join(selector.get('strategies', []))}",
         f"- selector_task_kinds: {','.join(selector.get('task_kinds', []))}",
+        f"- exclude_scopes: {','.join(selector.get('exclude_scopes', []))}",
+        f"- exclude_strategies: {','.join(selector.get('exclude_strategies', []))}",
+        f"- exclude_task_kinds: {','.join(selector.get('exclude_task_kinds', []))}",
         "",
         "## Changes",
         "",

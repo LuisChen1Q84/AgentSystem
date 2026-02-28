@@ -180,6 +180,22 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertTrue(strategy_plan["changes"]["strategy_overrides_changed"])
             self.assertTrue(all(item.get("scope") == "strategy" for item in strategy_plan["failure_review"]["repair_actions"]))
 
+            excluded_plan = build_repair_apply_plan(
+                data_dir=root,
+                days=14,
+                limit=10,
+                profile_overrides_file=profile_path,
+                strategy_overrides_file=strategy_path,
+                backup_dir=root / "repair_backups",
+                scopes=["strategy", "task_kind"],
+                exclude_scopes=["task_kind"],
+            )
+            self.assertEqual(excluded_plan["selection"]["selector"]["exclude_scopes"], ["task_kind"])
+            self.assertEqual(excluded_plan["selection"]["selected_scopes"], ["strategy"])
+            self.assertFalse(excluded_plan["changes"]["profile_overrides_changed"])
+            self.assertTrue(excluded_plan["changes"]["strategy_overrides_changed"])
+            self.assertTrue(all(item.get("scope") == "strategy" for item in excluded_plan["failure_review"]["repair_actions"]))
+
             no_op_plan = build_repair_apply_plan(
                 data_dir=root,
                 days=14,

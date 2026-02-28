@@ -1138,6 +1138,9 @@ run_agent_repair_apply() {
   local scopes=""
   local strategies=""
   local task_kinds=""
+  local exclude_scopes=""
+  local exclude_strategies=""
+  local exclude_task_kinds=""
   local approve_code=""
   local apply_flag=0
   local force_flag=0
@@ -1199,6 +1202,18 @@ run_agent_repair_apply() {
         ;;
       --task-kinds)
         task_kinds="${2:-}"
+        shift 2 || true
+        ;;
+      --exclude-scopes)
+        exclude_scopes="${2:-}"
+        shift 2 || true
+        ;;
+      --exclude-strategies)
+        exclude_strategies="${2:-}"
+        shift 2 || true
+        ;;
+      --exclude-task-kinds)
+        exclude_task_kinds="${2:-}"
         shift 2 || true
         ;;
       --approve-code)
@@ -1266,6 +1281,15 @@ run_agent_repair_apply() {
   if [ -n "${task_kinds}" ]; then
     cmd+=(--task-kinds "${task_kinds}")
   fi
+  if [ -n "${exclude_scopes}" ]; then
+    cmd+=(--exclude-scopes "${exclude_scopes}")
+  fi
+  if [ -n "${exclude_strategies}" ]; then
+    cmd+=(--exclude-strategies "${exclude_strategies}")
+  fi
+  if [ -n "${exclude_task_kinds}" ]; then
+    cmd+=(--exclude-task-kinds "${exclude_task_kinds}")
+  fi
   if [ -n "${approve_code}" ]; then
     cmd+=(--approve-code "${approve_code}")
   fi
@@ -1295,6 +1319,9 @@ run_agent_repair_approve() {
   local scopes=""
   local strategies=""
   local task_kinds=""
+  local exclude_scopes=""
+  local exclude_strategies=""
+  local exclude_task_kinds=""
   local approve_code=""
   local force_flag=0
   local extra=()
@@ -1357,6 +1384,18 @@ run_agent_repair_approve() {
         task_kinds="${2:-}"
         shift 2 || true
         ;;
+      --exclude-scopes)
+        exclude_scopes="${2:-}"
+        shift 2 || true
+        ;;
+      --exclude-strategies)
+        exclude_strategies="${2:-}"
+        shift 2 || true
+        ;;
+      --exclude-task-kinds)
+        exclude_task_kinds="${2:-}"
+        shift 2 || true
+        ;;
       --approve-code)
         approve_code="${2:-}"
         shift 2 || true
@@ -1414,6 +1453,15 @@ run_agent_repair_approve() {
   fi
   if [ -n "${task_kinds}" ]; then
     cmd+=(--task-kinds "${task_kinds}")
+  fi
+  if [ -n "${exclude_scopes}" ]; then
+    cmd+=(--exclude-scopes "${exclude_scopes}")
+  fi
+  if [ -n "${exclude_strategies}" ]; then
+    cmd+=(--exclude-strategies "${exclude_strategies}")
+  fi
+  if [ -n "${exclude_task_kinds}" ]; then
+    cmd+=(--exclude-task-kinds "${exclude_task_kinds}")
   fi
   if [ -n "${approve_code}" ]; then
     cmd+=(--approve-code "${approve_code}")
@@ -1900,8 +1948,8 @@ Usage:
   scripts/agentsys.sh agent-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh agent-recommend [--days N --apply --out-json path --out-md path]
   scripts/agentsys.sh agent-failure-review [--days N --limit N --data-dir <path> --out-dir <path>]
-  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
-  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
+  scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-list [--limit N --data-dir <path> --backup-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-compare [--snapshot-id <id> --base-snapshot-id <id> --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --only both|profile|strategy --data-dir <path> --backup-dir <path>]

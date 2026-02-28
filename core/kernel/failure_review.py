@@ -116,6 +116,92 @@ def _priority_from_score(score: int) -> str:
     return "low"
 
 
+def _repair_component_for_scope(scope: str) -> str:
+    if scope in {"strategy", "policy"}:
+        return "strategy"
+    if scope == "task_kind":
+        return "profile"
+    return ""
+
+
+def _selector_match(scope: str, target: str, selector: Dict[str, Any]) -> bool:
+    allowed_scopes = {str(item).strip() for item in selector.get("scopes", []) if str(item).strip()}
+    allowed_strategies = {str(item).strip() for item in selector.get("strategies", []) if str(item).strip()}
+    allowed_task_kinds = {str(item).strip() for item in selector.get("task_kinds", []) if str(item).strip()}
+    blocked_scopes = {str(item).strip() for item in selector.get("exclude_scopes", []) if str(item).strip()}
+    blocked_strategies = {str(item).strip() for item in selector.get("exclude_strategies", []) if str(item).strip()}
+    blocked_task_kinds = {str(item).strip() for item in selector.get("exclude_task_kinds", []) if str(item).strip()}
+
+    if scope in blocked_scopes:
+        return False
+    if scope == "strategy" and target in blocked_strategies:
+        return False
+    if scope == "task_kind" and target in blocked_task_kinds:
+        return False
+    if allowed_scopes and scope not in allowed_scopes:
+        return False
+    if scope == "strategy" and allowed_strategies:
+        return target in allowed_strategies
+    if scope == "task_kind" and allowed_task_kinds:
+        return target in allowed_task_kinds
+    if not allowed_scopes and (allowed_strategies or allowed_task_kinds):
+        if scope == "strategy":
+            return target in allowed_strategies if allowed_strategies else False
+        if scope == "task_kind":
+            return target in allowed_task_kinds if allowed_task_kinds else False
+        return False
+    return True
+
+
+def _governance_matches_action(row: Dict[str, Any], scope: str, target: str) -> bool:
+    selection = row.get("selection", {}) if isinstance(row.get("selection", {}), dict) else {}
+    selector = selection.get("selector", {}) if isinstance(selection.get("selector", {}), dict) else {}
+    changed_components = {str(item).strip() for item in row.get("changed_components", []) if str(item).strip()}
+    if selector and _selector_match(scope, target, selector):
+        return True
+    component = _repair_component_for_scope(scope)
+    return bool(component and component in changed_components)
+
+
+def _governance_history_for_action(data_dir: Path, action: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        from core.kernel.repair_apply import list_repair_snapshots
+    except Exception:
+        return {
+            "match_count": 0,
+            "lifecycle_counts": {},
+            "last_lifecycle": "",
+            "last_snapshot_id": "",
+            "last_ts": "",
+            "recent_matches": [],
+        }
+
+    report = list_repair_snapshots(backup_dir=data_dir / "repair_backups", limit=20)
+    rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
+    scope = str(action.get("scope", "")).strip()
+    target = str(action.get("target", "")).strip()
+    matches = [row for row in rows if isinstance(row, dict) and _governance_matches_action(row, scope, target)]
+    lifecycle_counter: Counter[str] = Counter(str(row.get("lifecycle", "")).strip() or "unknown" for row in matches)
+    latest = matches[0] if matches else {}
+    return {
+        "match_count": len(matches),
+        "lifecycle_counts": {str(k): int(v) for k, v in lifecycle_counter.items()},
+        "last_lifecycle": str(latest.get("lifecycle", "")),
+        "last_snapshot_id": str(latest.get("snapshot_id", "")),
+        "last_ts": str(latest.get("ts", "")),
+        "recent_matches": [
+            {
+                "snapshot_id": str(row.get("snapshot_id", "")),
+                "ts": str(row.get("ts", "")),
+                "lifecycle": str(row.get("lifecycle", "")),
+                "compare_base_snapshot_id": str(row.get("compare_base_snapshot_id", "")),
+                "change_count": int(row.get("change_count", 0) or 0),
+            }
+            for row in matches[:3]
+        ],
+    }
+
+
 def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> Dict[str, Any]:
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     evidence_rows = _load_jsonl(data_dir / "agent_evidence_objects.jsonl")
@@ -385,6 +471,12 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
     for idx, item in enumerate(deduped_repairs, start=1):
         item["rank"] = idx
     repair_actions = deduped_repairs[:8]
+    actions_with_governance_history = 0
+    for item in repair_actions:
+        history = _governance_history_for_action(data_dir, item)
+        item["governance_history"] = history
+        if int(history.get("match_count", 0) or 0) > 0:
+            actions_with_governance_history += 1
 
     return {
         "as_of": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -395,6 +487,7 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
             "pending_feedback_failures": pending_feedback,
             "missing_evidence_objects": evidence_missing,
             "missing_delivery_objects": delivery_missing,
+            "actions_with_governance_history": actions_with_governance_history,
         },
         "task_kind_top": [{"task_kind": k, "count": v} for k, v in task_counter.most_common(5)],
         "strategy_top": [{"strategy": k, "count": v} for k, v in strategy_counter.most_common(5)],
@@ -436,6 +529,11 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
             lines.append(
                 f"- [#{item.get('rank', 0)}|{item.get('priority', '')}|score={item.get('priority_score', 0)}] {item.get('scope', '')}:{item.get('target', '')} | {item.get('action', '')} | reason={item.get('reason', '')}"
             )
+            history = item.get("governance_history", {}) if isinstance(item.get("governance_history", {}), dict) else {}
+            if int(history.get("match_count", 0) or 0) > 0:
+                lines.append(
+                    f"  governance: matches={history.get('match_count', 0)} | last={history.get('last_lifecycle', '')} | snapshot={history.get('last_snapshot_id', '')} | ts={history.get('last_ts', '')}"
+                )
     else:
         lines.append("- none")
     lines += ["", "## Failures", ""]

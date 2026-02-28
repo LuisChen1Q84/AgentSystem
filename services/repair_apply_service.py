@@ -61,6 +61,9 @@ class RepairApplyService:
         scopes: str | list[str] = "",
         strategies: str | list[str] = "",
         task_kinds: str | list[str] = "",
+        exclude_scopes: str | list[str] = "",
+        exclude_strategies: str | list[str] = "",
+        exclude_task_kinds: str | list[str] = "",
         approve_code: str = "",
         force: bool = False,
     ):
@@ -89,6 +92,9 @@ class RepairApplyService:
                 scopes=_csv_values(scopes),
                 strategies=_csv_values(strategies),
                 task_kinds=_csv_values(task_kinds),
+                exclude_scopes=_csv_values(exclude_scopes),
+                exclude_strategies=_csv_values(exclude_strategies),
+                exclude_task_kinds=_csv_values(exclude_task_kinds),
             )
         files = write_repair_plan_files(plan, target_dir)
         approval_state = resolve_repair_approval(
@@ -141,6 +147,9 @@ class RepairApplyService:
                     "scopes": _csv_values(scopes),
                     "strategies": _csv_values(strategies),
                     "task_kinds": _csv_values(task_kinds),
+                    "exclude_scopes": _csv_values(exclude_scopes),
+                    "exclude_strategies": _csv_values(exclude_strategies),
+                    "exclude_task_kinds": _csv_values(exclude_task_kinds),
                 },
             )
         approval_receipt = approval_state.get("receipt", {}) if isinstance(approval_state.get("receipt", {}), dict) else {}
@@ -193,6 +202,9 @@ class RepairApplyService:
                 "scopes": _csv_values(scopes),
                 "strategies": _csv_values(strategies),
                 "task_kinds": _csv_values(task_kinds),
+                "exclude_scopes": _csv_values(exclude_scopes),
+                "exclude_strategies": _csv_values(exclude_strategies),
+                "exclude_task_kinds": _csv_values(exclude_task_kinds),
             },
         )
 
@@ -218,6 +230,9 @@ class RepairApproveService:
         scopes: str | list[str] = "",
         strategies: str | list[str] = "",
         task_kinds: str | list[str] = "",
+        exclude_scopes: str | list[str] = "",
+        exclude_strategies: str | list[str] = "",
+        exclude_task_kinds: str | list[str] = "",
         approve_code: str = "",
         force: bool = False,
     ):
@@ -242,6 +257,9 @@ class RepairApproveService:
                 scopes=_csv_values(scopes),
                 strategies=_csv_values(strategies),
                 task_kinds=_csv_values(task_kinds),
+                exclude_scopes=_csv_values(exclude_scopes),
+                exclude_strategies=_csv_values(exclude_strategies),
+                exclude_task_kinds=_csv_values(exclude_task_kinds),
             )
             plan_source = "generated"
         files = write_repair_plan_files(plan, target_dir)
@@ -294,6 +312,9 @@ class RepairApproveService:
                     "scopes": _csv_values(scopes),
                     "strategies": _csv_values(strategies),
                     "task_kinds": _csv_values(task_kinds),
+                    "exclude_scopes": _csv_values(exclude_scopes),
+                    "exclude_strategies": _csv_values(exclude_strategies),
+                    "exclude_task_kinds": _csv_values(exclude_task_kinds),
                 },
             )
         payload = annotate_payload(
@@ -333,6 +354,9 @@ class RepairApproveService:
                 "scopes": _csv_values(scopes),
                 "strategies": _csv_values(strategies),
                 "task_kinds": _csv_values(task_kinds),
+                "exclude_scopes": _csv_values(exclude_scopes),
+                "exclude_strategies": _csv_values(exclude_strategies),
+                "exclude_task_kinds": _csv_values(exclude_task_kinds),
             },
         )
 

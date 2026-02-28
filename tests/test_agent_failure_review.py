@@ -86,6 +86,65 @@ class AgentFailureReviewTest(unittest.TestCase):
                 json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "summary": "presentation handled via mckinsey-ppt"}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
+            repair_backups = root / "repair_backups"
+            repair_backups.mkdir(parents=True, exist_ok=True)
+            (repair_backups / "repair_plan_repair_snapshot_20260228_100000.json").write_text(
+                json.dumps(
+                    {
+                        "ts": "2026-02-28 10:00:00",
+                        "selection": {
+                            "selector": {
+                                "scopes": ["strategy"],
+                                "strategies": ["mckinsey-ppt"],
+                                "task_kinds": [],
+                                "exclude_scopes": [],
+                                "exclude_strategies": [],
+                                "exclude_task_kinds": [],
+                            }
+                        },
+                        "preview_diff": {"profile_overrides": [], "strategy_overrides": [{"path": "strict"}], "change_count": 1},
+                        "targets": {
+                            "snapshot_id": "repair_snapshot_20260228_100000",
+                            "plan_json_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_100000.json"),
+                            "plan_md_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_100000.md"),
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (repair_backups / "repair_approval_journal.jsonl").write_text(
+                "\n".join(
+                    [
+                        json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "event": "approved", "ts": "2026-02-28 10:01:00"}, ensure_ascii=False),
+                        json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "event": "rolled_back", "ts": "2026-02-28 10:02:00"}, ensure_ascii=False),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (repair_backups / "repair_snapshot_20260228_100000.json").write_text(
+                json.dumps(
+                    {
+                        "snapshot_id": "repair_snapshot_20260228_100000",
+                        "ts": "2026-02-28 10:02:00",
+                        "selection": {
+                            "selector": {
+                                "scopes": ["strategy"],
+                                "strategies": ["mckinsey-ppt"],
+                                "task_kinds": [],
+                                "exclude_scopes": [],
+                                "exclude_strategies": [],
+                                "exclude_task_kinds": [],
+                            }
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
 
             report = build_failure_review(data_dir=root, days=14, limit=10)
             self.assertEqual(report["summary"]["failure_count"], 1)
@@ -100,10 +159,16 @@ class AgentFailureReviewTest(unittest.TestCase):
             self.assertTrue(report["repair_actions"][0]["evidence"]["sample_run_ids"])
             self.assertGreater(report["repair_actions"][0]["priority_score"], 0)
             self.assertEqual(report["repair_actions"][0]["rank"], 1)
+            strategy_action = next(item for item in report["repair_actions"] if item.get("scope") == "strategy")
+            self.assertEqual(strategy_action["governance_history"]["match_count"], 1)
+            self.assertEqual(strategy_action["governance_history"]["last_lifecycle"], "rolled_back")
+            self.assertEqual(strategy_action["governance_history"]["last_snapshot_id"], "repair_snapshot_20260228_100000")
+            self.assertEqual(report["summary"]["actions_with_governance_history"], 1)
 
             files = write_failure_review_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
             self.assertTrue(Path(files["md"]).exists())
+            self.assertIn("governance:", Path(files["md"]).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

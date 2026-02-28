@@ -170,6 +170,9 @@ class AgentServiceRegistry:
             scopes=kwargs.get("scopes", ""),
             strategies=kwargs.get("strategies", ""),
             task_kinds=kwargs.get("task_kinds", ""),
+            exclude_scopes=kwargs.get("exclude_scopes", ""),
+            exclude_strategies=kwargs.get("exclude_strategies", ""),
+            exclude_task_kinds=kwargs.get("exclude_task_kinds", ""),
             approve_code=str(kwargs.get("approve_code", "")),
             force=bool(kwargs.get("force", False)),
         ).to_dict()
@@ -190,6 +193,9 @@ class AgentServiceRegistry:
             scopes=kwargs.get("scopes", ""),
             strategies=kwargs.get("strategies", ""),
             task_kinds=kwargs.get("task_kinds", ""),
+            exclude_scopes=kwargs.get("exclude_scopes", ""),
+            exclude_strategies=kwargs.get("exclude_strategies", ""),
+            exclude_task_kinds=kwargs.get("exclude_task_kinds", ""),
             approve_code=str(kwargs.get("approve_code", "")),
             force=bool(kwargs.get("force", False)),
         ).to_dict()
