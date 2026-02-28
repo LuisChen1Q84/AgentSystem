@@ -171,6 +171,7 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(listed["count"], 1)
             self.assertEqual(listed["rows"][0]["snapshot_id"], applied["snapshot_id"])
             self.assertEqual(listed["rows"][0]["lifecycle"], "applied")
+            self.assertEqual(listed["summary"]["applied"], 1)
 
             rollback = rollback_repair_plan(
                 backup_dir=root / "repair_backups",
@@ -181,6 +182,9 @@ class AgentRepairApplyTest(unittest.TestCase):
             self.assertEqual(rollback["restored_components"], ["strategy"])
             self.assertEqual(json.loads(profile_path.read_text(encoding="utf-8")), profile_after_apply)
             self.assertEqual(json.loads(strategy_path.read_text(encoding="utf-8")), strategy_before_apply)
+            listed_after_rollback = list_repair_snapshots(backup_dir=root / "repair_backups", limit=10)
+            self.assertEqual(listed_after_rollback["rows"][0]["lifecycle"], "rolled_back")
+            self.assertEqual(listed_after_rollback["summary"]["rolled_back"], 1)
 
             second_plan = build_repair_apply_plan(
                 data_dir=root,

@@ -22,6 +22,7 @@ from scripts.agent_feedback import list_pending_feedback
 from scripts.agent_os_observability import aggregate
 from core.kernel.memory_store import load_memory, memory_snapshot
 from core.kernel.policy_tuner import tune_policy
+from core.kernel.repair_apply import list_repair_snapshots
 
 
 
@@ -142,6 +143,19 @@ def _recent_deliveries(rows: List[Dict[str, Any]], limit: int = 5) -> List[Dict[
     return out
 
 
+def _repair_governance_summary(data_dir: Path, limit: int = 20) -> Dict[str, Any]:
+    backup_dir = data_dir / "repair_backups"
+    report = list_repair_snapshots(backup_dir=backup_dir, limit=max(1, int(limit)))
+    rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []
+    return {
+        "backup_dir": str(backup_dir),
+        "count": int(report.get("count", 0) or 0),
+        "lifecycle": dict(report.get("summary", {})) if isinstance(report.get("summary", {}), dict) else {},
+        "recent_rows": rows[:5],
+        "journal_file": str(report.get("journal_file", "")),
+    }
+
+
 
 def _quality_band(score: float) -> str:
     if score >= 0.85:
@@ -209,6 +223,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     scope = _scope_days(days)
     scoped_evidence_rows = [row for row in evidence_rows if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
     risk_dist = Counter(str(r.get("risk_level", "unknown")) for r in scoped_evidence_rows if str(r.get("risk_level", "")).strip())
+    repair_governance = _repair_governance_summary(data_dir)
 
     summary = {
         "window_days": max(1, int(days)),
@@ -223,6 +238,10 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "run_object_coverage_rate": float(object_coverage.get("run_object_coverage_rate", 0.0) or 0.0),
         "evidence_object_coverage_rate": float(object_coverage.get("evidence_object_coverage_rate", 0.0) or 0.0),
         "delivery_object_coverage_rate": float(object_coverage.get("delivery_object_coverage_rate", 0.0) or 0.0),
+        "repair_planned": int(repair_governance.get("lifecycle", {}).get("planned", 0) or 0),
+        "repair_approved": int(repair_governance.get("lifecycle", {}).get("approved", 0) or 0),
+        "repair_applied": int(repair_governance.get("lifecycle", {}).get("applied", 0) or 0),
+        "repair_rolled_back": int(repair_governance.get("lifecycle", {}).get("rolled_back", 0) or 0),
     }
 
     report = {
@@ -231,6 +250,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "observability": obs_report,
         "evaluation": eval_summary,
         "object_coverage": object_coverage,
+        "repair_governance": repair_governance,
         "risk_level_top": [{"risk_level": k, "count": v} for k, v in risk_dist.most_common(5)],
         "memory_snapshot": mem_snapshot,
         "policy_tuning": policy_tuning,
@@ -276,6 +296,13 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
         f"- evidence_object_coverage_rate: {object_coverage.get('evidence_object_coverage_rate', 0)}%",
         f"- delivery_object_coverage_rate: {object_coverage.get('delivery_object_coverage_rate', 0)}%",
         "",
+        "## Repair Governance",
+        "",
+        f"- planned: {report.get('repair_governance', {}).get('lifecycle', {}).get('planned', 0)}",
+        f"- approved: {report.get('repair_governance', {}).get('lifecycle', {}).get('approved', 0)}",
+        f"- applied: {report.get('repair_governance', {}).get('lifecycle', {}).get('applied', 0)}",
+        f"- rolled_back: {report.get('repair_governance', {}).get('lifecycle', {}).get('rolled_back', 0)}",
+        "",
         "## Recommendations",
         "",
     ]
@@ -316,6 +343,11 @@ def render_dashboard_html(report: Dict[str, Any]) -> str:
         for k, v, cls in cards
     )
     rec_html = "".join(f"<li>{x}</li>" for x in report.get("recommendations", []))
+    repair_gov = report.get("repair_governance", {}).get("lifecycle", {}) if isinstance(report.get("repair_governance", {}), dict) else {}
+    repair_html = "".join(
+        f"<li>{label}: {repair_gov.get(key, 0)}</li>"
+        for key, label in (("planned", "Planned"), ("approved", "Approved"), ("applied", "Applied"), ("rolled_back", "Rolled Back"))
+    ) or "<li>none</li>"
     fail_html = "".join(
         f"<li>{x.get('ts','')} | {x.get('task_kind','')} | {x.get('selected_strategy','')}</li>"
         for x in report.get("recent_failures", [])
@@ -334,6 +366,7 @@ body {{ margin:0; font-family:"IBM Plex Sans","Noto Sans SC",sans-serif; backgro
 .panel {{ background:var(--card); border-radius:16px; padding:16px; margin-top:14px; box-shadow:0 8px 24px rgba(16,33,22,.08); }}
 </style></head><body><div class="wrap"><h1>Agent Dashboard</h1><p>{report.get('as_of','')}</p><div class="grid">{card_html}</div>
 <div class="panel"><h2>Recommendations</h2><ul>{rec_html}</ul></div>
+<div class="panel"><h2>Repair Governance</h2><ul>{repair_html}</ul></div>
 <div class="panel"><h2>Recent Failures</h2><ul>{fail_html}</ul></div>
 </div></body></html>'''
 

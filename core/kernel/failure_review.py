@@ -53,6 +53,32 @@ def _repair_action(*, scope: str, target: str, action: str, reason: str, priorit
     }
 
 
+def _counter_dict(counter: Counter[str], limit: int = 3) -> Dict[str, int]:
+    return {str(k): int(v) for k, v in counter.most_common(max(1, int(limit)))}
+
+
+def _evidence_summary(
+    *,
+    count: int,
+    risk_levels: Counter[str],
+    signals: Counter[str],
+    qualities: List[float],
+    missing_evidence: int,
+    missing_delivery: int,
+    run_ids: List[str],
+) -> Dict[str, Any]:
+    avg_quality = round(sum(qualities) / max(1, len(qualities)), 4) if qualities else 0.0
+    return {
+        "failure_count": int(count),
+        "avg_quality_score": avg_quality,
+        "risk_levels": _counter_dict(risk_levels, limit=3),
+        "policy_signals": _counter_dict(signals, limit=4),
+        "missing_evidence_objects": int(missing_evidence),
+        "missing_delivery_objects": int(missing_delivery),
+        "sample_run_ids": list(run_ids)[:3],
+    }
+
+
 def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> Dict[str, Any]:
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     evidence_rows = _load_jsonl(data_dir / "agent_evidence_objects.jsonl")
@@ -67,6 +93,16 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
     risk_counter: Counter[str] = Counter()
     strategy_signals: Dict[str, Counter[str]] = {}
     task_signals: Dict[str, Counter[str]] = {}
+    strategy_risks: Dict[str, Counter[str]] = {}
+    task_risks: Dict[str, Counter[str]] = {}
+    strategy_quality: Dict[str, List[float]] = {}
+    task_quality: Dict[str, List[float]] = {}
+    strategy_missing_evidence: Counter[str] = Counter()
+    task_missing_evidence: Counter[str] = Counter()
+    strategy_missing_delivery: Counter[str] = Counter()
+    task_missing_delivery: Counter[str] = Counter()
+    strategy_run_ids: Dict[str, List[str]] = {}
+    task_run_ids: Dict[str, List[str]] = {}
     pending_feedback = 0
     evidence_missing = 0
     delivery_missing = 0
@@ -90,6 +126,18 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         risk_counter.update([risk_level])
         strategy_signals.setdefault(selected_strategy or "unknown", Counter())
         task_signals.setdefault(task_kind or "unknown", Counter())
+        strategy_risks.setdefault(selected_strategy or "unknown", Counter())
+        task_risks.setdefault(task_kind or "unknown", Counter())
+        strategy_quality.setdefault(selected_strategy or "unknown", [])
+        task_quality.setdefault(task_kind or "unknown", [])
+        strategy_run_ids.setdefault(selected_strategy or "unknown", [])
+        task_run_ids.setdefault(task_kind or "unknown", [])
+        strategy_risks[selected_strategy or "unknown"].update([risk_level])
+        task_risks[task_kind or "unknown"].update([risk_level])
+        strategy_quality[selected_strategy or "unknown"].append(float(evaluation.get("quality_score", 0.0) or 0.0))
+        task_quality[task_kind or "unknown"].append(float(evaluation.get("quality_score", 0.0) or 0.0))
+        strategy_run_ids[selected_strategy or "unknown"].append(run_id)
+        task_run_ids[task_kind or "unknown"].append(run_id)
         for signal in evaluation.get("policy_signals", []):
             signal = str(signal)
             signal_counter.update([signal])
@@ -99,8 +147,12 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
             pending_feedback += 1
         if not evidence_object:
             evidence_missing += 1
+            strategy_missing_evidence.update([selected_strategy or "unknown"])
+            task_missing_evidence.update([task_kind or "unknown"])
         if not delivery_object:
             delivery_missing += 1
+            strategy_missing_delivery.update([selected_strategy or "unknown"])
+            task_missing_delivery.update([task_kind or "unknown"])
         details.append(
             {
                 "run_id": run_id,
@@ -140,60 +192,93 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
     repair_actions: List[Dict[str, Any]] = []
     for strategy, count in strategy_counter.most_common(5):
         signals = strategy_signals.get(strategy, Counter())
+        evidence = _evidence_summary(
+            count=count,
+            risk_levels=strategy_risks.get(strategy, Counter()),
+            signals=signals,
+            qualities=strategy_quality.get(strategy, []),
+            missing_evidence=int(strategy_missing_evidence.get(strategy, 0) or 0),
+            missing_delivery=int(strategy_missing_delivery.get(strategy, 0) or 0),
+            run_ids=strategy_run_ids.get(strategy, []),
+        )
         if count >= 2 or signals:
             if signals.get("low_selection_confidence", 0) > 0:
                 repair_actions.append(
-                    _repair_action(
+                    {
+                        **_repair_action(
                         scope="strategy",
                         target=strategy,
                         action="Tighten routing triggers and reduce candidate overlap for this strategy.",
-                        reason=f"{strategy} has {count} failures with low selection confidence.",
+                        reason=f"{strategy} has {count} failures; low-confidence routing dominates and avg quality is {evidence.get('avg_quality_score', 0.0)}.",
                         priority="high",
-                    )
+                        ),
+                        "evidence": evidence,
+                    }
                 )
             elif signals.get("deep_fallback_chain", 0) > 0:
                 repair_actions.append(
-                    _repair_action(
+                    {
+                        **_repair_action(
                         scope="strategy",
                         target=strategy,
                         action="Lower fallback depth or demote this strategy in strict mode.",
-                        reason=f"{strategy} repeatedly depends on fallback chain recovery.",
+                        reason=f"{strategy} repeatedly depends on fallback chain recovery; risk mix={evidence.get('risk_levels', {})}.",
                         priority="high",
-                    )
+                        ),
+                        "evidence": evidence,
+                    }
                 )
             else:
                 repair_actions.append(
-                    _repair_action(
+                    {
+                        **_repair_action(
                         scope="strategy",
                         target=strategy,
                         action="Review executor path and add targeted regression cases for this strategy.",
-                        reason=f"{strategy} appears in {count} recent failures.",
+                        reason=f"{strategy} appears in {count} recent failures with risk mix={evidence.get('risk_levels', {})}.",
                         priority="medium",
-                    )
+                        ),
+                        "evidence": evidence,
+                    }
                 )
 
     for task_kind, count in task_counter.most_common(5):
         signals = task_signals.get(task_kind, Counter())
+        evidence = _evidence_summary(
+            count=count,
+            risk_levels=task_risks.get(task_kind, Counter()),
+            signals=signals,
+            qualities=task_quality.get(task_kind, []),
+            missing_evidence=int(task_missing_evidence.get(task_kind, 0) or 0),
+            missing_delivery=int(task_missing_delivery.get(task_kind, 0) or 0),
+            run_ids=task_run_ids.get(task_kind, []),
+        )
         if count >= 2 or signals.get("clarification_heavy", 0) > 0:
             if signals.get("clarification_heavy", 0) > 0:
                 repair_actions.append(
-                    _repair_action(
+                    {
+                        **_repair_action(
                         scope="task_kind",
                         target=task_kind,
                         action="Strengthen task template defaults and add clearer expected-output hints.",
-                        reason=f"{task_kind} failures frequently require clarification.",
+                        reason=f"{task_kind} failures frequently require clarification; avg quality is {evidence.get('avg_quality_score', 0.0)}.",
                         priority="high",
-                    )
+                        ),
+                        "evidence": evidence,
+                    }
                 )
             else:
                 repair_actions.append(
-                    _repair_action(
+                    {
+                        **_repair_action(
                         scope="task_kind",
                         target=task_kind,
                         action="Add task-specific constraints and validation checks before execution.",
-                        reason=f"{task_kind} appears in {count} recent failures.",
+                        reason=f"{task_kind} appears in {count} recent failures with risk mix={evidence.get('risk_levels', {})}.",
                         priority="medium",
-                    )
+                        ),
+                        "evidence": evidence,
+                    }
                 )
 
     if signal_counter.get("manual_takeover", 0) >= 2:
@@ -275,7 +360,7 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
     if report.get("repair_actions"):
         for item in report["repair_actions"]:
             lines.append(
-                f"- [{item.get('priority', '')}] {item.get('scope', '')}:{item.get('target', '')} | {item.get('action', '')}"
+                f"- [{item.get('priority', '')}] {item.get('scope', '')}:{item.get('target', '')} | {item.get('action', '')} | reason={item.get('reason', '')}"
             )
     else:
         lines.append("- none")

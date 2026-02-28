@@ -193,6 +193,17 @@ def _approval_receipt_map(backup_dir: Path) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def _latest_event_map(backup_dir: Path) -> Dict[str, Dict[str, Any]]:
+    rows = _approval_rows(backup_dir)
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        snapshot_id = str(row.get("snapshot_id", "")).strip()
+        if not snapshot_id:
+            continue
+        out[snapshot_id] = row
+    return out
+
+
 def _changed_components(preview_diff: Dict[str, Any]) -> List[str]:
     profile_rows = preview_diff.get("profile_overrides", []) if isinstance(preview_diff.get("profile_overrides", []), list) else []
     strategy_rows = preview_diff.get("strategy_overrides", []) if isinstance(preview_diff.get("strategy_overrides", []), list) else []
@@ -430,6 +441,18 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
     )
     profile_path.write_text(json.dumps(profile_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     strategy_path.write_text(json.dumps(strategy_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _record_repair_event(
+        backup_dir=backup_dir,
+        snapshot_id=snapshot_id,
+        event="applied",
+        approval_code=str(plan.get("approval", {}).get("code", "")),
+        actor="repair-apply",
+        extra={
+            "snapshot_file": str(snapshot_file),
+            "plan_json_file": str(plan.get("targets", {}).get("plan_json_file", "")),
+            "changed_components": _changed_components(plan.get("preview_diff", {}) if isinstance(plan.get("preview_diff", {}), dict) else {}),
+        },
+    )
     return {
         "profile_overrides_file": str(profile_path),
         "strategy_overrides_file": str(strategy_path),
@@ -443,6 +466,7 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
 def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any]:
     backup_dir = Path(backup_dir)
     approvals = _approval_receipt_map(backup_dir)
+    latest_events = _latest_event_map(backup_dir)
     plan_map: Dict[str, Dict[str, Any]] = {}
     snapshot_map: Dict[str, Dict[str, Any]] = {}
     snapshot_ids: set[str] = set(approvals.keys())
@@ -476,7 +500,18 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
         snapshot_present = snapshot_file.exists()
         plan_present = plan_json_file.exists()
         approval_recorded = bool(approval_receipt)
-        lifecycle = "applied" if snapshot_present else "approved" if approval_recorded else "planned" if plan_present else "journal-only"
+        latest_event = latest_events.get(snapshot_id, {})
+        latest_event_name = str(latest_event.get("event", "")).strip()
+        if latest_event_name == "rolled_back":
+            lifecycle = "rolled_back"
+        elif latest_event_name == "applied" or snapshot_present:
+            lifecycle = "applied"
+        elif approval_recorded:
+            lifecycle = "approved"
+        elif plan_present:
+            lifecycle = "planned"
+        else:
+            lifecycle = "journal-only"
         rows.append(
             {
                 "snapshot_id": snapshot_id,
@@ -494,10 +529,25 @@ def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any
                 "approval_required": bool(plan.get("approval", {}).get("required", snapshot.get("approval", {}).get("required", False))),
                 "approval_recorded": approval_recorded,
                 "approval_ts": str(approval_receipt.get("ts", "")) if approval_receipt else "",
+                "latest_event": latest_event_name,
+                "latest_event_ts": str(latest_event.get("ts", "")) if latest_event else "",
                 "changed_components": _changed_components(preview_diff),
             }
         )
-    return {"backup_dir": str(backup_dir), "rows": rows, "count": len(rows), "journal_file": str(_journal_path(backup_dir))}
+    lifecycle_counts = {
+        "planned": sum(1 for row in rows if str(row.get("lifecycle", "")) == "planned"),
+        "approved": sum(1 for row in rows if str(row.get("lifecycle", "")) == "approved"),
+        "applied": sum(1 for row in rows if str(row.get("lifecycle", "")) == "applied"),
+        "rolled_back": sum(1 for row in rows if str(row.get("lifecycle", "")) == "rolled_back"),
+        "journal_only": sum(1 for row in rows if str(row.get("lifecycle", "")) == "journal-only"),
+    }
+    return {
+        "backup_dir": str(backup_dir),
+        "rows": rows,
+        "count": len(rows),
+        "journal_file": str(_journal_path(backup_dir)),
+        "summary": lifecycle_counts,
+    }
 
 
 def compare_repair_snapshots(
@@ -589,6 +639,14 @@ def rollback_repair_plan(
         strategy_path.parent.mkdir(parents=True, exist_ok=True)
         strategy_path.write_text(json.dumps(strategy_before, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         restored_components.append("strategy")
+    _record_repair_event(
+        backup_dir=backup_dir,
+        snapshot_id=str(snapshot.get("snapshot_id", "")),
+        event="rolled_back",
+        approval_code=str(snapshot.get("approval", {}).get("code", "")) if isinstance(snapshot.get("approval", {}), dict) else "",
+        actor="repair-rollback",
+        extra={"restored_components": restored_components, "snapshot_file": str(snapshot_file)},
+    )
     return {
         "snapshot_file": str(snapshot_file),
         "snapshot_id": str(snapshot.get("snapshot_id", "")),
@@ -692,6 +750,10 @@ def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str
         "",
         f"- backup_dir: {report.get('backup_dir', '')}",
         f"- journal_file: {report.get('journal_file', '')}",
+        f"- planned: {report.get('summary', {}).get('planned', 0)}",
+        f"- approved: {report.get('summary', {}).get('approved', 0)}",
+        f"- applied: {report.get('summary', {}).get('applied', 0)}",
+        f"- rolled_back: {report.get('summary', {}).get('rolled_back', 0)}",
         "",
     ]
     rows = report.get("rows", []) if isinstance(report.get("rows", []), list) else []

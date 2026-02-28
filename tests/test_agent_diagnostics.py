@@ -66,6 +66,39 @@ class AgentDiagnosticsTest(unittest.TestCase):
                 json.dumps({"run_id": "r1", "rating": 1, "ts": "2026-02-28 10:10:00"}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
+            repair_backups = root / "repair_backups"
+            repair_backups.mkdir(parents=True, exist_ok=True)
+            (repair_backups / "repair_plan_repair_snapshot_20260228_100000.json").write_text(
+                json.dumps(
+                    {
+                        "ts": "2026-02-28 10:00:00",
+                        "approval": {"required": True, "code": "abc"},
+                        "preview_diff": {"profile_overrides": [{"path": "default_profile"}], "strategy_overrides": [], "change_count": 1},
+                        "targets": {
+                            "snapshot_id": "repair_snapshot_20260228_100000",
+                            "plan_json_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_100000.json"),
+                            "plan_md_file": str(repair_backups / "repair_plan_repair_snapshot_20260228_100000.md"),
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (repair_backups / "repair_approval_journal.jsonl").write_text(
+                "\n".join(
+                    [
+                        json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "event": "approved", "ts": "2026-02-28 10:01:00"}, ensure_ascii=False),
+                        json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "event": "applied", "ts": "2026-02-28 10:02:00"}, ensure_ascii=False),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (repair_backups / "repair_snapshot_20260228_100000.json").write_text(
+                json.dumps({"snapshot_id": "repair_snapshot_20260228_100000", "ts": "2026-02-28 10:02:00"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
 
             report = build_agent_dashboard(data_dir=root, days=14, pending_limit=10)
             self.assertEqual(report["summary"]["total_runs"], 2)
@@ -75,6 +108,8 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertEqual(report["object_coverage"]["run_object_count"], 1)
             self.assertEqual(report["risk_level_top"][0]["risk_level"], "low")
             self.assertIn("run_objects", report["sources"])
+            self.assertEqual(report["repair_governance"]["lifecycle"]["applied"], 1)
+            self.assertEqual(report["summary"]["repair_applied"], 1)
 
             files = write_dashboard_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())
