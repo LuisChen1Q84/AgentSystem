@@ -14,6 +14,8 @@ class AgentServiceRegistryTest(unittest.TestCase):
         rows = reg.list_services()
         names = {x["name"] for x in rows}
         self.assertIn("agent.run", names)
+        self.assertIn("agent.context.profile", names)
+        self.assertIn("agent.context.scaffold", names)
         self.assertIn("agent.feedback.pending", names)
         self.assertIn("agent.diagnostics", names)
         self.assertIn("agent.failures.review", names)
@@ -23,6 +25,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.policy.tune", names)
         self.assertIn("agent.policy.apply", names)
         self.assertIn("agent.preferences.learn", names)
+        self.assertIn("agent.question_set", names)
         self.assertIn("agent.repairs.apply", names)
         self.assertIn("agent.repairs.approve", names)
         self.assertIn("agent.repairs.compare", names)
@@ -214,6 +217,21 @@ class AgentServiceRegistryTest(unittest.TestCase):
     def test_execute_agent_run(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
+            context_dir = root / "ctx"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "project-instructions.json").write_text(
+                json.dumps(
+                    {
+                        "project_name": "Weekly Review",
+                        "audience": "management",
+                        "preferred_language": "zh",
+                        "default_deliverable": "markdown_report",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             reg = AgentServiceRegistry(root=root)
             out = reg.execute(
                 "agent.run",
@@ -221,6 +239,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
                 params={
                     "profile": "strict",
                     "dry_run": True,
+                    "context_dir": str(context_dir),
                     "agent_log_dir": str(root / "agent"),
                     "autonomy_log_dir": str(root / "aut"),
                     "memory_file": str(root / "memory.json"),
@@ -233,6 +252,28 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("evidence_object", out)
             self.assertIn("run_object", out)
             self.assertIn("delivery_protocol", out)
+            self.assertEqual(out.get("context_profile", {}).get("project_name"), "Weekly Review")
+
+    def test_execute_context_and_question_services(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            scaffold = reg.execute("agent.context.scaffold", context_dir=str(root / "ctx"), project_name="Research Ops", force=False)
+            self.assertTrue(scaffold.get("ok", False))
+            self.assertTrue((root / "ctx" / "project-instructions.json").exists())
+
+            profile = reg.execute("agent.context.profile", context_dir=str(root / "ctx"))
+            self.assertTrue(profile.get("ok", False))
+            self.assertEqual(profile.get("profile", {}).get("project_name"), "Research Ops")
+
+            question_set = reg.execute(
+                "agent.question_set",
+                text="请做一份董事会汇报PPT",
+                params={"context_dir": str(root / "ctx"), "task_kind": "presentation"},
+            )
+            self.assertTrue(question_set.get("ok", False))
+            self.assertEqual(question_set.get("task_kind"), "presentation")
+            self.assertIn("question_set", question_set)
 
     def test_execute_research_report(self):
         with tempfile.TemporaryDirectory() as td:

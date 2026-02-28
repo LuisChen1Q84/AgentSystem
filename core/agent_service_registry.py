@@ -12,6 +12,7 @@ ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 
 from core.registry.service_protocol import ServiceSpec, error_response
 from services.agent_runtime_service import AgentRuntimeService
+from services.context_service import ContextProfileService, ContextScaffoldService
 from services.data_service import DataService
 from services.diagnostics_service import DiagnosticsService
 from services.failure_review_service import FailureReviewService
@@ -26,6 +27,7 @@ from services.policy_action_service import PolicyActionService
 from services.policy_service import PolicyService
 from services.preference_learning_service import PreferenceLearningService
 from services.ppt_service import PPTService
+from services.question_service import QuestionSetService
 from services.recommendation_service import RecommendationService
 from services.research_service import ResearchService
 from services.repair_apply_service import RepairApplyService, RepairApproveService, RepairCompareService, RepairListService, RepairRollbackService
@@ -41,6 +43,8 @@ class AgentServiceRegistry:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
         self.runtime = AgentRuntimeService(root=self.root)
+        self.context_profile = ContextProfileService(root=self.root)
+        self.context_scaffold = ContextScaffoldService(root=self.root)
         self.observe = ObservabilityService(root=self.root)
         self.feedback = FeedbackService(root=self.root)
         self.governance = GovernanceConsoleService(root=self.root)
@@ -59,6 +63,7 @@ class AgentServiceRegistry:
         self.policy = PolicyService(root=self.root)
         self.policy_apply = PolicyActionService(root=self.root)
         self.preferences = PreferenceLearningService(root=self.root)
+        self.question_set = QuestionSetService(root=self.root)
         self.run_diagnostics = RunDiagnosticsService(root=self.root)
         self.object_view = ObjectViewService(root=self.root)
         self.replay = ReplayService(root=self.root)
@@ -71,8 +76,11 @@ class AgentServiceRegistry:
 
         self._services: Dict[str, ServiceSpec] = {
             "agent.run": ServiceSpec("agent.run", "runtime", "Run Personal Agent OS task", "medium"),
+            "agent.context.profile": ServiceSpec("agent.context.profile", "runtime", "Inspect project context folder and instructions", "low"),
+            "agent.context.scaffold": ServiceSpec("agent.context.scaffold", "runtime", "Scaffold a recommended context folder and project instructions", "low"),
             "agent.observe": ServiceSpec("agent.observe", "observability", "Build agent observability report", "low"),
             "agent.recommend": ServiceSpec("agent.recommend", "optimization", "Recommend profile by task kind", "low"),
+            "agent.question_set": ServiceSpec("agent.question_set", "runtime", "Build structured clarification questions for a task", "low"),
             "agent.state.sync": ServiceSpec("agent.state.sync", "observability", "Sync runtime objects into sqlite state store", "low"),
             "agent.state.stats": ServiceSpec("agent.state.stats", "observability", "Inspect sqlite state store counts", "low"),
             "agent.slo": ServiceSpec("agent.slo", "governance", "Evaluate SLO guard", "low"),
@@ -124,6 +132,16 @@ class AgentServiceRegistry:
             return error_response("agent.run", "missing_text", code="missing_text").to_dict()
         return self.runtime.run(text, params).to_dict()
 
+    def _exec_agent_context_profile(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.context_profile.profile(context_dir=str(kwargs.get("context_dir", ""))).to_dict()
+
+    def _exec_agent_context_scaffold(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.context_scaffold.run(
+            context_dir=str(kwargs.get("context_dir", "")),
+            project_name=str(kwargs.get("project_name", "")),
+            force=bool(kwargs.get("force", False)),
+        ).to_dict()
+
     def _exec_agent_observe(self, **kwargs: Any) -> Dict[str, Any]:
         return self.observe.run(data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")), days=max(1, int(kwargs.get("days", 14)))).to_dict()
 
@@ -166,6 +184,12 @@ class AgentServiceRegistry:
         return self.preferences.run(
             data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
             out_file=str(kwargs.get("out_file", "")),
+        ).to_dict()
+
+    def _exec_agent_question_set(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.question_set.run(
+            text=str(kwargs.get("text", "")),
+            params=kwargs.get("params", {}) if isinstance(kwargs.get("params", {}), dict) else {},
         ).to_dict()
 
     def _exec_agent_governance_console(self, **kwargs: Any) -> Dict[str, Any]:

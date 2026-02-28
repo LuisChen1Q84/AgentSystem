@@ -58,7 +58,7 @@ def _print_run_summary(out: Dict[str, Any]) -> None:
     )
 
 
-def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, params_json: str, data_dir: str) -> int:
+def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, params_json: str, data_dir: str, context_dir: str = "") -> int:
     try:
         params = _parse_params_json(params_json)
     except Exception as e:
@@ -68,6 +68,8 @@ def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, 
         params["profile"] = profile.strip()
     if dry_run:
         params["dry_run"] = True
+    if context_dir.strip():
+        params["context_dir"] = context_dir.strip()
     if data_dir.strip():
         p = Path(data_dir)
         params["agent_log_dir"] = str(p)
@@ -75,6 +77,32 @@ def _run_cmd(reg: AgentServiceRegistry, text: str, profile: str, dry_run: bool, 
         params["memory_file"] = str(p / "memory.json")
     out = reg.execute("agent.run", text=text, params=params)
     _print_run_summary(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _context_profile_cmd(reg: AgentServiceRegistry, context_dir: str) -> int:
+    _print_json(reg.execute("agent.context.profile", context_dir=context_dir))
+    return 0
+
+
+def _context_scaffold_cmd(reg: AgentServiceRegistry, context_dir: str, project_name: str, force: bool) -> int:
+    out = reg.execute("agent.context.scaffold", context_dir=context_dir, project_name=project_name, force=force)
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _question_set_cmd(reg: AgentServiceRegistry, text: str, params_json: str, context_dir: str, task_kind: str) -> int:
+    try:
+        params = _parse_params_json(params_json)
+    except Exception as e:
+        _print_json({"ok": False, "error": f"invalid params-json: {e}"})
+        return 2
+    if context_dir.strip():
+        params["context_dir"] = context_dir.strip()
+    if task_kind.strip():
+        params["task_kind"] = task_kind.strip()
+    out = reg.execute("agent.question_set", text=text, params=params)
+    _print_json(out)
     return 0 if bool(out.get("ok", False)) else 1
 
 
@@ -581,7 +609,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
-        "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
+        "Agent Studio REPL. commands: run <text>, context-profile <dir>, question-set <text>, observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
         "research-report <text>, research-deck <text>, research-lookup <text>, market-report <text>, market-committee <text>, "
         "governance [days] [limit], failure-review [days], repair-observe [limit], repair-apply [days] [min_score] [max_actions], "
         "repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], "
@@ -605,7 +633,20 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             if not text:
                 print("usage: run <task text>")
                 continue
-            _run_cmd(reg, text=text, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir)
+            _run_cmd(reg, text=text, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir, context_dir="")
+            continue
+        if cmd == "context-profile":
+            if not args:
+                print("usage: context-profile <context_dir>")
+                continue
+            _context_profile_cmd(reg, context_dir=str(args[0]))
+            continue
+        if cmd == "question-set":
+            text = " ".join(args).strip()
+            if not text:
+                print("usage: question-set <task text>")
+                continue
+            _question_set_cmd(reg, text=text, params_json="{}", context_dir="", task_kind="")
             continue
         if cmd == "observe":
             _observe_cmd(reg, days=int(args[0]) if args else 14, data_dir=data_dir)
@@ -832,7 +873,7 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             params_json = args[1] if len(args) > 1 else "{}"
             _call_cmd(reg, service=service, params_json=params_json)
             continue
-        _run_cmd(reg, text=line, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir)
+        _run_cmd(reg, text=line, profile="auto", dry_run=True, params_json="{}", data_dir=data_dir, context_dir="")
     return 0
 
 
@@ -846,6 +887,21 @@ def build_cli() -> argparse.ArgumentParser:
     run.add_argument("--profile", default="auto")
     run.add_argument("--dry-run", action="store_true")
     run.add_argument("--params-json", default="{}")
+    run.add_argument("--context-dir", default="")
+
+    context_profile = sp.add_parser("context-profile")
+    context_profile.add_argument("--context-dir", required=True)
+
+    context_scaffold = sp.add_parser("context-scaffold")
+    context_scaffold.add_argument("--context-dir", required=True)
+    context_scaffold.add_argument("--project-name", default="")
+    context_scaffold.add_argument("--force", action="store_true")
+
+    question_set = sp.add_parser("question-set")
+    question_set.add_argument("--text", required=True)
+    question_set.add_argument("--params-json", default="{}")
+    question_set.add_argument("--context-dir", default="")
+    question_set.add_argument("--task-kind", default="")
 
     ob = sp.add_parser("observe")
     ob.add_argument("--days", type=int, default=14)
@@ -1043,7 +1099,13 @@ def main() -> int:
     data_dir = str(args.data_dir)
 
     if args.cmd == "run":
-        return _run_cmd(reg, text=str(args.text), profile=str(args.profile), dry_run=bool(args.dry_run), params_json=str(args.params_json), data_dir=data_dir)
+        return _run_cmd(reg, text=str(args.text), profile=str(args.profile), dry_run=bool(args.dry_run), params_json=str(args.params_json), data_dir=data_dir, context_dir=str(args.context_dir))
+    if args.cmd == "context-profile":
+        return _context_profile_cmd(reg, context_dir=str(args.context_dir))
+    if args.cmd == "context-scaffold":
+        return _context_scaffold_cmd(reg, context_dir=str(args.context_dir), project_name=str(args.project_name), force=bool(args.force))
+    if args.cmd == "question-set":
+        return _question_set_cmd(reg, text=str(args.text), params_json=str(args.params_json), context_dir=str(args.context_dir), task_kind=str(args.task_kind))
     if args.cmd == "observe":
         return _observe_cmd(reg, days=int(args.days), data_dir=data_dir)
     if args.cmd == "recommend":

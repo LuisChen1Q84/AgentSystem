@@ -47,6 +47,7 @@ class AgentKernel:
         clarification = blueprint["clarification"]
         cap_snapshot = blueprint["capability_snapshot"]
         strategy_controls = blueprint["strategy_controls"]
+        context_profile = blueprint["context_profile"]
 
         log_dir = resolve_path(values.get("agent_log_dir", defaults.get("log_dir", ROOT / "日志" / "agent_os")), self.root)
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -78,6 +79,7 @@ class AgentKernel:
             "request": {"text": text, "params": values},
             "task_kind": run_request.task.task_kind,
             "clarification": clarification,
+            "context_profile": context_profile,
             "duration_ms": duration_ms,
             "capability_snapshot": cap_snapshot,
             "strategy_controls": strategy_controls,

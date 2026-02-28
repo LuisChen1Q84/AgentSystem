@@ -26,12 +26,16 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 try:
+    from core.kernel.context_profile import build_context_profile
     from core.kernel.models import ExecutionPlan, RunContext, RunRequest, TaskSpec
+    from core.kernel.question_set import build_question_set
     from scripts import autonomy_generalist
     from scripts.capability_catalog import load_cfg as load_catalog_cfg
     from scripts.capability_catalog import scan as scan_catalog
 except ModuleNotFoundError:  # direct
+    from context_profile import build_context_profile  # type: ignore
     from models import ExecutionPlan, RunContext, RunRequest, TaskSpec  # type: ignore
+    from question_set import build_question_set  # type: ignore
     import autonomy_generalist  # type: ignore
     from capability_catalog import load_cfg as load_catalog_cfg  # type: ignore
     from capability_catalog import scan as scan_catalog  # type: ignore
@@ -122,6 +126,8 @@ def task_kind_for_text(text: str) -> str:
         return "presentation"
     if any(k in low for k in ["图像", "图片", "画", "海报", "image", "poster"]):
         return "image"
+    if any(k in low for k in ["tam", "sam", "som", "prisma", "systematic review", "文献搜索", "系统综述", "研究报告", "研报", "meta analysis", "荟萃分析"]):
+        return "research"
     if any(k in low for k in ["股票", "etf", "k线", "market", "quant", "回测", "spy", "qqq", "支撑", "压力", "buy", "sell"]):
         return "market"
     if any(k in low for k in ["报告", "总结", "复盘", "brief", "summary"]):
@@ -132,42 +138,11 @@ def task_kind_for_text(text: str) -> str:
 
 
 
-def build_clarification_plan(text: str, task_kind: str) -> Dict[str, Any]:
-    t = text.strip()
-    low = t.lower()
-    questions: List[str] = []
-    assumptions: List[str] = []
-
-    if len(t) < 8:
-        questions.append("你希望最终交付是什么格式（清单/报告/PPT/表格）？")
-        assumptions.append("默认先输出结构化 markdown 清单。")
-
-    if task_kind == "presentation":
-        if not re.search(r"(董事会|管理层|客户|投资人|audience)", t, re.IGNORECASE):
-            questions.append("这份演示文稿的受众是谁？")
-            assumptions.append("默认受众为管理层。")
-        if not re.search(r"(10页|15页|20页|页|slides?)", low):
-            questions.append("你希望控制在多少页以内？")
-            assumptions.append("默认 12 页以内。")
-
-    if task_kind == "report":
-        if not re.search(r"(本周|本月|季度|年度|today|week|month|quarter|year)", low):
-            questions.append("时间范围是本周、本月还是自定义区间？")
-            assumptions.append("默认时间范围为本周。")
-
-    if task_kind == "market":
-        if not re.search(r"(A股|港股|美股|etf|symbol|代码)", low):
-            questions.append("请确认市场与标的代码（如 SPY、513180）。")
-            assumptions.append("默认按美股ETF语境进行框架化分析。")
-
-    return {"needed": len(questions) > 0, "questions": questions[:2], "assumptions": assumptions[:2]}
-
-
-
 def _task_intent(task_kind: str) -> str:
     mapping = {
         "presentation": "prepare_decision_material",
         "image": "generate_creative_asset",
+        "research": "build_evidence_led_analysis",
         "market": "analyze_market_signal",
         "report": "summarize_and_structure",
         "dataops": "query_or_transform_data",
@@ -181,6 +156,7 @@ def _expected_outputs(task_kind: str) -> List[str]:
     mapping = {
         "presentation": ["slide_spec", "markdown_summary"],
         "image": ["image_asset", "prompt_packet"],
+        "research": ["research_report", "citation_block", "evidence_ledger"],
         "market": ["market_report", "risk_notes"],
         "report": ["markdown_report"],
         "dataops": ["structured_data", "markdown_summary"],
@@ -410,7 +386,7 @@ def build_strategy_controls(
 
 
 
-def build_run_context(values: Dict[str, Any], strategy_controls: Dict[str, Any], capability: Dict[str, Any]) -> RunContext:
+def build_run_context(values: Dict[str, Any], strategy_controls: Dict[str, Any], capability: Dict[str, Any], context_profile: Dict[str, Any]) -> RunContext:
     return RunContext(
         memory_refs=[str(values.get("memory_file", ""))] if str(values.get("memory_file", "")).strip() else [],
         available_services=sorted(set(strategy_controls.get("allowed_strategies", []))),
@@ -419,8 +395,8 @@ def build_run_context(values: Dict[str, Any], strategy_controls: Dict[str, Any],
             "max_risk_level": strategy_controls.get("max_risk_level", "medium"),
             "blocked": strategy_controls.get("blocked_details", []),
         },
-        environment={"root": str(ROOT)},
-        session_state={"capability_error": capability.get("error", "")},
+        environment={"root": str(ROOT), "context_dir": str(context_profile.get("context_dir", ""))},
+        session_state={"capability_error": capability.get("error", ""), "context_profile": context_profile},
     )
 
 
@@ -471,7 +447,8 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
         preferences_file=preferences_file,
     )
     task = build_task_spec(text, values, task_kind=str(profile_meta.get("task_kind", "general")))
-    clarification = build_clarification_plan(text, task.task_kind)
+    context_profile = build_context_profile(values.get("context_dir", values.get("project_dir", "")))
+    clarification = build_question_set(text, task_kind=task.task_kind, context_profile=context_profile)
     capability = capability_report(values, cfg)
     cap_snapshot = capability_snapshot(capability)
     strategy_controls = build_strategy_controls(profile_name, values, cfg, capability, strategy_overrides_file)
@@ -483,16 +460,17 @@ def build_run_blueprint(text: str, values: Dict[str, Any], cfg: Dict[str, Any]) 
         mode="personal-agent-os",
         allow_high_risk=bool(values.get("allow_high_risk", False)),
         dry_run=bool(values.get("dry_run", False)),
-        context={"profile_meta": profile_meta},
+        context={"profile_meta": profile_meta, "context_profile": context_profile, "question_set": clarification},
         runtime_overrides=dict(values),
     )
-    run_context = build_run_context(values, strategy_controls, capability)
+    run_context = build_run_context(values, strategy_controls, capability, context_profile)
     plan = build_execution_plan(run_request, clarification, strategy_controls, governor)
     return {
         "run_request": run_request,
         "run_context": run_context,
         "execution_plan": plan,
         "clarification": clarification,
+        "context_profile": context_profile,
         "governor": governor,
         "profile_meta": profile_meta,
         "preferences_file": str(preferences_file),

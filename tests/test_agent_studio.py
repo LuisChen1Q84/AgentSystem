@@ -18,6 +18,24 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a1.cmd, "feedback-add")
         self.assertEqual(a1.rating, 1)
 
+        a0 = parser.parse_args(["run", "--text", "做周报", "--context-dir", "/tmp/ctx"])
+        self.assertEqual(a0.cmd, "run")
+        self.assertEqual(a0.context_dir, "/tmp/ctx")
+
+        ac1 = parser.parse_args(["context-profile", "--context-dir", "/tmp/ctx"])
+        self.assertEqual(ac1.cmd, "context-profile")
+        self.assertEqual(ac1.context_dir, "/tmp/ctx")
+
+        ac2 = parser.parse_args(["context-scaffold", "--context-dir", "/tmp/ctx", "--project-name", "Board Pack", "--force"])
+        self.assertEqual(ac2.cmd, "context-scaffold")
+        self.assertEqual(ac2.project_name, "Board Pack")
+        self.assertTrue(ac2.force)
+
+        aq = parser.parse_args(["question-set", "--text", "请做董事会汇报", "--context-dir", "/tmp/ctx", "--task-kind", "presentation"])
+        self.assertEqual(aq.cmd, "question-set")
+        self.assertEqual(aq.context_dir, "/tmp/ctx")
+        self.assertEqual(aq.task_kind, "presentation")
+
         a2 = parser.parse_args(["feedback-stats"])
         self.assertEqual(a2.cmd, "feedback-stats")
 
@@ -229,6 +247,38 @@ class AgentStudioTest(unittest.TestCase):
             self.assertIn("run_object", payload)
             self.assertEqual(payload.get("report", {}).get("count"), 1)
             self.assertEqual(payload.get("report", {}).get("rows", [])[0].get("lifecycle"), "applied")
+
+    def test_context_and_question_commands(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._context_scaffold_cmd(reg, context_dir=str(root / "ctx"), project_name="Board Pack", force=False)
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._context_profile_cmd(reg, context_dir=str(root / "ctx"))
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(payload.get("profile", {}).get("project_name"), "Board Pack")
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._question_set_cmd(
+                    reg,
+                    text="请做一份董事会汇报PPT",
+                    params_json="{}",
+                    context_dir=str(root / "ctx"),
+                    task_kind="presentation",
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(payload.get("task_kind"), "presentation")
+            self.assertIn("question_set", payload)
 
     def test_research_report_cmd(self):
         with tempfile.TemporaryDirectory() as td:
