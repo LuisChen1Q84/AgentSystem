@@ -31,6 +31,8 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.run.resume", names)
         self.assertIn("agent.session.list", names)
         self.assertIn("agent.session.view", names)
+        self.assertIn("agent.inbox", names)
+        self.assertIn("agent.actions.plan", names)
         self.assertIn("agent.workbench", names)
         self.assertIn("agent.repairs.apply", names)
         self.assertIn("agent.repairs.approve", names)
@@ -269,6 +271,10 @@ class AgentServiceRegistryTest(unittest.TestCase):
             session_view = reg.execute("agent.session.view", data_dir=str(root / "agent"), session_id=session_id)
             self.assertTrue(session_view.get("ok", False))
             self.assertEqual(session_view.get("report", {}).get("session_id"), session_id)
+            inbox = reg.execute("agent.inbox", data_dir=str(root / "agent"), days=14, limit=10)
+            self.assertTrue(inbox.get("ok", False))
+            action_plan = reg.execute("agent.actions.plan", data_dir=str(root / "agent"), days=14, limit=10)
+            self.assertTrue(action_plan.get("ok", False))
 
     def test_execute_context_and_question_services(self):
         with tempfile.TemporaryDirectory() as td:

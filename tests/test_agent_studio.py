@@ -57,6 +57,17 @@ class AgentStudioTest(unittest.TestCase):
         asv = parser.parse_args(["session-view", "--session-id", "session_1"])
         self.assertEqual(asv.cmd, "session-view")
         self.assertEqual(asv.session_id, "session_1")
+        self.assertEqual(asv.out_dir, "")
+
+        ain = parser.parse_args(["inbox", "--days", "7", "--limit", "9"])
+        self.assertEqual(ain.cmd, "inbox")
+        self.assertEqual(ain.days, 7)
+        self.assertEqual(ain.limit, 9)
+
+        aap = parser.parse_args(["action-plan", "--days", "7", "--limit", "9"])
+        self.assertEqual(aap.cmd, "action-plan")
+        self.assertEqual(aap.days, 7)
+        self.assertEqual(aap.limit, 9)
 
         awb = parser.parse_args(["workbench", "--context-dir", "/tmp/ctx", "--days", "7", "--limit", "6"])
         self.assertEqual(awb.cmd, "workbench")
@@ -375,10 +386,27 @@ class AgentStudioTest(unittest.TestCase):
 
             buf = io.StringIO()
             with redirect_stdout(buf):
-                code = agent_studio._session_view_cmd(reg, data_dir=str(root / "agent"), session_id=session_id)
+                code = agent_studio._session_view_cmd(reg, data_dir=str(root / "agent"), session_id=session_id, out_dir=str(root / "out"))
             self.assertEqual(code, 0)
             session_view_payload = json.loads(buf.getvalue())
             self.assertEqual(session_view_payload.get("report", {}).get("session_id"), session_id)
+            self.assertTrue(session_view_payload.get("deliver_assets", {}).get("items"))
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._inbox_cmd(reg, data_dir=str(root / "agent"), days=14, limit=10)
+            self.assertEqual(code, 0)
+            inbox_payload = json.loads(buf.getvalue())
+            self.assertTrue(inbox_payload.get("ok", False))
+            self.assertTrue(inbox_payload.get("report", {}).get("rows"))
+
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._action_plan_cmd(reg, data_dir=str(root / "agent"), days=14, limit=10)
+            self.assertEqual(code, 0)
+            action_payload = json.loads(buf.getvalue())
+            self.assertTrue(action_payload.get("ok", False))
+            self.assertTrue(action_payload.get("report", {}).get("do_now"))
 
             buf = io.StringIO()
             with redirect_stdout(buf):

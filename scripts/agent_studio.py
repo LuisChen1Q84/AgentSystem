@@ -154,11 +154,34 @@ def _session_list_cmd(reg: AgentServiceRegistry, data_dir: str, limit: int, stat
     return 0 if bool(out.get("ok", False)) else 1
 
 
-def _session_view_cmd(reg: AgentServiceRegistry, data_dir: str, session_id: str) -> int:
+def _session_view_cmd(reg: AgentServiceRegistry, data_dir: str, session_id: str, out_dir: str = "") -> int:
     out = reg.execute(
         "agent.session.view",
         data_dir=data_dir or str(ROOT / "日志/agent_os"),
         session_id=session_id,
+        out_dir=out_dir,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _inbox_cmd(reg: AgentServiceRegistry, data_dir: str, days: int, limit: int) -> int:
+    out = reg.execute(
+        "agent.inbox",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        days=days,
+        limit=limit,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
+def _action_plan_cmd(reg: AgentServiceRegistry, data_dir: str, days: int, limit: int) -> int:
+    out = reg.execute(
+        "agent.actions.plan",
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        days=days,
+        limit=limit,
     )
     _print_json(out)
     return 0 if bool(out.get("ok", False)) else 1
@@ -691,7 +714,7 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
-        "Agent Studio REPL. commands: run <text>, context-profile <dir>, question-set <text>, question-pending [limit], question-answer <qs_id> <json>, run-resume <qs_id>, session-list [limit], session-view <session_id>, workbench [days limit], observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
+        "Agent Studio REPL. commands: run <text>, context-profile <dir>, question-set <text>, question-pending [limit], question-answer <qs_id> <json>, run-resume <qs_id>, session-list [limit], session-view <session_id>, inbox [days limit], action-plan [days limit], workbench [days limit], observe [days], recommend [days], state-sync, state-stats, diagnostics [days], "
         "research-report <text>, research-deck <text>, research-lookup <text>, market-report <text>, market-committee <text>, "
         "governance [days] [limit], failure-review [days], repair-observe [limit], repair-apply [days] [min_score] [max_actions], "
         "repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-presets [list|recommend|save|drift|lifecycle] [days] [limit] [top_n], "
@@ -752,7 +775,13 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             if not args:
                 print("usage: session-view <session_id>")
                 continue
-            _session_view_cmd(reg, data_dir=data_dir, session_id=str(args[0]))
+            _session_view_cmd(reg, data_dir=data_dir, session_id=str(args[0]), out_dir="")
+            continue
+        if cmd == "inbox":
+            _inbox_cmd(reg, data_dir=data_dir, days=int(args[0]) if args else 14, limit=int(args[1]) if len(args) > 1 else 12)
+            continue
+        if cmd == "action-plan":
+            _action_plan_cmd(reg, data_dir=data_dir, days=int(args[0]) if args else 14, limit=int(args[1]) if len(args) > 1 else 12)
             continue
         if cmd == "workbench":
             _workbench_cmd(
@@ -1039,6 +1068,15 @@ def build_cli() -> argparse.ArgumentParser:
 
     session_view = sp.add_parser("session-view")
     session_view.add_argument("--session-id", required=True)
+    session_view.add_argument("--out-dir", default="")
+
+    inbox = sp.add_parser("inbox")
+    inbox.add_argument("--days", type=int, default=14)
+    inbox.add_argument("--limit", type=int, default=12)
+
+    action_plan = sp.add_parser("action-plan")
+    action_plan.add_argument("--days", type=int, default=14)
+    action_plan.add_argument("--limit", type=int, default=12)
 
     workbench = sp.add_parser("workbench")
     workbench.add_argument("--context-dir", default="")
@@ -1270,7 +1308,11 @@ def main() -> int:
     if args.cmd == "session-list":
         return _session_list_cmd(reg, data_dir=data_dir, limit=int(args.limit), status=str(args.status))
     if args.cmd == "session-view":
-        return _session_view_cmd(reg, data_dir=data_dir, session_id=str(args.session_id))
+        return _session_view_cmd(reg, data_dir=data_dir, session_id=str(args.session_id), out_dir=str(args.out_dir))
+    if args.cmd == "inbox":
+        return _inbox_cmd(reg, data_dir=data_dir, days=int(args.days), limit=int(args.limit))
+    if args.cmd == "action-plan":
+        return _action_plan_cmd(reg, data_dir=data_dir, days=int(args.days), limit=int(args.limit))
     if args.cmd == "workbench":
         return _workbench_cmd(
             reg,

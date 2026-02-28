@@ -12,10 +12,12 @@ ROOT = Path(__file__).resolve().parents[2]
 ROOT = Path(os.getenv("AGENTSYSTEM_ROOT", str(ROOT))).resolve()
 
 from core.kernel.context_profile import build_context_profile, context_brief
+from core.kernel.action_orchestrator import build_action_plan
 from core.kernel.diagnostics import build_agent_dashboard
 from core.kernel.governance_console import build_governance_console
+from core.kernel.inbox import build_inbox
 from core.kernel.question_flow import list_pending_question_sets
-from core.kernel.session_flow import list_sessions
+from core.kernel.session_flow import build_session_frontdesk, list_sessions
 
 
 
@@ -183,6 +185,9 @@ def render_workbench_html(report: Dict[str, Any]) -> str:
     summary = report.get("summary", {}) if isinstance(report.get("summary", {}), dict) else {}
     pending = report.get("pending_questions", {}) if isinstance(report.get("pending_questions", {}), dict) else {}
     session_report = report.get("sessions", {}) if isinstance(report.get("sessions", {}), dict) else {}
+    inbox = report.get("inbox", {}) if isinstance(report.get("inbox", {}), dict) else {}
+    action_plan = report.get("action_plan", {}) if isinstance(report.get("action_plan", {}), dict) else {}
+    frontdesk = report.get("session_frontdesk", {}) if isinstance(report.get("session_frontdesk", {}), dict) else {}
     workspace = report.get("workspace", {}) if isinstance(report.get("workspace", {}), dict) else {}
     focus_queue = report.get("focus_queue", []) if isinstance(report.get("focus_queue", []), list) else []
     quick_actions = report.get("quick_actions", []) if isinstance(report.get("quick_actions", []), list) else []
@@ -268,6 +273,21 @@ th {{ color: #6d6558; font-weight: 600; }}
             ["session_id", "status", "task_kind", "summary"],
         )}
       </div>
+      <div class="panel">
+        <h2>Inbox</h2>
+        {_render_rows(
+            [
+                {
+                    "kind": row.get("kind", ""),
+                    "status": row.get("status", ""),
+                    "title": row.get("title", ""),
+                    "command": row.get("command", ""),
+                }
+                for row in (inbox.get("rows", []) if isinstance(inbox.get("rows", []), list) else [])[:6]
+            ],
+            ["kind", "status", "title", "command"],
+        )}
+      </div>
     </div>
     <div class="stack">
       <div class="panel">
@@ -294,6 +314,29 @@ th {{ color: #6d6558; font-weight: 600; }}
           <li>Market source gate: {summary.get("market_source_gate_status", "")}</li>
         </ul>
       </div>
+      <div class="panel">
+        <h2>Action Plan</h2>
+        {_render_rows(
+            [
+                {
+                    "action_type": row.get("action_type", ""),
+                    "priority": row.get("priority", ""),
+                    "title": row.get("title", ""),
+                    "command": row.get("command", ""),
+                }
+                for row in (action_plan.get("do_now", []) if isinstance(action_plan.get("do_now", []), list) else [])[:5]
+            ],
+            ["action_type", "priority", "title", "command"],
+        )}
+      </div>
+      <div class="panel">
+        <h2>Session Frontdesk</h2>
+        <ul>
+          <li>session_id: {(frontdesk.get("session", {}) if isinstance(frontdesk.get("session", {}), dict) else {}).get("session_id", "")}</li>
+          <li>state: {frontdesk.get("collaboration_state", "")}</li>
+          <li>summary: {(frontdesk.get("session", {}) if isinstance(frontdesk.get("session", {}), dict) else {}).get("summary", "")}</li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -311,6 +354,22 @@ def build_workbench(*, data_dir: Path, context_dir: str = "", days: int = 14, li
     governance = build_governance_console(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)), pending_limit=max(1, int(limit)))
     pending = list_pending_question_sets(data_dir=data_dir, limit=max(1, int(limit)), status="pending")
     sessions = list_sessions(data_dir=data_dir, limit=max(1, int(limit)), status="all")
+    inbox = build_inbox(
+        data_dir=data_dir,
+        days=max(1, int(days)),
+        limit=max(1, int(limit)),
+        pending_report=pending,
+        session_report=sessions,
+        dashboard=dashboard,
+        governance=governance,
+    )
+    action_plan = build_action_plan(data_dir=data_dir, days=max(1, int(days)), limit=max(1, int(limit)), inbox_report=inbox)
+    session_rows = sessions.get("rows", []) if isinstance(sessions.get("rows", []), list) else []
+    primary_session_id = ""
+    if session_rows:
+        active = [row for row in session_rows if isinstance(row, dict) and str(row.get("status", "")).strip() in {"needs_input", "answered", "running"}]
+        primary_session_id = str((active[0] if active else session_rows[0]).get("session_id", "")).strip()
+    session_frontdesk = build_session_frontdesk(data_dir=data_dir, session_id=primary_session_id) if primary_session_id else {}
     workspace = {
         "research": _recent_research_assets(data_dir, limit=limit),
         "ppt": _recent_ppt_assets(limit=limit),
@@ -325,6 +384,8 @@ def build_workbench(*, data_dir: Path, context_dir: str = "", days: int = 14, li
         "pending_feedback": int(dashboard.get("summary", {}).get("pending_feedback", 0) or 0),
         "repair_applied": int(dashboard.get("summary", {}).get("repair_applied", 0) or 0),
         "market_source_gate_status": str(governance.get("summary", {}).get("market_source_gate_status", "")),
+        "inbox_items": int(inbox.get("summary", {}).get("count", 0) or 0),
+        "do_now_actions": int(action_plan.get("summary", {}).get("do_now", 0) or 0),
     }
     pending_rows = pending.get("rows", []) if isinstance(pending.get("rows", []), list) else []
     return {
@@ -333,6 +394,9 @@ def build_workbench(*, data_dir: Path, context_dir: str = "", days: int = 14, li
         "context_brief": context_brief(context_profile),
         "pending_questions": pending,
         "sessions": sessions,
+        "session_frontdesk": session_frontdesk,
+        "inbox": inbox,
+        "action_plan": action_plan,
         "dashboard": {
             "summary": dashboard.get("summary", {}),
             "recent_failures": dashboard.get("recent_failures", []),

@@ -16,7 +16,7 @@ ROOT ?= $(CURDIR)
 	mcp-doctor mcp-route-smart mcp-run mcp-replay mcp-pipeline \
 	mcp-repair-templates mcp-schedule mcp-schedule-run mcp-freefirst-sync mcp-freefirst-report \
 	stock-env-check stock-health-check stock-universe stock-sync stock-analyze stock-backtest stock-portfolio stock-portfolio-bt stock-sector-audit stock-sector-patch stock-report stock-run stock-hub \
-	skill-route skill-execute autonomous agent agent-studio agent-context-profile agent-context-scaffold agent-question-set agent-question-pending agent-question-answer agent-run-resume agent-workbench agent-research-report agent-research-deck agent-research-lookup agent-market-report agent-market-committee agent-observe agent-recommend agent-state-sync agent-state-stats agent-failure-review agent-repair-observe agent-repair-apply agent-repair-approve agent-repair-list agent-repair-presets agent-repair-compare agent-repair-rollback agent-run-inspect agent-object-view agent-run-replay agent-policy agent-policy-apply agent-preferences agent-governance agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
+	skill-route skill-execute autonomous agent agent-studio agent-context-profile agent-context-scaffold agent-question-set agent-question-pending agent-question-answer agent-run-resume agent-session-list agent-session-view agent-inbox agent-action-plan agent-workbench agent-research-report agent-research-deck agent-research-lookup agent-market-report agent-market-committee agent-observe agent-recommend agent-state-sync agent-state-stats agent-failure-review agent-repair-observe agent-repair-apply agent-repair-approve agent-repair-list agent-repair-presets agent-repair-compare agent-repair-rollback agent-run-inspect agent-object-view agent-run-replay agent-policy agent-policy-apply agent-preferences agent-governance agent-pack agent-slo-guard agent-golden agent-fault agent-feedback agent-learn capability-catalog skill-contract-lint autonomy-observe autonomy-eval image-hub image-hub-observe
 
 help:
 	@echo "Available targets:"
@@ -27,7 +27,7 @@ help:
 	@echo "  make stock-env-check [root='$(ROOT)']"
 	@echo "  make stock-health-check [days=7] [require_network=1] [max_dns_ssl_fail=0]"
 	@echo "  make stock-universe [universe='global_core'] | stock-sync|stock-analyze|stock-backtest|stock-portfolio|stock-portfolio-bt|stock-sector-audit|stock-sector-patch|stock-report|stock-run|stock-hub"
-	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|context-profile|context-scaffold|question-set|question-pending|question-answer|run-resume|workbench|observe|recommend|state-sync|state-stats|diagnostics|research-report|research-deck|research-lookup|market-report|market-committee|governance|failure-review|repair-observe|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|object-view|run-replay|slo|policy|policy-apply|preferences|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|market.committee|research.report|research.deck|research.lookup|data.query|agent.diagnostics|agent.governance.console|agent.failures.review|agent.repairs.observe|agent.repairs.apply|agent.repairs.approve|agent.repairs.list|agent.repairs.presets|agent.repairs.compare|agent.repairs.rollback|agent.run.inspect|agent.object.view|agent.run.replay|agent.policy.tune|agent.policy.apply|agent.state.sync|agent.state.stats|agent.preferences.learn|agent.context.profile|agent.context.scaffold|agent.question_set|agent.question_set.pending|agent.question_set.answer|agent.run.resume|agent.workbench'] [params='{\"k\":\"v\"}']"
+	@echo "  make skill-route text='...' | skill-execute text='...' [params='{\"k\":\"v\"}'] | autonomous text='...' [params='{\"k\":\"v\"}'] | agent text='...' [params='{\"profile\":\"strict|adaptive|auto\"}'] | agent-studio [cmd='repl|run|context-profile|context-scaffold|question-set|question-pending|question-answer|run-resume|session-list|session-view|inbox|action-plan|workbench|observe|recommend|state-sync|state-stats|diagnostics|research-report|research-deck|research-lookup|market-report|market-committee|governance|failure-review|repair-observe|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|object-view|run-replay|slo|policy|policy-apply|preferences|pending|feedback-add|feedback-stats|services|call'] [service='mcp.run|ppt.generate|image.generate|market.report|market.committee|research.report|research.deck|research.lookup|data.query|agent.diagnostics|agent.governance.console|agent.failures.review|agent.repairs.observe|agent.repairs.apply|agent.repairs.approve|agent.repairs.list|agent.repairs.presets|agent.repairs.compare|agent.repairs.rollback|agent.run.inspect|agent.object.view|agent.run.replay|agent.policy.tune|agent.policy.apply|agent.state.sync|agent.state.stats|agent.preferences.learn|agent.context.profile|agent.context.scaffold|agent.question_set|agent.question_set.pending|agent.question_set.answer|agent.run.resume|agent.session.list|agent.session.view|agent.inbox|agent.actions.plan|agent.workbench'] [params='{\"k\":\"v\"}']"
 	@echo "  make writing-policy action='show|clear-task|set-task|set-session|set-global|resolve' args='...'"
 	@echo "  make index-full"
 	@echo "  make risk|dashboard|weekly-review|okr-init|okr-report"
@@ -896,6 +896,19 @@ agent-question-answer:
 agent-run-resume:
 	@if [ -z "$(question_set_id)" ] && [ -z "$(resume_token)" ]; then echo "Usage: make agent-run-resume question_set_id=<qs_xxx> [resume_token=<resume_xxx>] [data_dir='...']"; exit 2; fi
 	@$(ROOT)/scripts/agentsys.sh agent-studio run-resume $(if $(question_set_id),--question-set-id "$(question_set_id)",) $(if $(resume_token),--resume-token "$(resume_token)",) $(if $(data_dir),--data-dir "$(data_dir)",)
+
+agent-session-list:
+	@$(ROOT)/scripts/agentsys.sh agent-studio session-list $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(limit),--limit "$(limit)",) $(if $(status),--status "$(status)",)
+
+agent-session-view:
+	@if [ -z "$(session_id)" ]; then echo "Usage: make agent-session-view session_id='session_xxx' [data_dir='...'] [out_dir='...']"; exit 2; fi
+	@$(ROOT)/scripts/agentsys.sh agent-studio session-view --session-id "$(session_id)" $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(out_dir),--out-dir "$(out_dir)",)
+
+agent-inbox:
+	@$(ROOT)/scripts/agentsys.sh agent-studio inbox $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days "$(days)",) $(if $(limit),--limit "$(limit)",)
+
+agent-action-plan:
+	@$(ROOT)/scripts/agentsys.sh agent-studio action-plan $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(days),--days "$(days)",) $(if $(limit),--limit "$(limit)",)
 
 agent-workbench:
 	@$(ROOT)/scripts/agentsys.sh agent-studio workbench $(if $(data_dir),--data-dir "$(data_dir)",) $(if $(context_dir),--context-dir "$(context_dir)",) $(if $(days),--days "$(days)",) $(if $(limit),--limit "$(limit)",) $(if $(out_dir),--out-dir "$(out_dir)",)

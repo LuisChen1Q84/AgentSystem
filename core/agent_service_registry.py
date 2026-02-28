@@ -19,6 +19,7 @@ from services.failure_review_service import FailureReviewService
 from services.feedback_service import FeedbackService
 from services.governance_console_service import GovernanceConsoleService
 from services.image_service import ImageService
+from services.inbox_service import ActionPlanService, InboxService
 from services.market_service import MarketService
 from services.mcp_service import MCPService
 from services.object_view_service import ObjectViewService
@@ -71,6 +72,8 @@ class AgentServiceRegistry:
         self.resume_run = ResumeRunService(root=self.root)
         self.session_list = SessionListService(root=self.root)
         self.session_view = SessionViewService(root=self.root)
+        self.inbox = InboxService(root=self.root)
+        self.action_plan = ActionPlanService(root=self.root)
         self.run_diagnostics = RunDiagnosticsService(root=self.root)
         self.object_view = ObjectViewService(root=self.root)
         self.replay = ReplayService(root=self.root)
@@ -94,6 +97,8 @@ class AgentServiceRegistry:
             "agent.run.resume": ServiceSpec("agent.run.resume", "runtime", "Resume a paused run from a saved answer packet", "medium"),
             "agent.session.list": ServiceSpec("agent.session.list", "runtime", "List collaboration sessions and their current states", "low"),
             "agent.session.view": ServiceSpec("agent.session.view", "runtime", "Inspect one collaboration session with recent events", "low"),
+            "agent.inbox": ServiceSpec("agent.inbox", "runtime", "Build the unified action inbox across questions, failures, and governance", "low"),
+            "agent.actions.plan": ServiceSpec("agent.actions.plan", "runtime", "Build prioritized do-now and do-next actions from inbox signals", "low"),
             "agent.workbench": ServiceSpec("agent.workbench", "runtime", "Build the unified day-to-day workbench", "low"),
             "agent.state.sync": ServiceSpec("agent.state.sync", "observability", "Sync runtime objects into sqlite state store", "low"),
             "agent.state.stats": ServiceSpec("agent.state.stats", "observability", "Inspect sqlite state store counts", "low"),
@@ -240,6 +245,21 @@ class AgentServiceRegistry:
         return self.session_view.run(
             data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
             session_id=str(kwargs.get("session_id", "")),
+            out_dir=str(kwargs.get("out_dir", "")),
+        ).to_dict()
+
+    def _exec_agent_inbox(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.inbox.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            limit=max(1, int(kwargs.get("limit", 12))),
+        ).to_dict()
+
+    def _exec_agent_actions_plan(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.action_plan.run(
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            limit=max(1, int(kwargs.get("limit", 12))),
         ).to_dict()
 
     def _exec_agent_workbench(self, **kwargs: Any) -> Dict[str, Any]:

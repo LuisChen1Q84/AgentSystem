@@ -13,7 +13,7 @@ import sys
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.kernel.session_flow import list_sessions, load_session
+from core.kernel.session_flow import build_session_frontdesk, list_sessions, write_session_frontdesk_files
 from core.registry.service_diagnostics import annotate_payload
 from core.registry.service_protocol import error_response, ok_response
 
@@ -39,17 +39,20 @@ class SessionViewService:
     def __init__(self, root: Path = ROOT):
         self.root = Path(root)
 
-    def run(self, *, data_dir: str, session_id: str):
+    def run(self, *, data_dir: str, session_id: str, out_dir: str = ""):
         if not str(session_id).strip():
             return error_response("agent.session.view", "missing_session_id", code="missing_session_id")
-        report = load_session(data_dir=Path(data_dir), session_id=session_id)
+        report = build_session_frontdesk(data_dir=Path(data_dir), session_id=session_id)
         if not report:
             return error_response("agent.session.view", "session_not_found", code="session_not_found", meta={"data_dir": data_dir, "session_id": session_id})
+        output_dir = Path(out_dir).resolve() if str(out_dir).strip() else Path(data_dir)
+        files = write_session_frontdesk_files(report, output_dir)
         payload = annotate_payload(
             "agent.session.view",
             {
                 "report": report,
-                "summary": f"Loaded session {session_id} with {len(report.get('events', []))} events.",
+                "deliver_assets": {"items": [{"path": path} for path in files.values()]},
+                "summary": f"Loaded session {session_id} with {len(report.get('event_timeline', []))} events.",
             },
             entrypoint="core.kernel.session_flow",
         )
