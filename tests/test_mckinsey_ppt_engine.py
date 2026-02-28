@@ -2,6 +2,7 @@
 import json
 import tempfile
 import unittest
+from zipfile import ZipFile
 from pathlib import Path
 
 from scripts.mckinsey_ppt_engine import run_request
@@ -34,12 +35,13 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("quality_review", out)
             self.assertIn("design_handoff", out)
             self.assertIn("html_path", out)
+            self.assertIn("pptx_path", out)
             self.assertEqual(out["request"]["page_count"], 8)
             self.assertIn("theme_label", out["design_system"])
             self.assertIn("slide_navigation", out["design_handoff"])
 
             items = out["deliver_assets"]["items"]
-            self.assertEqual(len(items), 3)
+            self.assertEqual(len(items), 4)
             for item in items:
                 self.assertTrue(Path(item["path"]).exists())
 
@@ -60,6 +62,17 @@ class McKinseyPptEngineTest(unittest.TestCase):
             self.assertIn("Slide Map", html_text)
             self.assertIn("Designer Brief", html_text)
 
+            with ZipFile(out["pptx_path"]) as zf:
+                names = set(zf.namelist())
+                self.assertIn("[Content_Types].xml", names)
+                self.assertIn("ppt/presentation.xml", names)
+                self.assertIn("ppt/slides/slide1.xml", names)
+                self.assertIn("ppt/slideMasters/slideMaster1.xml", names)
+                self.assertIn("ppt/slideLayouts/slideLayout1.xml", names)
+                self.assertIn("ppt/theme/theme1.xml", names)
+                slide_xml = zf.read("ppt/slides/slide1.xml").decode("utf-8")
+                self.assertIn("Decision Ask", slide_xml)
+
     def test_page_count_is_bounded_and_quality_review_exists(self):
         out = run_request("Growth strategy", {"page_count": 99, "theme": "ivory-ledger"})
         self.assertTrue(out["ok"])
@@ -71,6 +84,7 @@ class McKinseyPptEngineTest(unittest.TestCase):
         self.assertIn("consulting_score", out["quality_review"])
         self.assertEqual(out["design_system"]["theme"], "ivory-ledger")
         self.assertIn("visual_variety_score", out["quality_review"])
+        self.assertTrue(Path(out["pptx_path"]).exists())
 
 
 if __name__ == "__main__":

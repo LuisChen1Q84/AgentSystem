@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 from core.registry.delivery_protocol import build_output_objects
 from core.skill_intelligence import build_loop_closure, compose_prompt_v2
 from scripts.mckinsey_ppt_html_renderer import render_deck_html
+from scripts.mckinsey_ppt_pptx_renderer import render_deck_pptx
 
 LAYOUT_CATALOG_PATH = ROOT / "assets" / "mckinsey_ppt" / "layout_catalog.json"
 DESIGN_RULES_PATH = ROOT / "references" / "mckinsey_ppt" / "design_rules.md"
@@ -795,10 +796,12 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
     out_json = out_root / f"deck_spec_{ts}.json"
     out_md = out_root / f"deck_spec_{ts}.md"
     out_html = out_root / f"deck_preview_{ts}.html"
+    out_pptx = out_root / f"deck_native_{ts}.pptx"
 
     out_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     out_md.write_text(_markdown_report(req, payload), encoding="utf-8")
     render_deck_html(payload, out_html)
+    render_deck_pptx(payload, out_pptx)
 
     result = {
         "ok": True,
@@ -816,7 +819,15 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
         "json_path": str(out_json),
         "md_path": str(out_md),
         "html_path": str(out_html),
-        "deliver_assets": {"items": [{"path": str(out_json)}, {"path": str(out_md)}, {"path": str(out_html)}]},
+        "pptx_path": str(out_pptx),
+        "deliver_assets": {
+            "items": [
+                {"path": str(out_json)},
+                {"path": str(out_md)},
+                {"path": str(out_html)},
+                {"path": str(out_pptx)},
+            ]
+        },
         "prompt_packet": prompt_packet,
         "loop_closure": build_loop_closure(
             skill="mckinsey-ppt",
@@ -829,6 +840,7 @@ def run_request(text: str, values: Dict[str, Any], out_dir: Path | None = None) 
             next_actions=[
                 "Review deck_preview HTML before exporting to PPTX.",
                 "Replace placeholder evidence with approved business data.",
+                "Open the native PPTX and adjust chart data if business numbers have changed.",
             ],
         ),
     }

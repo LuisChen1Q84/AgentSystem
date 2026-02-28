@@ -52,6 +52,21 @@
   - handoff strip
   - 更强的质量/风险提示
 
+## 第三轮优化（原生 PPTX 导出）
+- 新增 [mckinsey_ppt_pptx_renderer.py](/Volumes/Luis_MacData/AgentSystem/scripts/mckinsey_ppt_pptx_renderer.py)
+  - 不依赖 `python-pptx`
+  - 直接生成原生 `.pptx`（Open XML）
+- 当前产物链路升级为：
+  - `deck_spec_*.json`
+  - `deck_spec_*.md`
+  - `deck_preview_*.html`
+  - `deck_native_*.pptx`
+- 这一步的目标不是复杂图表自动化，而是先打通：
+  - deck spec
+  - HTML 审稿
+  - native PPTX 交付
+  的闭环
+
 ## 后续建议
 - 若要继续提升成品质量，下一步应该做 PPTX 原生导出模板，而不是再扩提示词。
 - 若要适配多个审美方向，应在 `assets/mckinsey_ppt/` 下继续扩主题与布局，而不是在 engine 里写分支。
