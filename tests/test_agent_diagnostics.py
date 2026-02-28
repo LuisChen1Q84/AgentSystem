@@ -15,6 +15,9 @@ class AgentDiagnosticsTest(unittest.TestCase):
             runs = root / "agent_runs.jsonl"
             evals = root / "agent_evaluations.jsonl"
             deliveries = root / "agent_deliveries.jsonl"
+            run_objects = root / "agent_run_objects.jsonl"
+            evidence_objects = root / "agent_evidence_objects.jsonl"
+            delivery_objects = root / "agent_delivery_objects.jsonl"
             feedback = root / "feedback.jsonl"
 
             runs.write_text(
@@ -41,6 +44,24 @@ class AgentDiagnosticsTest(unittest.TestCase):
                 json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "summary": "report handled", "quality_score": 0.88}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
+            run_objects.write_text(
+                json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "service": "agent.run", "status": "ok"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            evidence_objects.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "risk_level": "low", "service": "agent.run"}, ensure_ascii=False),
+                        json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "risk_level": "high", "service": "agent.run"}, ensure_ascii=False),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            delivery_objects.write_text(
+                json.dumps({"run_id": "r1", "ts": "2026-02-28 10:00:00", "summary": "report handled"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
             feedback.write_text(
                 json.dumps({"run_id": "r1", "rating": 1, "ts": "2026-02-28 10:10:00"}, ensure_ascii=False) + "\n",
                 encoding="utf-8",
@@ -51,6 +72,9 @@ class AgentDiagnosticsTest(unittest.TestCase):
             self.assertEqual(report["summary"]["pending_feedback"], 1)
             self.assertEqual(report["summary"]["recent_failures"], 1)
             self.assertTrue(report["recommendations"])
+            self.assertEqual(report["object_coverage"]["run_object_count"], 1)
+            self.assertEqual(report["risk_level_top"][0]["risk_level"], "low")
+            self.assertIn("run_objects", report["sources"])
 
             files = write_dashboard_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())

@@ -52,6 +52,39 @@ def _avg(values: List[float]) -> float:
     return round(sum(values) / max(1, len(values)), 4) if values else 0.0
 
 
+def _object_coverage(
+    run_rows: List[Dict[str, Any]],
+    run_objects: List[Dict[str, Any]],
+    evidence_objects: List[Dict[str, Any]],
+    delivery_objects: List[Dict[str, Any]],
+    *,
+    days: int,
+) -> Dict[str, Any]:
+    scope = _scope_days(days)
+    scoped_runs = [row for row in run_rows if str(row.get("ts", ""))[:10] in scope]
+    scoped_run_objects = [row for row in run_objects if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
+    scoped_evidence = [row for row in evidence_objects if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
+    scoped_delivery = [row for row in delivery_objects if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
+    total_runs = len(scoped_runs)
+    run_ids = {str(row.get("run_id", "")).strip() for row in scoped_runs if str(row.get("run_id", "")).strip()}
+    run_object_ids = {str(row.get("run_id", "")).strip() for row in scoped_run_objects if str(row.get("run_id", "")).strip()}
+    evidence_ids = {str(row.get("run_id", "")).strip() for row in scoped_evidence if str(row.get("run_id", "")).strip()}
+    delivery_ids = {str(row.get("run_id", "")).strip() for row in scoped_delivery if str(row.get("run_id", "")).strip()}
+
+    def _pct(value: int) -> float:
+        return round((value / max(1, total_runs)) * 100.0, 2) if total_runs else 0.0
+
+    return {
+        "total_runs": total_runs,
+        "run_object_count": len(run_object_ids),
+        "evidence_object_count": len(evidence_ids),
+        "delivery_object_count": len(delivery_ids),
+        "run_object_coverage_rate": _pct(len(run_object_ids & run_ids)),
+        "evidence_object_coverage_rate": _pct(len(evidence_ids & run_ids)),
+        "delivery_object_coverage_rate": _pct(len(delivery_ids & run_ids)),
+    }
+
+
 
 def _summarize_evals(rows: List[Dict[str, Any]], days: int) -> Dict[str, Any]:
     scope = _scope_days(days)
@@ -121,7 +154,7 @@ def _quality_band(score: float) -> str:
 
 
 
-def _recommendations(obs: Dict[str, Any], evals: Dict[str, Any], pending_count: int, failures: List[Dict[str, Any]]) -> List[str]:
+def _recommendations(obs: Dict[str, Any], evals: Dict[str, Any], pending_count: int, failures: List[Dict[str, Any]], object_coverage: Dict[str, Any]) -> List[str]:
     items: List[str] = []
     if float(evals.get("avg_quality_score", 0.0)) < 0.7:
         items.append("Average quality score is below 0.70; review recent delivery bundles and tighten output contracts.")
@@ -131,6 +164,10 @@ def _recommendations(obs: Dict[str, Any], evals: Dict[str, Any], pending_count: 
         items.append("Clarification demand is high; improve task templates or strengthen task classification defaults.")
     if pending_count > 5:
         items.append("Pending feedback queue is growing; clear feedback backlog to keep controlled learning effective.")
+    if float(object_coverage.get("run_object_coverage_rate", 0.0) or 0.0) < 80.0:
+        items.append("Run object coverage is low; standardize persistence before trusting strategy analytics.")
+    if float(object_coverage.get("evidence_object_coverage_rate", 0.0) or 0.0) < 80.0:
+        items.append("Evidence object coverage is low; improve observability fidelity before tightening policy.")
     if failures:
         top = failures[0]
         items.append(f"Most recent failure was {top.get('task_kind','general')} via {top.get('selected_strategy','unknown')}; inspect that path first.")
@@ -144,6 +181,9 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
     eval_rows = _load_jsonl(data_dir / "agent_evaluations.jsonl")
     delivery_rows = _load_jsonl(data_dir / "agent_deliveries.jsonl")
+    run_object_rows = _load_jsonl(data_dir / "agent_run_objects.jsonl")
+    evidence_rows = _load_jsonl(data_dir / "agent_evidence_objects.jsonl")
+    delivery_object_rows = _load_jsonl(data_dir / "agent_delivery_objects.jsonl")
     feedback_rows = _load_jsonl(data_dir / "feedback.jsonl")
     memory = load_memory(data_dir / "memory.json")
 
@@ -165,6 +205,10 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
     quality_band = _quality_band(avg_quality)
     policy_tuning = tune_policy(run_rows=run_rows, evaluation_rows=eval_rows, memory=memory, days=max(1, int(days)))
     mem_snapshot = memory_snapshot(memory)
+    object_coverage = _object_coverage(run_rows, run_object_rows, evidence_rows, delivery_object_rows, days=max(1, int(days)))
+    scope = _scope_days(days)
+    scoped_evidence_rows = [row for row in evidence_rows if str(row.get("ts", row.get("payload_ts", "")))[:10] in scope or not str(row.get("ts", row.get("payload_ts", ""))).strip()]
+    risk_dist = Counter(str(r.get("risk_level", "unknown")) for r in scoped_evidence_rows if str(r.get("risk_level", "")).strip())
 
     summary = {
         "window_days": max(1, int(days)),
@@ -176,6 +220,9 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "recent_failures": len(failures),
         "last_run_at": str(latest_run.get("ts", "")),
         "last_feedback_at": str(latest_feedback.get("ts", "")),
+        "run_object_coverage_rate": float(object_coverage.get("run_object_coverage_rate", 0.0) or 0.0),
+        "evidence_object_coverage_rate": float(object_coverage.get("evidence_object_coverage_rate", 0.0) or 0.0),
+        "delivery_object_coverage_rate": float(object_coverage.get("delivery_object_coverage_rate", 0.0) or 0.0),
     }
 
     report = {
@@ -183,13 +230,15 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
         "summary": summary,
         "observability": obs_report,
         "evaluation": eval_summary,
+        "object_coverage": object_coverage,
+        "risk_level_top": [{"risk_level": k, "count": v} for k, v in risk_dist.most_common(5)],
         "memory_snapshot": mem_snapshot,
         "policy_tuning": policy_tuning,
         "recent_failures": failures,
         "pending_feedback": pending,
         "recent_deliveries": deliveries,
         "strategy_top": [{"strategy": k, "runs": v} for k, v in strategy_dist.most_common(5)],
-        "recommendations": _recommendations(obs_summary, eval_summary, len(pending), failures) + list(policy_tuning.get("recommendations", [])),
+        "recommendations": _recommendations(obs_summary, eval_summary, len(pending), failures, object_coverage) + list(policy_tuning.get("recommendations", [])),
         "sources": {
             "runs": str(data_dir / "agent_runs.jsonl"),
             "evaluations": str(data_dir / "agent_evaluations.jsonl"),
@@ -207,6 +256,7 @@ def build_agent_dashboard(*, data_dir: Path, days: int = 14, pending_limit: int 
 
 def render_dashboard_md(report: Dict[str, Any]) -> str:
     s = report.get("summary", {})
+    object_coverage = report.get("object_coverage", {})
     lines = [
         f"# Agent Dashboard | {report.get('as_of','')}",
         "",
@@ -220,6 +270,12 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
         f"- last_run_at: {s.get('last_run_at', '')}",
         f"- last_feedback_at: {s.get('last_feedback_at', '')}",
         "",
+        "## Object Coverage",
+        "",
+        f"- run_object_coverage_rate: {object_coverage.get('run_object_coverage_rate', 0)}%",
+        f"- evidence_object_coverage_rate: {object_coverage.get('evidence_object_coverage_rate', 0)}%",
+        f"- delivery_object_coverage_rate: {object_coverage.get('delivery_object_coverage_rate', 0)}%",
+        "",
         "## Recommendations",
         "",
     ]
@@ -227,6 +283,9 @@ def render_dashboard_md(report: Dict[str, Any]) -> str:
     lines += ["", "## Top Strategies", "", "| strategy | runs |", "|---|---:|"]
     for row in report.get("strategy_top", []):
         lines.append(f"| {row.get('strategy','')} | {row.get('runs',0)} |")
+    lines += ["", "## Risk Levels", "", "| risk_level | count |", "|---|---:|"]
+    for row in report.get("risk_level_top", []):
+        lines.append(f"| {row.get('risk_level','')} | {row.get('count',0)} |")
     lines += ["", "## Recent Failures", ""]
     if report.get("recent_failures"):
         for row in report["recent_failures"]:

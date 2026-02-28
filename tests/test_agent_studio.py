@@ -66,6 +66,23 @@ class AgentStudioTest(unittest.TestCase):
             root = Path(td)
             backup_dir = root / "backups"
             backup_dir.mkdir(parents=True, exist_ok=True)
+            (backup_dir / "repair_plan_repair_snapshot_20260228_100000.json").write_text(
+                json.dumps(
+                    {
+                        "ts": "2026-02-28 10:00:00",
+                        "approval": {"required": True, "code": "abc"},
+                        "preview_diff": {"profile_overrides": [{"path": "default_profile"}], "strategy_overrides": [], "change_count": 1},
+                        "targets": {
+                            "snapshot_id": "repair_snapshot_20260228_100000",
+                            "plan_json_file": str(backup_dir / "repair_plan_repair_snapshot_20260228_100000.json"),
+                            "plan_md_file": str(backup_dir / "repair_plan_repair_snapshot_20260228_100000.md"),
+                        },
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             (backup_dir / "repair_snapshot_20260228_100000.json").write_text(
                 json.dumps(
                     {
@@ -88,6 +105,7 @@ class AgentStudioTest(unittest.TestCase):
             self.assertIn("delivery_bundle", payload)
             self.assertIn("run_object", payload)
             self.assertEqual(payload.get("report", {}).get("count"), 1)
+            self.assertEqual(payload.get("report", {}).get("rows", [])[0].get("lifecycle"), "applied")
 
     def test_repair_compare_cmd(self):
         with tempfile.TemporaryDirectory() as td:

@@ -78,6 +78,14 @@ class AgentFailureReviewTest(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
+            (root / "agent_evidence_objects.jsonl").write_text(
+                json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "risk_level": "high", "service": "agent.run"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_delivery_objects.jsonl").write_text(
+                json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "summary": "presentation handled via mckinsey-ppt"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
 
             report = build_failure_review(data_dir=root, days=14, limit=10)
             self.assertEqual(report["summary"]["failure_count"], 1)
@@ -85,6 +93,9 @@ class AgentFailureReviewTest(unittest.TestCase):
             self.assertTrue(report["failures"])
             self.assertTrue(report["recommendations"])
             self.assertTrue(report["repair_actions"])
+            self.assertEqual(report["failures"][0]["risk_level"], "high")
+            self.assertTrue(report["failures"][0]["object_presence"]["evidence_object"])
+            self.assertEqual(report["risk_level_top"][0]["risk_level"], "high")
 
             files = write_failure_review_files(report, root / "out")
             self.assertTrue(Path(files["json"]).exists())

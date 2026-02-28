@@ -193,6 +193,12 @@ def _approval_receipt_map(backup_dir: Path) -> Dict[str, Dict[str, Any]]:
     return out
 
 
+def _changed_components(preview_diff: Dict[str, Any]) -> List[str]:
+    profile_rows = preview_diff.get("profile_overrides", []) if isinstance(preview_diff.get("profile_overrides", []), list) else []
+    strategy_rows = preview_diff.get("strategy_overrides", []) if isinstance(preview_diff.get("strategy_overrides", []), list) else []
+    return [component for component, changed in (("profile", bool(profile_rows)), ("strategy", bool(strategy_rows))) if changed]
+
+
 def _record_repair_event(
     *,
     backup_dir: Path,
@@ -437,32 +443,58 @@ def apply_repair_plan(plan: Dict[str, Any]) -> Dict[str, str]:
 def list_repair_snapshots(*, backup_dir: Path, limit: int = 20) -> Dict[str, Any]:
     backup_dir = Path(backup_dir)
     approvals = _approval_receipt_map(backup_dir)
-    rows: List[Dict[str, Any]] = []
-    for snapshot_file in sorted(backup_dir.glob("repair_snapshot_*.json"), reverse=True)[: max(1, int(limit))]:
+    plan_map: Dict[str, Dict[str, Any]] = {}
+    snapshot_map: Dict[str, Dict[str, Any]] = {}
+    snapshot_ids: set[str] = set(approvals.keys())
+    for plan_file in sorted(backup_dir.glob(PLAN_GLOB)):
+        plan = _load_json(plan_file, {})
+        snapshot_id = str(plan.get("targets", {}).get("snapshot_id", "")).strip()
+        if not snapshot_id:
+            continue
+        plan_map[snapshot_id] = plan
+        snapshot_ids.add(snapshot_id)
+    for snapshot_file in sorted(backup_dir.glob("repair_snapshot_*.json")):
         snapshot = _load_json(snapshot_file, {})
-        preview_diff = snapshot.get("preview_diff", {}) if isinstance(snapshot.get("preview_diff", {}), dict) else {}
-        profile_rows = preview_diff.get("profile_overrides", []) if isinstance(preview_diff.get("profile_overrides", []), list) else []
-        strategy_rows = preview_diff.get("strategy_overrides", []) if isinstance(preview_diff.get("strategy_overrides", []), list) else []
-        snapshot_id = str(snapshot.get("snapshot_id", snapshot_file.stem))
+        snapshot_id = str(snapshot.get("snapshot_id", snapshot_file.stem)).strip()
+        if not snapshot_id:
+            continue
+        snapshot_map[snapshot_id] = snapshot
+        snapshot_ids.add(snapshot_id)
+    rows: List[Dict[str, Any]] = []
+    for snapshot_id in sorted(snapshot_ids, reverse=True)[: max(1, int(limit))]:
+        plan = plan_map.get(snapshot_id, {})
+        snapshot = snapshot_map.get(snapshot_id, {})
         approval_receipt = approvals.get(snapshot_id, {})
+        preview_diff = {}
+        if isinstance(plan.get("preview_diff", {}), dict):
+            preview_diff = plan.get("preview_diff", {})
+        elif isinstance(snapshot.get("preview_diff", {}), dict):
+            preview_diff = snapshot.get("preview_diff", {})
+        snapshot_file = backup_dir / f"{snapshot_id}.json"
+        plan_json_file = Path(str(plan.get("targets", {}).get("plan_json_file", "")).strip()) if plan else backup_dir / f"repair_plan_{snapshot_id}.json"
+        plan_md_file = Path(str(plan.get("targets", {}).get("plan_md_file", "")).strip()) if plan else backup_dir / f"repair_plan_{snapshot_id}.md"
+        snapshot_present = snapshot_file.exists()
+        plan_present = plan_json_file.exists()
+        approval_recorded = bool(approval_receipt)
+        lifecycle = "applied" if snapshot_present else "approved" if approval_recorded else "planned" if plan_present else "journal-only"
         rows.append(
             {
                 "snapshot_id": snapshot_id,
-                "ts": str(snapshot.get("ts", "")),
-                "snapshot_file": str(snapshot_file),
-                "plan_json_file": str(snapshot.get("plan_json_file", "")),
-                "plan_md_file": str(snapshot.get("plan_md_file", "")),
-                "profile_overrides_file": str(snapshot.get("profile_overrides_file", "")),
-                "strategy_overrides_file": str(snapshot.get("strategy_overrides_file", "")),
-                "change_count": int(preview_diff.get("change_count", len(profile_rows) + len(strategy_rows)) or 0),
-                "approval_code": str(snapshot.get("approval", {}).get("code", "")) if isinstance(snapshot.get("approval", {}), dict) else "",
-                "approval_recorded": bool(approval_receipt),
+                "ts": str(plan.get("ts", "") or snapshot.get("ts", "") or approval_receipt.get("ts", "")),
+                "lifecycle": lifecycle,
+                "plan_present": plan_present,
+                "snapshot_present": snapshot_present,
+                "snapshot_file": str(snapshot_file) if snapshot_present else "",
+                "plan_json_file": str(plan_json_file) if plan_present else "",
+                "plan_md_file": str(plan_md_file) if plan_md_file.exists() else "",
+                "profile_overrides_file": str(plan.get("targets", {}).get("profile_overrides_file", "") or snapshot.get("profile_overrides_file", "")),
+                "strategy_overrides_file": str(plan.get("targets", {}).get("strategy_overrides_file", "") or snapshot.get("strategy_overrides_file", "")),
+                "change_count": int(preview_diff.get("change_count", 0) or 0),
+                "approval_code": str(plan.get("approval", {}).get("code", "") or snapshot.get("approval", {}).get("code", "")),
+                "approval_required": bool(plan.get("approval", {}).get("required", snapshot.get("approval", {}).get("required", False))),
+                "approval_recorded": approval_recorded,
                 "approval_ts": str(approval_receipt.get("ts", "")) if approval_receipt else "",
-                "changed_components": [
-                    component
-                    for component, changed in (("profile", bool(profile_rows)), ("strategy", bool(strategy_rows)))
-                    if changed
-                ],
+                "changed_components": _changed_components(preview_diff),
             }
         )
     return {"backup_dir": str(backup_dir), "rows": rows, "count": len(rows), "journal_file": str(_journal_path(backup_dir))}
@@ -669,7 +701,7 @@ def write_snapshot_list_files(report: Dict[str, Any], out_dir: Path) -> Dict[str
         if not isinstance(row, dict):
             continue
         lines.append(
-            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | approved={row.get('approval_recorded', False)} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | approval={row.get('approval_code', '')}"
+            f"- {row.get('snapshot_id', '')} | ts={row.get('ts', '')} | lifecycle={row.get('lifecycle', '')} | approved={row.get('approval_recorded', False)} | components={','.join(row.get('changed_components', []))} | changes={row.get('change_count', 0)} | approval={row.get('approval_code', '')}"
         )
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

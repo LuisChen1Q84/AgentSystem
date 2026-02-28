@@ -196,6 +196,7 @@ def persist_agent_payload(log_dir: Path, payload: Dict[str, Any]) -> Dict[str, A
     _append_jsonl(
         log_dir / "agent_evidence_objects.jsonl",
         {
+            "ts": payload.get("ts", ""),
             **payload["evidence_object"],
             "payload_path": str(out_file),
         },

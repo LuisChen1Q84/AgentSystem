@@ -35,6 +35,14 @@ def _scope_days(days: int) -> set[str]:
     return {(today - dt.timedelta(days=i)).isoformat() for i in range(max(1, int(days)))}
 
 
+def _find_latest(rows: List[Dict[str, Any]], run_id: str) -> Dict[str, Any]:
+    run_id = str(run_id).strip()
+    for row in reversed(rows):
+        if str(row.get("run_id", "")).strip() == run_id:
+            return row
+    return {}
+
+
 def _repair_action(*, scope: str, target: str, action: str, reason: str, priority: str) -> Dict[str, Any]:
     return {
         "scope": scope,
@@ -47,6 +55,8 @@ def _repair_action(*, scope: str, target: str, action: str, reason: str, priorit
 
 def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> Dict[str, Any]:
     run_rows = _load_jsonl(data_dir / "agent_runs.jsonl")
+    evidence_rows = _load_jsonl(data_dir / "agent_evidence_objects.jsonl")
+    delivery_object_rows = _load_jsonl(data_dir / "agent_delivery_objects.jsonl")
     scope = _scope_days(days)
     failed = [r for r in reversed(run_rows) if not bool(r.get("ok", False)) and str(r.get("ts", ""))[:10] in scope]
 
@@ -54,9 +64,12 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
     task_counter: Counter[str] = Counter()
     strategy_counter: Counter[str] = Counter()
     signal_counter: Counter[str] = Counter()
+    risk_counter: Counter[str] = Counter()
     strategy_signals: Dict[str, Counter[str]] = {}
     task_signals: Dict[str, Counter[str]] = {}
     pending_feedback = 0
+    evidence_missing = 0
+    delivery_missing = 0
 
     for row in failed[: max(1, int(limit))]:
         run_id = str(row.get("run_id", "")).strip()
@@ -67,10 +80,14 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         evaluation = report.get("evaluation", {})
         feedback = report.get("feedback", {})
         selection = report.get("selection", {})
+        evidence_object = _find_latest(evidence_rows, run_id)
+        delivery_object = _find_latest(delivery_object_rows, run_id)
         task_kind = str(status.get("task_kind", ""))
         selected_strategy = str(selection.get("selected_strategy", ""))
+        risk_level = str(evidence_object.get("risk_level", "unknown")).strip() or "unknown"
         task_counter.update([task_kind or "unknown"])
         strategy_counter.update([selected_strategy or "unknown"])
+        risk_counter.update([risk_level])
         strategy_signals.setdefault(selected_strategy or "unknown", Counter())
         task_signals.setdefault(task_kind or "unknown", Counter())
         for signal in evaluation.get("policy_signals", []):
@@ -80,6 +97,10 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
             task_signals[task_kind or "unknown"].update([signal])
         if bool(feedback.get("pending", False)):
             pending_feedback += 1
+        if not evidence_object:
+            evidence_missing += 1
+        if not delivery_object:
+            delivery_missing += 1
         details.append(
             {
                 "run_id": run_id,
@@ -89,9 +110,15 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
                 "selected_strategy": selected_strategy,
                 "duration_ms": int(status.get("duration_ms", 0) or 0),
                 "quality_score": float(evaluation.get("quality_score", 0.0) or 0.0),
+                "risk_level": risk_level,
                 "eval_reason": str(evaluation.get("eval_reason", "")),
                 "policy_signals": list(evaluation.get("policy_signals", [])),
                 "feedback_pending": bool(feedback.get("pending", False)),
+                "object_presence": {
+                    "evidence_object": bool(evidence_object),
+                    "delivery_object": bool(delivery_object),
+                },
+                "delivery_summary": str(delivery_object.get("summary", report.get("delivery", {}).get("summary", ""))),
                 "recommendations": list(evaluation.get("policy_recommendations", []))[:3],
             }
         )
@@ -103,6 +130,8 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
         recommendations.append("Fallback chains are too deep; demote unstable strategies and shorten retry policy.")
     if pending_feedback > 0:
         recommendations.append("Some failed runs still lack feedback; label them to improve controlled learning.")
+    if evidence_missing > 0 or delivery_missing > 0:
+        recommendations.append("Some failed runs are missing standardized objects; close observability gaps before changing strategy policy.")
     if not recommendations and details:
         recommendations.append("Failure set is small; inspect the top failed run first and keep collecting traces.")
     if not details:
@@ -205,16 +234,21 @@ def build_failure_review(*, data_dir: Path, days: int = 14, limit: int = 10) -> 
             "failure_count": len(failed),
             "reviewed_count": len(details),
             "pending_feedback_failures": pending_feedback,
+            "missing_evidence_objects": evidence_missing,
+            "missing_delivery_objects": delivery_missing,
         },
         "task_kind_top": [{"task_kind": k, "count": v} for k, v in task_counter.most_common(5)],
         "strategy_top": [{"strategy": k, "count": v} for k, v in strategy_counter.most_common(5)],
         "policy_signal_top": [{"signal": k, "count": v} for k, v in signal_counter.most_common(5)],
+        "risk_level_top": [{"risk_level": k, "count": v} for k, v in risk_counter.most_common(5)],
         "failures": details,
         "repair_actions": repair_actions,
         "recommendations": recommendations,
         "sources": {
             "runs": str(data_dir / "agent_runs.jsonl"),
             "evaluations": str(data_dir / "agent_evaluations.jsonl"),
+            "evidence_objects": str(data_dir / "agent_evidence_objects.jsonl"),
+            "delivery_objects": str(data_dir / "agent_delivery_objects.jsonl"),
             "feedback": str(data_dir / "feedback.jsonl"),
         },
     }
@@ -230,6 +264,8 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
         f"- failure_count: {s.get('failure_count', 0)}",
         f"- reviewed_count: {s.get('reviewed_count', 0)}",
         f"- pending_feedback_failures: {s.get('pending_feedback_failures', 0)}",
+        f"- missing_evidence_objects: {s.get('missing_evidence_objects', 0)}",
+        f"- missing_delivery_objects: {s.get('missing_delivery_objects', 0)}",
         "",
         "## Recommendations",
         "",
@@ -247,7 +283,7 @@ def render_failure_review_md(report: Dict[str, Any]) -> str:
     if report.get("failures"):
         for row in report["failures"]:
             lines.append(
-                f"- {row.get('ts', '')} | {row.get('task_kind', '')} | {row.get('selected_strategy', '')} | run_id={row.get('run_id', '')}"
+                f"- {row.get('ts', '')} | {row.get('task_kind', '')} | {row.get('selected_strategy', '')} | risk={row.get('risk_level', '')} | run_id={row.get('run_id', '')}"
             )
     else:
         lines.append("- none")
