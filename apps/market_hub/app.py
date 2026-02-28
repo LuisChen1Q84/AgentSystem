@@ -234,13 +234,23 @@ def _downgrade_decision_for_source_gate(committee: dict[str, Any], source_gate: 
     decision["conviction"] = downgraded_conviction
     if downgraded_stance == "accumulate_small":
         decision["position_sizing_note"] = "Start small (20-30% of normal size) and expand only after fresher corroboration."
+        decision["sizing_band"] = "20-30%"
     elif downgraded_stance == "watchlist_only":
         decision["position_sizing_note"] = "Keep on watchlist or paper-trade only until source quality and recency improve."
+        decision["sizing_band"] = "0-10%"
     else:
         decision["position_sizing_note"] = "Stay defensive until missing or stale evidence is repaired."
+        decision["sizing_band"] = "0%"
     guardrails = decision.get("guardrails", []) if isinstance(decision.get("guardrails", []), list) else []
     decision["guardrails"] = list(dict.fromkeys(guardrails + ["Do not scale while source gate remains elevated."]))
     decision["source_gate_reason"] = ", ".join(flags)
+    decision["recommended_next_actions"] = []
+    if "source_gap" in flags:
+        decision["recommended_next_actions"].append("Backfill missing source connectors before revisiting the committee decision.")
+    if "evidence_freshness_warning" in flags:
+        decision["recommended_next_actions"].append("Refresh stale evidence and rerun the committee with current filings or knowledge updates.")
+    if "connector_conflict" in flags:
+        decision["recommended_next_actions"].append("Resolve conflicting connectors and document which source should dominate the decision.")
     committee["decision"] = decision
 
     participants = committee.get("participants", []) if isinstance(committee.get("participants", []), list) else []
@@ -258,6 +268,7 @@ def _downgrade_decision_for_source_gate(committee: dict[str, Any], source_gate: 
             evidence = item.get("evidence", []) if isinstance(item.get("evidence", []), list) else []
             item["evidence"] = list(dict.fromkeys(evidence + flags))
     committee["participants"] = participants
+    committee["recommended_next_actions"] = decision.get("recommended_next_actions", [])
 
 
 class MarketHubApp:
@@ -314,4 +325,11 @@ class MarketHubApp:
                     risk_gate["risk_level"] = "medium"
                 payload["market_committee"]["risk_gate"] = risk_gate
             _downgrade_decision_for_source_gate(payload["market_committee"], payload["source_risk_gate"])
+            loop_closure = payload.get("loop_closure", {})
+            if isinstance(loop_closure, dict):
+                next_actions = loop_closure.get("next_actions", []) if isinstance(loop_closure.get("next_actions", []), list) else []
+                loop_closure["next_actions"] = list(
+                    dict.fromkeys(next_actions + list(payload["market_committee"].get("recommended_next_actions", [])))
+                )
+                payload["loop_closure"] = loop_closure
         return payload

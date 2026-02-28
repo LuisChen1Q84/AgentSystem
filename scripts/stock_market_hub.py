@@ -398,6 +398,7 @@ def render_md(payload: Dict[str, Any]) -> str:
             f"- stance: {decision.get('stance', '')} | conviction: {decision.get('conviction', '')}",
             f"- pre-source stance: {decision.get('pre_source_gate_stance', '')} | pre-source conviction: {decision.get('pre_source_gate_conviction', '')}",
             f"- sizing: {decision.get('position_sizing_note', '')}",
+            f"- sizing band: {decision.get('sizing_band', '')}",
             f"- source adjusted: {decision.get('source_adjusted', False)} | reason: {decision.get('source_gate_reason', '')}",
             f"- bull case: {debate.get('bull_case', '')}",
             f"- bear case: {debate.get('bear_case', '')}",
@@ -456,6 +457,10 @@ def render_md(payload: Dict[str, Any]) -> str:
             lines.append(f"- missing_connectors: {source_risk_gate.get('missing_connectors', [])}")
             lines.append(f"- confidence_spread: {source_risk_gate.get('confidence_spread', '')}")
             lines.append(f"- recency_spread: {source_risk_gate.get('recency_spread', '')}")
+        if decision.get("recommended_next_actions"):
+            lines.extend(["", "### Source Recovery Actions", ""])
+            for item in decision.get("recommended_next_actions", [])[:6]:
+                lines.append(f"- {item}")
         lines.extend(["", ""])
     return "\n".join(lines)
 

@@ -133,6 +133,14 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
     research_citations = research_payload.get("citation_block", []) if isinstance(research_payload.get("citation_block", []), list) else []
     research_systematic_review = research_payload.get("systematic_review", {}) if isinstance(research_payload.get("systematic_review", {}), dict) else {}
     research_appendix_assets = research_payload.get("appendix_assets", []) if isinstance(research_payload.get("appendix_assets", []), list) else []
+    has_systematic_appendix = bool(
+        (isinstance(research_systematic_review.get("prisma_flow", []), list) and research_systematic_review.get("prisma_flow", []))
+        or (isinstance(research_systematic_review.get("quality_scorecard", []), list) and research_systematic_review.get("quality_scorecard", []))
+        or (isinstance(research_systematic_review.get("citation_appendix", []), list) and research_systematic_review.get("citation_appendix", []))
+        or research_appendix_assets
+    )
+    requested_page_count = max(6, min(20, int(values.get("page_count", 10) or 10)))
+    effective_page_count = 12 if has_systematic_appendix and requested_page_count == 11 else requested_page_count
     topic = str(values.get("topic") or text or "Business strategy").strip()
     default_audience = "管理层" if lang == "zh" else "Management"
     default_objective = "支持管理层决策" if lang == "zh" else "Support decision making"
@@ -156,7 +164,8 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "topic": topic,
         "audience": str(values.get("audience", default_audience)).strip(),
         "objective": str(values.get("objective", default_objective)).strip(),
-        "page_count": max(6, min(20, int(values.get("page_count", 10) or 10))),
+        "page_count": effective_page_count,
+        "requested_page_count": requested_page_count,
         "tone": str(values.get("tone", "executive")).strip(),
         "time_horizon": str(values.get("time_horizon", "12 months")).strip(),
         "brand": str(values.get("brand", "Private Agent Office")).strip(),
@@ -180,6 +189,7 @@ def _extract_values(text: str, values: Dict[str, Any], lang: str) -> Dict[str, A
         "research_citations": research_citations,
         "research_systematic_review": research_systematic_review,
         "research_appendix_assets": research_appendix_assets,
+        "has_systematic_appendix": has_systematic_appendix,
     }
 
 
@@ -621,6 +631,48 @@ def _visual_payload_for_slide(slide: Dict[str, Any], req: Dict[str, Any], lang: 
                 for idx, item in enumerate(evidence[:4])
         ]
         return appendix_payload
+    if layout == "appendix_review_tables":
+        systematic_review = req.get("research_systematic_review", {}) if isinstance(req.get("research_systematic_review", {}), dict) else {}
+        appendix_assets = req.get("research_appendix_assets", []) if isinstance(req.get("research_appendix_assets", []), list) else []
+        research_citations = req.get("research_citations", []) if isinstance(req.get("research_citations", []), list) else []
+        citation_appendix = systematic_review.get("citation_appendix", []) if isinstance(systematic_review.get("citation_appendix", []), list) else []
+        return {
+            "kind": "appendix_review_tables",
+            "prisma_flow": [
+                {
+                    "stage": str(item.get("stage", "")).strip(),
+                    "count": int(item.get("count", 0) or 0),
+                }
+                for item in (systematic_review.get("prisma_flow", []) if isinstance(systematic_review.get("prisma_flow", []), list) else [])[:5]
+                if str(item.get("stage", "")).strip()
+            ],
+            "quality_rows": [
+                {
+                    "study_id": str(item.get("study_id", "")).strip(),
+                    "risk_of_bias": str(item.get("risk_of_bias", "")).strip(),
+                    "certainty": str(item.get("certainty", "")).strip(),
+                }
+                for item in (systematic_review.get("quality_scorecard", []) if isinstance(systematic_review.get("quality_scorecard", []), list) else [])[:6]
+                if str(item.get("study_id", "")).strip()
+            ],
+            "citation_rows": [
+                {
+                    "id": str(item.get("id", "")).strip(),
+                    "title": str(item.get("title", "")).strip(),
+                    "type": str(item.get("type", "")).strip(),
+                }
+                for item in (citation_appendix[:6] if citation_appendix else research_citations[:6])
+                if str(item.get("title", "")).strip()
+            ],
+            "appendix_assets": [
+                {
+                    "label": str(item.get("label", "")).strip(),
+                    "path": str(item.get("path", "")).strip(),
+                }
+                for item in appendix_assets[:4]
+                if str(item.get("label", "")).strip() and str(item.get("path", "")).strip()
+            ],
+        }
     if layout == "metric_deep_dive":
         metrics = _metric_value_rows(req, lang)
         return {
@@ -748,7 +800,7 @@ def _canonical_blueprints(req: Dict[str, Any], lang: str) -> List[Dict[str, Any]
     horizon = req["time_horizon"]
     decision = req["decision_ask"]
     if lang == "zh":
-        return [
+        blueprints = [
             {
                 "section": "North Star",
                 "layout": "cover_signal",
@@ -849,7 +901,20 @@ def _canonical_blueprints(req: Dict[str, Any], lang: str) -> List[Dict[str, Any]
                 "decision_link": "支持主线页快速进入更细追问。",
             },
         ]
-    return [
+        if req.get("has_systematic_appendix"):
+            blueprints.append(
+                {
+                    "section": "Review Tables",
+                    "layout": "appendix_review_tables",
+                    "title_assertion": "系统综述的质量评分、引文表和 PRISMA 口径应作为独立附录页展示",
+                    "so_what": "把方法学证据单独拎出来，避免和业务证据页互相挤压。",
+                    "visual_brief": "PRISMA 摘要 + 质量评分表 + 引文表。",
+                    "evidence_needed": ["PRISMA 流程", "质量评分", "引文表"],
+                    "decision_link": "供审稿、法务或研究负责人单独追查方法学证据。",
+                }
+            )
+        return blueprints
+    blueprints = [
         {
             "section": "North Star",
             "layout": "cover_signal",
@@ -950,6 +1015,19 @@ def _canonical_blueprints(req: Dict[str, Any], lang: str) -> List[Dict[str, Any]
             "decision_link": "Support fast drill-down from the main narrative.",
         },
     ]
+    if req.get("has_systematic_appendix"):
+        blueprints.append(
+            {
+                "section": "Review Tables",
+                "layout": "appendix_review_tables",
+                "title_assertion": "Systematic review scoring, citations, and PRISMA logic deserve a separate appendix page",
+                "so_what": "Separate method tables from business evidence so the appendix stays readable.",
+                "visual_brief": "PRISMA summary, quality scorecard, and citation appendix table.",
+                "evidence_needed": ["PRISMA flow", "quality scorecard", "citation appendix"],
+                "decision_link": "Enable method-level audit without diluting the executive storyline.",
+            }
+        )
+    return blueprints
 
 
 def _select_blueprints(page_count: int, blueprints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

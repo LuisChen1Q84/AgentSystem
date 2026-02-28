@@ -405,6 +405,38 @@ def _render_visual_payload(slide: Dict[str, Any]) -> str:
             )
             + '</section>'
         )
+    if kind == "appendix_review_tables":
+        prisma_flow = payload.get("prisma_flow", []) if isinstance(payload.get("prisma_flow", []), list) else []
+        quality_rows = payload.get("quality_rows", []) if isinstance(payload.get("quality_rows", []), list) else []
+        citation_rows = payload.get("citation_rows", []) if isinstance(payload.get("citation_rows", []), list) else []
+        appendix_assets = payload.get("appendix_assets", []) if isinstance(payload.get("appendix_assets", []), list) else []
+        return (
+            '<section class="visual-stage">'
+            '<div class="visual-head">Systematic Review Appendix</div>'
+            '<div class="visual-grid two-up appendix-grid">'
+            '<div class="visual-card"><h4>PRISMA Flow</h4><ul>'
+            + "".join(f'<li>{_esc(item.get("stage", ""))}: {_esc(item.get("count", ""))}</li>' for item in prisma_flow)
+            + '</ul></div>'
+            '<div class="visual-card"><h4>Quality Scorecard</h4><ul>'
+            + "".join(
+                f'<li>{_esc(item.get("study_id", ""))} | {_esc(item.get("risk_of_bias", ""))} | {_esc(item.get("certainty", ""))}</li>'
+                for item in quality_rows
+            )
+            + '</ul></div>'
+            '<div class="visual-card"><h4>Citation Appendix</h4><ul>'
+            + "".join(
+                f'<li>{_esc(item.get("id", ""))} | {_esc(item.get("title", ""))} | {_esc(item.get("type", ""))}</li>'
+                for item in citation_rows
+            )
+            + '</ul></div>'
+            '<div class="visual-card"><h4>Review Assets</h4><ul>'
+            + "".join(
+                f'<li>{_esc(item.get("label", ""))}: {_esc(item.get("path", ""))}</li>'
+                for item in appendix_assets
+            )
+            + '</ul></div>'
+            '</div></section>'
+        )
     if kind == "metric_deep_dive":
         metric = payload.get("focus_metric", {}) if isinstance(payload.get("focus_metric", {}), dict) else {}
         bullets = payload.get("proof_bullets", []) if isinstance(payload.get("proof_bullets", []), list) else []

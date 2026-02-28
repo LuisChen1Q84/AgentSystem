@@ -219,26 +219,32 @@ class McKinseyPptEngineTest(unittest.TestCase):
                 },
                 Path(td),
             )
-            appendix = out["slides"][-1]["visual_payload"]
+            self.assertEqual(out["request"]["requested_page_count"], 11)
+            self.assertEqual(out["request"]["page_count"], 12)
+            appendix = out["slides"][-2]["visual_payload"]
+            review_appendix = out["slides"][-1]["visual_payload"]
             self.assertEqual(appendix["kind"], "appendix_evidence")
+            self.assertEqual(review_appendix["kind"], "appendix_review_tables")
             self.assertEqual(appendix["prisma_flow"][0]["count"], 120)
-            self.assertEqual(appendix["quality_rows"][0]["study_id"], "S1")
-            self.assertEqual(appendix["citation_rows"][0]["id"], "S1")
-            self.assertEqual(appendix["appendix_assets"][0]["label"], "PRISMA SVG")
+            self.assertEqual(review_appendix["quality_rows"][0]["study_id"], "S1")
+            self.assertEqual(review_appendix["citation_rows"][0]["id"], "S1")
+            self.assertEqual(review_appendix["appendix_assets"][0]["label"], "PRISMA SVG")
 
             html_text = Path(out["html_path"]).read_text(encoding="utf-8")
             self.assertIn("PRISMA Flow", html_text)
             self.assertIn("Citation Appendix", html_text)
+            self.assertIn("Systematic Review Appendix", html_text)
             self.assertIn(str(prisma_svg), html_text)
 
             with ZipFile(out["pptx_path"]) as zf:
-                slide_xml = zf.read(f"ppt/slides/slide{len(out['slides'])}.xml").decode("utf-8")
-                slide_rels = zf.read(f"ppt/slides/_rels/slide{len(out['slides'])}.xml.rels").decode("utf-8")
-                self.assertIn("identified: 120", slide_xml)
-                self.assertIn("S1 | 行业报告A", slide_xml)
-                self.assertIn("rId2", slide_xml)
-                self.assertIn("image", slide_rels)
-                self.assertIn("appendix_prisma_", slide_rels)
+                appendix_slide_xml = zf.read(f"ppt/slides/slide{len(out['slides']) - 1}.xml").decode("utf-8")
+                appendix_slide_rels = zf.read(f"ppt/slides/_rels/slide{len(out['slides']) - 1}.xml.rels").decode("utf-8")
+                review_slide_xml = zf.read(f"ppt/slides/slide{len(out['slides'])}.xml").decode("utf-8")
+                self.assertIn("identified: 120", appendix_slide_xml)
+                self.assertIn("rId2", appendix_slide_xml)
+                self.assertIn("image", appendix_slide_rels)
+                self.assertIn("appendix_prisma_", appendix_slide_rels)
+                self.assertIn("S1 | 行业报告A", review_slide_xml)
                 media_files = [name for name in zf.namelist() if name.startswith("ppt/media/")]
                 self.assertTrue(any(name.endswith(".svg") for name in media_files))
 

@@ -644,6 +644,81 @@ def _appendix_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: 
     return _slide_xml_from_shapes(shapes)
 
 
+def _review_tables_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
+    payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
+    prisma_flow = payload.get("prisma_flow", []) if isinstance(payload.get("prisma_flow", []), list) else []
+    quality_rows = payload.get("quality_rows", []) if isinstance(payload.get("quality_rows", []), list) else []
+    citation_rows = payload.get("citation_rows", []) if isinstance(payload.get("citation_rows", []), list) else []
+    appendix_assets = payload.get("appendix_assets", []) if isinstance(payload.get("appendix_assets", []), list) else []
+    shapes = _background_shapes(colors["paper"], colors["accent_soft"]) + _header_shapes(slide, colors)
+    shapes.append(
+        _textbox_shape(
+            6,
+            "Prisma Review",
+            700000,
+            1900000,
+            4300000,
+            1800000,
+            ["PRISMA flow"] + [f"{item.get('stage', '')}: {item.get('count', '')}" for item in prisma_flow[:5]],
+            font_size=1180,
+            color=colors["ink"],
+            fill=colors["panel"],
+            line=colors["line"],
+            bold_first=True,
+        )
+    )
+    shapes.append(
+        _textbox_shape(
+            7,
+            "Quality Review",
+            5200000,
+            1900000,
+            4300000,
+            1800000,
+            ["Quality scorecard"] + [f"{item.get('study_id', '')} | {item.get('risk_of_bias', '')} | {item.get('certainty', '')}" for item in quality_rows[:6]],
+            font_size=1100,
+            color=colors["ink"],
+            fill=colors["panel"],
+            line=colors["line"],
+            bold_first=True,
+        )
+    )
+    shapes.append(
+        _textbox_shape(
+            8,
+            "Citation Review",
+            700000,
+            3900000,
+            4300000,
+            1900000,
+            ["Citation appendix"] + [f"{item.get('id', '')} | {item.get('title', '')} | {item.get('type', '')}" for item in citation_rows[:6]],
+            font_size=1060,
+            color=colors["ink"],
+            fill=colors["panel"],
+            line=colors["line"],
+            bold_first=True,
+        )
+    )
+    shapes.append(
+        _textbox_shape(
+            9,
+            "Review Assets",
+            5200000,
+            3900000,
+            4300000,
+            1900000,
+            ["Review assets"] + [f"{item.get('label', '')}: {item.get('path', '')}" for item in appendix_assets[:4]],
+            font_size=980,
+            color=colors["ink"],
+            fill=colors["panel"],
+            line=colors["line"],
+            bold_first=True,
+        )
+    )
+    shapes.append(_footer_shape(int(slide.get("index", 12)), colors))
+    return _slide_xml_from_shapes(shapes)
+
+
 def _deep_dive_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Dict[str, str]) -> str:
     payload = slide.get("visual_payload", {}) if isinstance(slide.get("visual_payload", {}), dict) else {}
     metric = payload.get("focus_metric", {}) if isinstance(payload.get("focus_metric", {}), dict) else {}
@@ -713,6 +788,8 @@ def _render_slide_xml(slide: Dict[str, Any], request: Dict[str, Any], colors: Di
         return _decision_slide_xml(slide, request, colors)
     if layout == "appendix_evidence":
         return _appendix_slide_xml(slide, request, colors)
+    if layout == "appendix_review_tables":
+        return _review_tables_slide_xml(slide, request, colors)
     if layout == "metric_deep_dive":
         return _deep_dive_slide_xml(slide, request, colors)
     return _generic_content_slide_xml(slide, request, colors)

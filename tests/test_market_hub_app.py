@@ -51,6 +51,7 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertEqual(out.get("source_risk_gate", {}).get("status"), "clear")
             self.assertEqual(out.get("market_committee", {}).get("source_gate_status"), "clear")
             self.assertFalse(out.get("market_committee", {}).get("decision", {}).get("source_adjusted", True))
+            self.assertNotIn("recommended_next_actions", out.get("market_committee", {}).get("decision", {}))
 
     def test_run_committee_marks_source_gate_when_connectors_are_stale_or_missing(self):
         with tempfile.TemporaryDirectory() as td:
@@ -87,6 +88,9 @@ class MarketHubAppTest(unittest.TestCase):
             self.assertTrue(out.get("market_committee", {}).get("decision", {}).get("source_adjusted"))
             self.assertEqual(out.get("market_committee", {}).get("decision", {}).get("stance"), "defensive")
             self.assertEqual(out.get("market_committee", {}).get("decision", {}).get("conviction"), "low")
+            self.assertEqual(out.get("market_committee", {}).get("decision", {}).get("sizing_band"), "0%")
+            self.assertTrue(out.get("market_committee", {}).get("decision", {}).get("recommended_next_actions"))
+            self.assertTrue(out.get("market_committee", {}).get("recommended_next_actions"))
 
 
 if __name__ == "__main__":
