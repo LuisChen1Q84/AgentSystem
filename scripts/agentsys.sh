@@ -1561,6 +1561,99 @@ run_agent_repair_list() {
   automation_log "INFO" "agent-repair-list" "done"
 }
 
+run_agent_repair_presets() {
+  automation_log "INFO" "agent-repair-presets" "start"
+  local data_dir=""
+  local days=""
+  local limit=""
+  local out_dir=""
+  local presets_file=""
+  local top_n=""
+  local mode=""
+  local allow_update_flag=0
+  local include_review_only_flag=0
+  local extra=()
+  local cmd=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --data-dir)
+        data_dir="${2:-}"
+        shift 2 || true
+        ;;
+      --days)
+        days="${2:-}"
+        shift 2 || true
+        ;;
+      --limit)
+        limit="${2:-}"
+        shift 2 || true
+        ;;
+      --out-dir)
+        out_dir="${2:-}"
+        shift 2 || true
+        ;;
+      --presets-file)
+        presets_file="${2:-}"
+        shift 2 || true
+        ;;
+      --top-n)
+        top_n="${2:-}"
+        shift 2 || true
+        ;;
+      --mode)
+        mode="${2:-}"
+        shift 2 || true
+        ;;
+      --allow-update)
+        allow_update_flag=1
+        shift || true
+        ;;
+      --include-review-only)
+        include_review_only_flag=1
+        shift || true
+        ;;
+      *)
+        extra+=("$1")
+        shift || true
+        ;;
+    esac
+  done
+  cmd=(python3 "${ROOT_DIR}/scripts/agent_studio.py")
+  if [ -n "${data_dir}" ]; then
+    cmd+=(--data-dir "${data_dir}")
+  fi
+  cmd+=(repair-presets)
+  if [ -n "${mode}" ]; then
+    cmd+=(--mode "${mode}")
+  fi
+  if [ -n "${days}" ]; then
+    cmd+=(--days "${days}")
+  fi
+  if [ -n "${limit}" ]; then
+    cmd+=(--limit "${limit}")
+  fi
+  if [ -n "${out_dir}" ]; then
+    cmd+=(--out-dir "${out_dir}")
+  fi
+  if [ -n "${presets_file}" ]; then
+    cmd+=(--presets-file "${presets_file}")
+  fi
+  if [ -n "${top_n}" ]; then
+    cmd+=(--top-n "${top_n}")
+  fi
+  if [ "${allow_update_flag}" -eq 1 ]; then
+    cmd+=(--allow-update)
+  fi
+  if [ "${include_review_only_flag}" -eq 1 ]; then
+    cmd+=(--include-review-only)
+  fi
+  if [ "${#extra[@]}" -gt 0 ]; then
+    cmd+=("${extra[@]}")
+  fi
+  "${cmd[@]}" || return "${E_SKILL}"
+  automation_log "INFO" "agent-repair-presets" "done"
+}
+
 run_agent_repair_compare() {
   automation_log "INFO" "agent-repair-compare" "start"
   local data_dir=""
@@ -1983,6 +2076,7 @@ Usage:
   scripts/agentsys.sh agent-repair-apply [--days N --limit N --apply --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery --selector-presets-file <path> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-approve [--days N --limit N --snapshot-id <id> --plan-file <path> --min-priority-score <n> --max-actions <n> --selector-preset presentation_recovery --selector-presets-file <path> --scopes 'strategy,task_kind' --strategies 'mckinsey-ppt' --task-kinds 'presentation' --exclude-scopes 'feedback' --exclude-strategies 'mcp-generalist' --exclude-task-kinds 'report' --approve-code <code> --force --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-list [--limit N --data-dir <path> --backup-dir <path> --out-dir <path>]
+  scripts/agentsys.sh agent-repair-presets [--mode list|recommend|save --days N --limit N --top-n N --presets-file <path> --allow-update --include-review-only --data-dir <path> --out-dir <path>]
   scripts/agentsys.sh agent-repair-compare [--snapshot-id <id> --base-snapshot-id <id> --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-repair-rollback [--snapshot-id <id> --only both|profile|strategy --data-dir <path> --backup-dir <path>]
   scripts/agentsys.sh agent-run-inspect --run-id <run_id> [--data-dir <path> --out-dir <path>]
@@ -1994,7 +2088,7 @@ Usage:
   scripts/agentsys.sh agent-feedback [add|stats|pending] [args...]
   scripts/agentsys.sh agent-learn [--apply --cfg <path>]
   scripts/agentsys.sh skill-contract-lint [--strict --cfg <path>]
-  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|failure-review|repair-apply|repair-approve|repair-list|repair-compare|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
+  scripts/agentsys.sh agent-studio [repl|run|observe|recommend|diagnostics|failure-review|repair-apply|repair-approve|repair-list|repair-presets|repair-compare|repair-rollback|run-inspect|slo|policy|pending|feedback-add|feedback-stats|services|call] [args...]
   scripts/agentsys.sh autonomy-observe [--days N --out-json path --out-md path]
   scripts/agentsys.sh autonomy-eval [--out-json path --out-md path]
   scripts/agentsys.sh capability-catalog [--cfg path --out-json path --out-md path]
@@ -2099,6 +2193,7 @@ case "${cmd}" in
   agent-repair-apply) shift; run_agent_repair_apply "$@" ;;
   agent-repair-approve) shift; run_agent_repair_approve "$@" ;;
   agent-repair-list) shift; run_agent_repair_list "$@" ;;
+  agent-repair-presets) shift; run_agent_repair_presets "$@" ;;
   agent-repair-compare) shift; run_agent_repair_compare "$@" ;;
   agent-repair-rollback) shift; run_agent_repair_rollback "$@" ;;
   agent-run-inspect) shift; run_agent_run_inspect "$@" ;;

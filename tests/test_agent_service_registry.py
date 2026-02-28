@@ -21,6 +21,7 @@ class AgentServiceRegistryTest(unittest.TestCase):
         self.assertIn("agent.repairs.approve", names)
         self.assertIn("agent.repairs.compare", names)
         self.assertIn("agent.repairs.list", names)
+        self.assertIn("agent.repairs.presets", names)
         self.assertIn("agent.repairs.rollback", names)
         self.assertIn("agent.run.inspect", names)
         self.assertIn("mcp.run", names)
@@ -532,6 +533,92 @@ class AgentServiceRegistryTest(unittest.TestCase):
             self.assertIn("delivery_protocol", rolled_back)
             self.assertEqual(rolled_back.get("rollback", {}).get("snapshot_id"), snapshot_id)
             self.assertEqual(rolled_back.get("rollback", {}).get("restored_components"), ["strategy"])
+
+    def test_execute_agent_repairs_presets(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "agent_run_20260228_100500.json"
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "result": {"ok": False},
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "selected_strategy": "mckinsey-ppt",
+                        "payload_path": str(payload_path),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "success": False,
+                        "quality_score": 0.28,
+                        "policy_signals": ["low_selection_confidence", "clarification_heavy"],
+                        "policy_recommendations": ["tighten selector"],
+                        "eval_reason": "delegated_autonomy_failed",
+                        "ts": "2026-02-28 10:05:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evidence_objects.jsonl").write_text(
+                json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "risk_level": "high"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_delivery_objects.jsonl").write_text(
+                json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "summary": "presentation failed"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            presets_file = root / "selector_presets.json"
+            presets_file.write_text("{}\n", encoding="utf-8")
+            reg = AgentServiceRegistry(root=root)
+            recommended = reg.execute(
+                "agent.repairs.presets",
+                mode="recommend",
+                data_dir=str(root),
+                presets_file=str(presets_file),
+                out_dir=str(root / "out"),
+            )
+            self.assertTrue(recommended.get("ok", False))
+            self.assertEqual(recommended.get("mode"), "recommend")
+            self.assertTrue(recommended.get("report", {}).get("suggestions", []))
+            saved = reg.execute(
+                "agent.repairs.presets",
+                mode="save",
+                data_dir=str(root),
+                presets_file=str(presets_file),
+                out_dir=str(root / "out"),
+                top_n=1,
+                allow_update=True,
+            )
+            self.assertTrue(saved.get("ok", False))
+            self.assertEqual(saved.get("save_result", {}).get("saved_count"), 1)
 
     def test_execute_agent_run_inspect(self):
         with tempfile.TemporaryDirectory() as td:

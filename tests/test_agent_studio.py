@@ -85,6 +85,12 @@ class AgentStudioTest(unittest.TestCase):
         self.assertEqual(a44.cmd, "repair-list")
         self.assertEqual(a44.limit, 20)
 
+        a441 = parser.parse_args(["repair-presets", "--mode", "save", "--top-n", "2", "--allow-update"])
+        self.assertEqual(a441.cmd, "repair-presets")
+        self.assertEqual(a441.mode, "save")
+        self.assertEqual(a441.top_n, 2)
+        self.assertTrue(a441.allow_update)
+
         a45 = parser.parse_args(["repair-compare", "--snapshot-id", "snap2", "--base-snapshot-id", "snap1"])
         self.assertEqual(a45.cmd, "repair-compare")
         self.assertEqual(a45.snapshot_id, "snap2")
@@ -183,6 +189,90 @@ class AgentStudioTest(unittest.TestCase):
             self.assertTrue(payload.get("ok", False))
             self.assertIn("delivery_bundle", payload)
             self.assertGreater(payload.get("report", {}).get("summary", {}).get("change_count", 0), 0)
+
+    def test_repair_presets_cmd(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            payload_path = root / "agent_run_20260228_100500.json"
+            payload_path.write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "result": {"ok": False},
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_runs.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "ts": "2026-02-28 10:05:00",
+                        "ok": False,
+                        "profile": "strict",
+                        "task_kind": "presentation",
+                        "duration_ms": 200,
+                        "selected_strategy": "mckinsey-ppt",
+                        "payload_path": str(payload_path),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evaluations.jsonl").write_text(
+                json.dumps(
+                    {
+                        "run_id": "r2",
+                        "success": False,
+                        "quality_score": 0.28,
+                        "policy_signals": ["low_selection_confidence", "clarification_heavy"],
+                        "policy_recommendations": ["tighten selector"],
+                        "eval_reason": "delegated_autonomy_failed",
+                        "ts": "2026-02-28 10:05:00",
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_evidence_objects.jsonl").write_text(
+                json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "risk_level": "high"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            (root / "agent_delivery_objects.jsonl").write_text(
+                json.dumps({"run_id": "r2", "ts": "2026-02-28 10:05:00", "summary": "presentation failed"}, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            presets_file = root / "selector_presets.json"
+            presets_file.write_text("{}\n", encoding="utf-8")
+            reg = AgentServiceRegistry(root=root)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = agent_studio._repair_presets_cmd(
+                    reg,
+                    mode="save",
+                    days=14,
+                    limit=10,
+                    data_dir=str(root),
+                    out_dir=str(root / "out"),
+                    presets_file=str(presets_file),
+                    top_n=1,
+                    allow_update=True,
+                    include_review_only=False,
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertTrue(payload.get("ok", False))
+            self.assertEqual(payload.get("mode"), "save")
+            self.assertEqual(payload.get("save_result", {}).get("saved_count"), 1)
 
     def test_repair_compare_cmd_fails_without_pair(self):
         with tempfile.TemporaryDirectory() as td:

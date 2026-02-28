@@ -231,6 +231,34 @@ def _repair_list_cmd(reg: AgentServiceRegistry, limit: int, data_dir: str, out_d
     return 0 if bool(out.get("ok", False)) else 1
 
 
+def _repair_presets_cmd(
+    reg: AgentServiceRegistry,
+    mode: str,
+    days: int,
+    limit: int,
+    data_dir: str,
+    out_dir: str,
+    presets_file: str,
+    top_n: int,
+    allow_update: bool,
+    include_review_only: bool,
+) -> int:
+    out = reg.execute(
+        "agent.repairs.presets",
+        mode=mode,
+        days=days,
+        limit=limit,
+        data_dir=data_dir or str(ROOT / "日志/agent_os"),
+        out_dir=out_dir,
+        presets_file=presets_file,
+        top_n=top_n,
+        allow_update=allow_update,
+        include_review_only=include_review_only,
+    )
+    _print_json(out)
+    return 0 if bool(out.get("ok", False)) else 1
+
+
 def _repair_compare_cmd(
     reg: AgentServiceRegistry,
     snapshot_id: str,
@@ -360,7 +388,9 @@ def _call_cmd(reg: AgentServiceRegistry, service: str, params_json: str) -> int:
 def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
     print(
         "Agent Studio REPL. commands: run <text>, observe [days], recommend [days], diagnostics [days], pending [limit], "
-        "failure-review [days], repair-apply [days] [min_score] [max_actions], repair-approve [days] [min_score] [max_actions], repair-list [limit], repair-compare [snapshot_id] [base_snapshot_id], repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
+        "failure-review [days], repair-apply [days] [min_score] [max_actions], repair-approve [days] [min_score] [max_actions], "
+        "repair-list [limit], repair-presets [list|recommend|save] [days] [limit] [top_n], repair-compare [snapshot_id] [base_snapshot_id], "
+        "repair-rollback [snapshot_id] [both|profile|strategy], run-inspect <run_id>, policy [days], feedback <run_id> <rating> [note], stats, services, call <service> [json], exit"
     )
     while True:
         try:
@@ -454,6 +484,20 @@ def _repl(reg: AgentServiceRegistry, data_dir: str) -> int:
             continue
         if cmd == "repair-list":
             _repair_list_cmd(reg, limit=int(args[0]) if args else 20, data_dir=data_dir, out_dir="", backup_dir="")
+            continue
+        if cmd == "repair-presets":
+            _repair_presets_cmd(
+                reg,
+                mode=str(args[0]) if args else "recommend",
+                days=int(args[1]) if len(args) > 1 else 14,
+                limit=int(args[2]) if len(args) > 2 else 10,
+                data_dir=data_dir,
+                out_dir="",
+                presets_file="",
+                top_n=int(args[3]) if len(args) > 3 else 3,
+                allow_update=True,
+                include_review_only=False,
+            )
             continue
         if cmd == "repair-compare":
             _repair_compare_cmd(
@@ -592,6 +636,16 @@ def build_cli() -> argparse.ArgumentParser:
     rlist.add_argument("--out-dir", default="")
     rlist.add_argument("--backup-dir", default="")
 
+    rpresets = sp.add_parser("repair-presets")
+    rpresets.add_argument("--mode", choices=["list", "recommend", "save"], default="recommend")
+    rpresets.add_argument("--days", type=int, default=14)
+    rpresets.add_argument("--limit", type=int, default=10)
+    rpresets.add_argument("--out-dir", default="")
+    rpresets.add_argument("--presets-file", default="")
+    rpresets.add_argument("--top-n", type=int, default=3)
+    rpresets.add_argument("--allow-update", action="store_true")
+    rpresets.add_argument("--include-review-only", action="store_true")
+
     rcompare = sp.add_parser("repair-compare")
     rcompare.add_argument("--snapshot-id", default="")
     rcompare.add_argument("--base-snapshot-id", default="")
@@ -705,6 +759,19 @@ def main() -> int:
         )
     if args.cmd == "repair-list":
         return _repair_list_cmd(reg, limit=int(args.limit), data_dir=data_dir, out_dir=str(args.out_dir), backup_dir=str(args.backup_dir))
+    if args.cmd == "repair-presets":
+        return _repair_presets_cmd(
+            reg,
+            mode=str(args.mode),
+            days=int(args.days),
+            limit=int(args.limit),
+            data_dir=data_dir,
+            out_dir=str(args.out_dir),
+            presets_file=str(args.presets_file),
+            top_n=int(args.top_n),
+            allow_update=bool(args.allow_update),
+            include_review_only=bool(args.include_review_only),
+        )
     if args.cmd == "repair-compare":
         return _repair_compare_cmd(
             reg,

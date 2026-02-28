@@ -24,6 +24,7 @@ from services.policy_service import PolicyService
 from services.ppt_service import PPTService
 from services.recommendation_service import RecommendationService
 from services.repair_apply_service import RepairApplyService, RepairApproveService, RepairCompareService, RepairListService, RepairRollbackService
+from services.repair_preset_service import RepairPresetService
 from services.run_diagnostics_service import RunDiagnosticsService
 from services.slo_service import SLOService
 
@@ -42,6 +43,7 @@ class AgentServiceRegistry:
         self.repair_compare = RepairCompareService(root=self.root)
         self.repair_list = RepairListService(root=self.root)
         self.repair_rollback = RepairRollbackService(root=self.root)
+        self.repair_presets = RepairPresetService(root=self.root)
         self.slo = SLOService(root=self.root)
         self.policy = PolicyService(root=self.root)
         self.run_diagnostics = RunDiagnosticsService(root=self.root)
@@ -67,6 +69,7 @@ class AgentServiceRegistry:
             "agent.repairs.approve": ServiceSpec("agent.repairs.approve", "governance", "Approve a persisted repair plan before apply", "medium"),
             "agent.repairs.compare": ServiceSpec("agent.repairs.compare", "governance", "Compare repair snapshots and diff their approved changes", "low"),
             "agent.repairs.list": ServiceSpec("agent.repairs.list", "governance", "List available repair snapshots and backups", "low"),
+            "agent.repairs.presets": ServiceSpec("agent.repairs.presets", "governance", "List, recommend, or save reusable repair selector presets", "low"),
             "agent.repairs.rollback": ServiceSpec("agent.repairs.rollback", "governance", "Rollback the latest or specified repair snapshot", "medium"),
             "mcp.run": ServiceSpec("mcp.run", "tooling", "Run MCP candidate routing and execution", "medium"),
             "ppt.generate": ServiceSpec("ppt.generate", "delivery", "Generate premium slide/deck specification", "low"),
@@ -228,6 +231,19 @@ class AgentServiceRegistry:
             limit=max(1, int(kwargs.get("limit", 20))),
             backup_dir=str(kwargs.get("backup_dir", "")),
             out_dir=str(kwargs.get("out_dir", "")),
+        ).to_dict()
+
+    def _exec_agent_repairs_presets(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.repair_presets.run(
+            mode=str(kwargs.get("mode", "recommend")),
+            data_dir=str(kwargs.get("data_dir", self.root / "日志/agent_os")),
+            days=max(1, int(kwargs.get("days", 14))),
+            limit=max(1, int(kwargs.get("limit", 10))),
+            out_dir=str(kwargs.get("out_dir", "")),
+            presets_file=str(kwargs.get("presets_file", "")),
+            top_n=max(1, int(kwargs.get("top_n", 3))),
+            allow_update=bool(kwargs.get("allow_update", True)),
+            include_review_only=bool(kwargs.get("include_review_only", False)),
         ).to_dict()
 
     def _exec_mcp_run(self, **kwargs: Any) -> Dict[str, Any]:
